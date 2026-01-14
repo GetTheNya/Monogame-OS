@@ -1,0 +1,13 @@
+{
+  "appId": "NOTEPAD",
+  "name": "Notepad",
+  "icon": "icon.png",
+  "version": "1.0.0",
+  "author": "Unknown",
+  "description": "Simple text editor",
+  "entryPoint": "Program.cs",
+  "entryClass": "NotepadApp.Program",
+  "entryMethod": "CreateWindow",
+  "permissions": [],
+  "dependencies": []
+}

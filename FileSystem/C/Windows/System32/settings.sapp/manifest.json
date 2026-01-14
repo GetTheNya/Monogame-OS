@@ -1,0 +1,13 @@
+{
+  "appId": "SETTINGS",
+  "name": "Settings",
+  "icon": "icon.png",
+  "version": "1.0.0",
+  "author": "Unknown",
+  "description": "System settings",
+  "entryPoint": "Program.cs",
+  "entryClass": "SettingsApp.SettingsWindow",
+  "entryMethod": "CreateWindow",
+  "permissions": [],
+  "dependencies": []
+}

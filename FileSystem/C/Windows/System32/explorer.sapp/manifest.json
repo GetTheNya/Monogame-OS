@@ -1,0 +1,13 @@
+{
+  "appId": "EXPLORER",
+  "name": "File Explorer",
+  "icon": "icon.png",
+  "version": "1.0.0",
+  "author": "Unknown",
+  "description": "Browse files and folders",
+  "entryPoint": "Program.cs",
+  "entryClass": "ExplorerApp.FileExplorerWindow",
+  "entryMethod": "CreateWindow",
+  "permissions": [],
+  "dependencies": []
+}
