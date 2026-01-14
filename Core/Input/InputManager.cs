@@ -117,8 +117,8 @@ public static class InputManager {
         return GetButtonState(_currentMouse, button) == ButtonState.Pressed;
     }
 
-    public static bool IsMouseButtonJustPressed(MouseButton button) {
-        if (IsMouseConsumed) return false;
+    public static bool IsMouseButtonJustPressed(MouseButton button, bool ignoreConsumed = false) {
+        if (!ignoreConsumed && IsMouseConsumed) return false;
         return GetButtonState(_currentMouse, button) == ButtonState.Pressed &&
                GetButtonState(_previousMouse, button) == ButtonState.Released;
     }

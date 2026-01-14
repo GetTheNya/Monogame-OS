@@ -5,11 +5,14 @@ using TheGame.Graphics;
 
 namespace TheGame.Core.UI.Controls;
 
+public enum TextAlign { Center, Left, Right }
+
 public class Button : UIControl {
     public string Text { get; set; } = "";
     public Texture2D Icon { get; set; }
     public Action OnClickAction { get; set; }
     public Color TextColor { get; set; } = Color.White;
+    public TextAlign TextAlign { get; set; } = TextAlign.Center;
 
     public Button(Vector2 position, Vector2 size, string text = "") : base(position, size) {
         Text = text;
@@ -72,10 +75,17 @@ public class Button : UIControl {
                         textSize = font.MeasureString(textToDraw);
                     }
 
-                    Vector2 textPos = new Vector2(
-                        contentStartX + (remainingWidth - textSize.X) / 2f,
-                        drawPos.Y + (size.Y - textSize.Y) / 2f
-                    );
+                    Vector2 textPos;
+                    if (TextAlign == TextAlign.Left) {
+                         textPos = new Vector2(contentStartX, drawPos.Y + (size.Y - textSize.Y) / 2f);
+                    } else if (TextAlign == TextAlign.Right) {
+                         textPos = new Vector2(contentStartX + remainingWidth - textSize.X, drawPos.Y + (size.Y - textSize.Y) / 2f);
+                    } else {
+                         textPos = new Vector2(
+                            contentStartX + (remainingWidth - textSize.X) / 2f,
+                            drawPos.Y + (size.Y - textSize.Y) / 2f
+                        );
+                    }
 
                     font.DrawText(batch, textToDraw, textPos, TextColor * AbsoluteOpacity);
                 }

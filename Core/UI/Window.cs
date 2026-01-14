@@ -133,6 +133,9 @@ public class Window : UIElement {
         _closeButton.Position = new Vector2(rightSide - 25, top);
         _maxButton.Position = new Vector2(rightSide - 50, top);
         _minButton.Position = new Vector2(rightSide - 75, top);
+
+        // Hide maximize button if resizing is disabled
+        _maxButton.IsVisible = CanResize;
     }
 
     public void Minimize() {
@@ -295,11 +298,13 @@ public class Window : UIElement {
             }
         }
 
-        // 3. Resizing logic (CHECK BEFORE CHILDREN for chrome priority)
-        if (isJustPressed && !_isMaximized && CanResize) {
+        // 3. Resizing logic - Check using RAW input to take priority over children
+        // Window chrome (borders) should always be grabbable even if a full-screen child control exists
+        bool rawJustPressed = InputManager.IsMouseHovering(Bounds) && InputManager.IsMouseButtonJustPressed(MouseButton.Left, ignoreConsumed: true);
+        if (rawJustPressed && !_isMaximized && CanResize) {
             var mousePos = InputManager.MousePosition;
             Rectangle bounds = new Rectangle((int)AbsolutePosition.X, (int)AbsolutePosition.Y, (int)Size.X, (int)Size.Y);
-            const int Edge = 5;
+            const int Edge = 8; // Slightly larger hit area for easier grabbing
             bool left = mousePos.X >= bounds.Left && mousePos.X <= bounds.Left + Edge;
             bool right = mousePos.X >= bounds.Right - Edge && mousePos.X <= bounds.Right;
             bool top = mousePos.Y >= bounds.Top && mousePos.Y <= bounds.Top + Edge;
@@ -332,8 +337,8 @@ public class Window : UIElement {
             return;
         }
 
-        // 4. Double Click Maximize
-        if (isDoubleClick) {
+        // 4. Double Click Maximize (only if CanResize)
+        if (isDoubleClick && CanResize) {
             var titleRect = new Rectangle((int)AbsolutePosition.X, (int)AbsolutePosition.Y, (int)Size.X, TitleBarHeight);
             if (titleRect.Contains(InputManager.MousePosition)) {
                 var viewport = G.GraphicsDevice.Viewport;
@@ -397,19 +402,21 @@ public class Window : UIElement {
                 Position = mousePos.ToVector2() - _dragOffset;
                 InputManager.IsMouseConsumed = true;
 
-                // Aero Snap Edge Detection
-                var viewport = G.GraphicsDevice.Viewport;
-                int screenW = viewport.Width;
-                int screenH = viewport.Height - 40; // Subtract taskbar
-                int edgeMargin = 10;
-
+                // Aero Snap Edge Detection (only if CanResize)
                 Rectangle? newTarget = null;
-                if (mousePos.Y < edgeMargin) {
-                    newTarget = new Rectangle(0, 0, screenW, screenH);
-                } else if (mousePos.X < edgeMargin) {
-                    newTarget = new Rectangle(0, 0, screenW / 2, screenH);
-                } else if (mousePos.X > screenW - edgeMargin) {
-                    newTarget = new Rectangle(screenW / 2, 0, screenW / 2, screenH);
+                if (CanResize) {
+                    var viewport = G.GraphicsDevice.Viewport;
+                    int screenW = viewport.Width;
+                    int screenH = viewport.Height - 40; // Subtract taskbar
+                    int edgeMargin = 10;
+
+                    if (mousePos.Y < edgeMargin) {
+                        newTarget = new Rectangle(0, 0, screenW, screenH);
+                    } else if (mousePos.X < edgeMargin) {
+                        newTarget = new Rectangle(0, 0, screenW / 2, screenH);
+                    } else if (mousePos.X > screenW - edgeMargin) {
+                        newTarget = new Rectangle(screenW / 2, 0, screenW / 2, screenH);
+                    }
                 }
 
                 if (newTarget != _snapPreview) {

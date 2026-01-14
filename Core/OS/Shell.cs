@@ -227,6 +227,54 @@ public static class Shell {
     public static void DrawDrag(SpriteBatch sb, ShapeBatch sbatch) {
         DragDropManager.Instance.DrawDragVisual(sb, sbatch);
     }
+
+    // --- Registry Integration ---
+
+    /// <summary>
+    /// Gets a registry setting for the current app. 
+    /// Path: HKCU\Software\{AppId}\{Key}
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static T GetSetting<T>(string key, T defaultValue = default) {
+        string appId = AppLoader.Instance.GetAppIdFromAssembly(Assembly.GetCallingAssembly());
+        if (appId == null) return defaultValue;
+
+        string path = $"HKCU\\Software\\{appId}\\{key}";
+        return Registry.GetValue(path, defaultValue);
+    }
+
+    /// <summary>
+    /// Sets a registry setting for the current app.
+    /// Path: HKCU\Software\{AppId}\{Key}
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void SetSetting<T>(string key, T value) {
+        string appId = AppLoader.Instance.GetAppIdFromAssembly(Assembly.GetCallingAssembly());
+        if (appId == null) return;
+
+        string path = $"HKCU\\Software\\{appId}\\{key}";
+        Registry.SetValue(path, value);
+    }
+
+    // --- File Picker Integration ---
+
+    /// <summary>
+    /// Opens a file picker dialog to select an existing file.
+    /// </summary>
+    public static void PickFile(string title, string defaultPath, Action<string> onFilePicked) {
+        if (WindowLayer == null) return;
+        var picker = new FilePickerWindow(title, defaultPath, "", FilePickerMode.Open, onFilePicked);
+        OpenWindow(picker);
+    }
+
+    /// <summary>
+    /// Opens a file picker dialog to save a file.
+    /// </summary>
+    public static void SaveFile(string title, string defaultPath, string defaultName, Action<string> onFilePicked) {
+        if (WindowLayer == null) return;
+        var picker = new FilePickerWindow(title, defaultPath, defaultName, FilePickerMode.Save, onFilePicked);
+        OpenWindow(picker);
+    }
 }
 
 public class ShortcutHandler : FileHandler {
