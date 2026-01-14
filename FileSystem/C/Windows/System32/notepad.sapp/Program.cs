@@ -32,6 +32,7 @@ public class NotepadWindow : Window {
     private MenuBar _menuBar;
     private string _currentFilePath = null;
     private bool _isModified = false;
+    private bool _needsSave = false;
     private const float MenuBarHeight = 26f;
 
     public NotepadWindow(Vector2 pos, Vector2 size, AppSettings settings) : base(pos, size) {
@@ -44,14 +45,14 @@ public class NotepadWindow : Window {
             LayoutUI();
             _settings.WindowWidth = Size.X;
             _settings.WindowHeight = Size.Y;
-            Shell.SaveSettings(_settings);
+            _needsSave = true;
         };
 
         OnMove += () => {
             if (Opacity < 0.9f) return;
             _settings.WindowX = Position.X;
             _settings.WindowY = Position.Y;
-            Shell.SaveSettings(_settings);
+            _needsSave = true;
         };
     }
 
@@ -105,6 +106,14 @@ public class NotepadWindow : Window {
             }
         };
         AddChild(_textArea);
+    }
+
+    public override void Update(GameTime gameTime) {
+        base.Update(gameTime);
+        if (_needsSave && !TheGame.Core.Input.InputManager.IsMouseButtonDown(TheGame.Core.Input.MouseButton.Left)) {
+            Shell.SaveSettings(_settings);
+            _needsSave = false;
+        }
     }
 
     private void LayoutUI() {
@@ -175,6 +184,6 @@ public class NotepadWindow : Window {
     }
 
     private void SelectAll() {
-        // TODO: Implement select all in TextArea via public method
+        _textArea.SelectAll();
     }
 }

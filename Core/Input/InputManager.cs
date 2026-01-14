@@ -103,8 +103,8 @@ public static class InputManager {
         return false;
     }
 
-    public static bool IsDoubleClick(MouseButton button) {
-        if (IsMouseConsumed) return false;
+    public static bool IsDoubleClick(MouseButton button, bool ignoreConsumed = false) {
+        if (!ignoreConsumed && IsMouseConsumed) return false;
         if (button == MouseButton.Left) return _isDoubleClickFrame;
         return false; // Only implementing Left for now
     }
@@ -147,8 +147,8 @@ public static class InputManager {
                GetButtonState(_previousMouse, button) == ButtonState.Released;
     }
 
-    public static bool IsMouseHovering(Rectangle rect) {
-        if (IsMouseConsumed) return false;
+    public static bool IsMouseHovering(Rectangle rect, bool ignoreConsumed = false) {
+        if (!ignoreConsumed && IsMouseConsumed) return false;
         return rect.Contains(MousePosition);
     }
 

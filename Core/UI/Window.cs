@@ -261,13 +261,14 @@ public class Window : UIElement {
             _potentialDrag = false;
         }
 
-        bool isHovering = InputManager.IsMouseHovering(Bounds);
-        bool isDoubleClick = isHovering && InputManager.IsDoubleClick(MouseButton.Left);
-        bool isJustPressed = isHovering && InputManager.IsMouseButtonJustPressed(MouseButton.Left);
+        bool isHoveringStrict = InputManager.IsMouseHovering(Bounds); // Normal child-priority hover
+        bool isHoveringRaw = InputManager.IsMouseHovering(Bounds, ignoreConsumed: true); // Raw window hover
+        
+        bool isDoubleClick = isHoveringRaw && InputManager.IsDoubleClick(MouseButton.Left, ignoreConsumed: true);
+        bool isJustPressed = isHoveringRaw && InputManager.IsMouseButtonJustPressed(MouseButton.Left, ignoreConsumed: true);
 
         // 2. Hover cursor logic (Always check if hovering over window)
-        // We only set the window's hover cursor if a child hasn't already claimed the mouse.
-        if (isHovering && !inputConsumedByChild) {
+        if (isHoveringRaw) {
             if (!_isMaximized && CanResize) {
                 const int Edge = 5;
                 var mouseP = InputManager.MousePosition;
@@ -300,36 +301,41 @@ public class Window : UIElement {
 
         // 3. Resizing logic - Check using RAW input to take priority over children
         // Window chrome (borders) should always be grabbable even if a full-screen child control exists
-        bool rawJustPressed = InputManager.IsMouseHovering(Bounds) && InputManager.IsMouseButtonJustPressed(MouseButton.Left, ignoreConsumed: true);
-        if (rawJustPressed && !_isMaximized && CanResize) {
+        if (isJustPressed && !_isMaximized && CanResize) {
             var mousePos = InputManager.MousePosition;
             Rectangle bounds = new Rectangle((int)AbsolutePosition.X, (int)AbsolutePosition.Y, (int)Size.X, (int)Size.Y);
-            const int Edge = 8; // Slightly larger hit area for easier grabbing
-            bool left = mousePos.X >= bounds.Left && mousePos.X <= bounds.Left + Edge;
-            bool right = mousePos.X >= bounds.Right - Edge && mousePos.X <= bounds.Right;
-            bool top = mousePos.Y >= bounds.Top && mousePos.Y <= bounds.Top + Edge;
-            bool bottom = mousePos.Y >= bounds.Bottom - Edge && mousePos.Y <= bounds.Bottom;
+            // Inflate bounds slightly for hit detection so it's easier to grab outside
+            Rectangle hitBounds = bounds;
+            hitBounds.Inflate(4, 4);
+            
+            if (hitBounds.Contains(mousePos)) {
+                const int Edge = 10; // Hit area thickness
+                bool left = mousePos.X >= hitBounds.Left && mousePos.X <= bounds.Left + Edge;
+                bool right = mousePos.X >= bounds.Right - Edge && mousePos.X <= hitBounds.Right;
+                bool top = mousePos.Y >= hitBounds.Top && mousePos.Y <= bounds.Top + Edge;
+                bool bottom = mousePos.Y >= bounds.Bottom - Edge && mousePos.Y <= hitBounds.Bottom;
 
-            if (left || right || top || bottom) {
-                _isResizing = true;
-                _resizeDir = Vector2.Zero;
-                if (left) _resizeDir.X = -1;
-                if (right) _resizeDir.X = 1;
-                if (top) _resizeDir.Y = -1;
-                if (bottom) _resizeDir.Y = 1;
+                if (left || right || top || bottom) {
+                    _isResizing = true;
+                    _resizeDir = Vector2.Zero;
+                    if (left) _resizeDir.X = -1;
+                    if (right) _resizeDir.X = 1;
+                    if (top) _resizeDir.Y = -1;
+                    if (bottom) _resizeDir.Y = 1;
 
-                _resizeStartMouse = mousePos.ToVector2();
-                _resizeStartSize = Size;
-                _resizeStartPos = Position;
+                    _resizeStartMouse = mousePos.ToVector2();
+                    _resizeStartSize = Size;
+                    _resizeStartPos = Position;
 
-                InputManager.IsMouseConsumed = true;
-                ActiveWindow = this;
-                Parent?.BringToFront(this);
-                return; // Resize takes total priority
+                    InputManager.IsMouseConsumed = true;
+                    ActiveWindow = this;
+                    Parent?.BringToFront(this);
+                    return; // Resize takes total priority
+                }
             }
         }
 
-        if (isHovering && ConsumesInput)
+        if (isHoveringStrict && ConsumesInput)
             InputManager.IsMouseConsumed = true;
 
         if (inputConsumedByChild) {

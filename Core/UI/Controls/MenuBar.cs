@@ -110,9 +110,10 @@ public class MenuBar : UIControl {
 
     private void OpenDropdown(int index, Rectangle anchorRect) {
         _activeMenuIndex = index;
+        bool wasOpen = _isOpen;
         _isOpen = true;
 
-        // Remove old dropdown
+        // Remove old dropdown immediately if switching
         if (_dropdownPanel != null && Parent != null) {
             Parent.RemoveChild(_dropdownPanel);
         }
@@ -131,12 +132,14 @@ public class MenuBar : UIControl {
             dropdownHeight += isSeparator ? separatorHeight : itemHeight;
         }
 
-        Vector2 dropdownPos = new Vector2(anchorRect.X - AbsolutePosition.X + Position.X, Position.Y + Size.Y);
+        Vector2 targetPos = new Vector2(anchorRect.X - AbsolutePosition.X + Position.X, Position.Y + Size.Y);
+        Vector2 startPos = targetPos - new Vector2(0, 5); // Start slightly higher for slide effect
 
-        _dropdownPanel = new Panel(dropdownPos, new Vector2(dropdownWidth, dropdownHeight)) {
+        _dropdownPanel = new Panel(startPos, new Vector2(dropdownWidth, dropdownHeight)) {
             BackgroundColor = DropdownBackgroundColor,
             BorderColor = new Color(80, 80, 80),
-            BorderThickness = 1
+            BorderThickness = 1,
+            Opacity = 0f
         };
 
         float y = 0;
@@ -171,14 +174,24 @@ public class MenuBar : UIControl {
         }
 
         Parent?.AddChild(_dropdownPanel);
+
+        // Animate in
+        TheGame.Core.Animation.Tweener.To(_dropdownPanel, p => _dropdownPanel.Position = p, startPos, targetPos, 0.15f, TheGame.Core.Animation.Easing.EaseOutQuad);
+        TheGame.Core.Animation.Tweener.To(_dropdownPanel, o => _dropdownPanel.Opacity = o, 0f, 1f, 0.15f, TheGame.Core.Animation.Easing.Linear);
     }
 
     private void CloseDropdown() {
+        if (!_isOpen) return;
         _isOpen = false;
         _activeMenuIndex = -1;
-        if (_dropdownPanel != null && Parent != null) {
-            Parent.RemoveChild(_dropdownPanel);
+        
+        if (_dropdownPanel != null) {
+            var panel = _dropdownPanel;
             _dropdownPanel = null;
+            
+            // Animate out then remove
+            TheGame.Core.Animation.Tweener.To(panel, o => panel.Opacity = o, panel.Opacity, 0f, 0.1f, TheGame.Core.Animation.Easing.Linear)
+                .OnComplete = () => { Parent?.RemoveChild(panel); };
         }
     }
 
@@ -190,6 +203,19 @@ public class MenuBar : UIControl {
 
         var font = GameContent.FontSystem?.GetFont(16);
         if (font == null) return;
+
+        // Clip region for menu items (prevent draw outside MenuBar)
+        var oldScissor = G.GraphicsDevice.ScissorRectangle;
+        var scissor = new Rectangle((int)absPos.X, (int)absPos.Y, (int)Size.X, (int)Size.Y);
+        scissor = Rectangle.Intersect(oldScissor, scissor);
+        
+        if (scissor.Width <= 0 || scissor.Height <= 0) return;
+
+        batch.End();
+        spriteBatch.End();
+        G.GraphicsDevice.ScissorRectangle = scissor;
+        batch.Begin();
+        spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, DepthStencilState.None, new RasterizerState { ScissorTestEnable = true });
 
         float x = 10;
         float padding = 15;
@@ -212,5 +238,11 @@ public class MenuBar : UIControl {
 
             x += itemWidth;
         }
+        
+        batch.End();
+        spriteBatch.End();
+        G.GraphicsDevice.ScissorRectangle = oldScissor;
+        batch.Begin();
+        spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, DepthStencilState.None, RasterizerState.CullNone);
     }
 }

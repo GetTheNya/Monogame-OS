@@ -30,11 +30,13 @@ public abstract class UIControl : UIElement {
 
     // Animated State
     public Color CurrentBackgroundColor { get; protected set; }
-    public float Scale { get; private set; } = 1.0f;
+    public float Scale { get; private set; } = 0.98f;
+    public bool EnableScaleAnimation { get; set; } = true;
     private ControlState _lastState = ControlState.Normal;
 
     protected UIControl(Vector2 position, Vector2 size) : base(position, size) {
         CurrentBackgroundColor = BackgroundColor;
+        if (!EnableScaleAnimation) Scale = 1.0f;
     }
 
     public override void Update(GameTime gameTime) {
@@ -50,8 +52,13 @@ public abstract class UIControl : UIElement {
         CurrentBackgroundColor = Color.Lerp(CurrentBackgroundColor, targetColor, MathHelper.Clamp(dt * 15f, 0, 1));
 
         // Animate Scale
-        float targetScale = ControlState == ControlState.Hovered ? 1.02f : 1.0f;
-        if (ControlState == ControlState.Pressed) targetScale = 0.98f;
+        float targetScale = 0.98f;
+        if (EnableScaleAnimation) {
+            targetScale = ControlState == ControlState.Hovered ? 1.0f : 0.98f;
+            if (ControlState == ControlState.Pressed) targetScale = 0.96f;
+        } else {
+            targetScale = 1.0f;
+        }
         
         Scale = MathHelper.Lerp(Scale, targetScale, MathHelper.Clamp(dt * 15f, 0, 1));
         
