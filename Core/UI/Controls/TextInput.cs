@@ -22,6 +22,7 @@ public class TextInput : ValueControl<string> {
     private int _selectionEnd = 0; // If != _cursorPos, we have a selection
     private float _scrollX = 0f;
     private float _targetScrollX = 0f;
+    private static readonly RasterizerState _scissorRasterizer = new RasterizerState { ScissorTestEnable = true, CullMode = CullMode.None };
 
     public TextInput(Vector2 position, Vector2 size) : base(position, size, "") {
         ConsumesInput = true;
@@ -256,7 +257,7 @@ public class TextInput : ValueControl<string> {
                 var oldState = G.GraphicsDevice.ScissorRectangle;
                 G.GraphicsDevice.ScissorRectangle = scissor;
 
-                var rasterizerState = new RasterizerState { ScissorTestEnable = true, CullMode = CullMode.None };
+                var rasterizerState = _scissorRasterizer;
                 G.GraphicsDevice.RasterizerState = rasterizerState;
 
                 batch.Begin();

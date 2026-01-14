@@ -42,6 +42,7 @@ public class MenuBar : UIControl {
     public Color MenuTextColor { get; set; } = Color.White;
     public Color MenuHoverColor { get; set; } = new Color(60, 60, 60);
     public Color DropdownBackgroundColor { get; set; } = new Color(45, 45, 45);
+    private static readonly RasterizerState _scissorRasterizer = new RasterizerState { ScissorTestEnable = true };
 
     public MenuBar(Vector2 position, Vector2 size) : base(position, size) {
         BackgroundColor = new Color(35, 35, 35);
@@ -215,7 +216,7 @@ public class MenuBar : UIControl {
         spriteBatch.End();
         G.GraphicsDevice.ScissorRectangle = scissor;
         batch.Begin();
-        spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, DepthStencilState.None, new RasterizerState { ScissorTestEnable = true });
+        spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, DepthStencilState.None, _scissorRasterizer);
 
         float x = 10;
         float padding = 15;

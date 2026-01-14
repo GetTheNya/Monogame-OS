@@ -25,6 +25,9 @@ public class TextArea : UIControl {
     private float _cursorTimer = 0f;
     private bool _showCursor = true;
     private bool _isWordSelecting = false;
+    private float _cachedMaxWidth = 0f;
+    private bool _maxWidthDirty = true;
+    private static readonly RasterizerState _scissorRasterizer = new RasterizerState { ScissorTestEnable = true, CullMode = CullMode.None };
 
     public string Text {
         get => string.Join("\n", _lines);
@@ -35,6 +38,7 @@ public class TextArea : UIControl {
             _cursorCol = 0;
             _selStartLine = 0;
             _selStartCol = 0;
+            _maxWidthDirty = true;
             OnTextChanged?.Invoke(Text);
         }
     }
@@ -129,6 +133,7 @@ public class TextArea : UIControl {
                     _cursorLine--;
                 }
                 ResetSelection();
+                _maxWidthDirty = true;
                 OnTextChanged?.Invoke(Text);
             }
 
@@ -141,6 +146,7 @@ public class TextArea : UIControl {
                     _lines[_cursorLine] += _lines[_cursorLine + 1];
                     _lines.RemoveAt(_cursorLine + 1);
                 }
+                _maxWidthDirty = true;
                 OnTextChanged?.Invoke(Text);
             }
 
@@ -153,6 +159,7 @@ public class TextArea : UIControl {
                 _cursorLine++;
                 _cursorCol = 0;
                 ResetSelection();
+                _maxWidthDirty = true;
                 OnTextChanged?.Invoke(Text);
             }
 
@@ -162,6 +169,7 @@ public class TextArea : UIControl {
                 _lines[_cursorLine] = _lines[_cursorLine].Insert(_cursorCol, "    ");
                 _cursorCol += 4;
                 ResetSelection();
+                _maxWidthDirty = true;
                 OnTextChanged?.Invoke(Text);
             }
 
@@ -172,6 +180,7 @@ public class TextArea : UIControl {
                 _lines[_cursorLine] = _lines[_cursorLine].Insert(_cursorCol, c.ToString());
                 _cursorCol++;
                 ResetSelection();
+                _maxWidthDirty = true;
                 OnTextChanged?.Invoke(Text);
             }
 
@@ -309,12 +318,16 @@ public class TextArea : UIControl {
         float totalHeight = _lines.Count * font.LineHeight;
         _targetScrollOffset = Math.Clamp(_targetScrollOffset, 0, Math.Max(0, totalHeight - Size.Y + 10));
 
-        float maxW = 0;
-        foreach (var l in _lines) {
-            float w = font.MeasureString(l).X;
-            if (w > maxW) maxW = w;
+        if (_maxWidthDirty) {
+            float maxW = 0;
+            foreach (var l in _lines) {
+                float w = font.MeasureString(l).X;
+                if (w > maxW) maxW = w;
+            }
+            _cachedMaxWidth = maxW;
+            _maxWidthDirty = false;
         }
-        _targetScrollOffsetX = Math.Clamp(_targetScrollOffsetX, 0, Math.Max(0, maxW - Size.X + 20));
+        _targetScrollOffsetX = Math.Clamp(_targetScrollOffsetX, 0, Math.Max(0, _cachedMaxWidth - Size.X + 20));
     }
 
     public override void Update(GameTime gameTime) {
@@ -393,7 +406,7 @@ public class TextArea : UIControl {
         var oldState = G.GraphicsDevice.ScissorRectangle;
         G.GraphicsDevice.ScissorRectangle = scissor;
         
-        var rasterizerState = new RasterizerState { ScissorTestEnable = true, CullMode = CullMode.None };
+        var rasterizerState = _scissorRasterizer;
         G.GraphicsDevice.RasterizerState = rasterizerState;
         
         batch.Begin();
