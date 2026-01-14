@@ -30,6 +30,9 @@ public class Window : UIElement {
     private bool _isMaximized;
     private Rectangle _restoreRect;
 
+    public bool IsMaximized => _isMaximized;
+    public Rectangle RestoreBounds => _restoreRect;
+
     // Animation / Minimize state
     private Vector2 _preMinimizeSize;
     private Vector2 _preMinimizePos;
@@ -247,6 +250,18 @@ public class Window : UIElement {
         }
 
         Parent?.BringToFront(this);
+    }
+
+    public void SetMaximized(bool maximized, Rectangle workArea) {
+        _isMaximized = maximized;
+        if (maximized) {
+            _restoreRect = new Rectangle(Position.ToPoint(), Size.ToPoint());
+            Position = workArea.Location.ToVector2();
+            Size = workArea.Size.ToVector2();
+        } else {
+            Position = _restoreRect.Location.ToVector2();
+            Size = _restoreRect.Size.ToVector2();
+        }
     }
 
     protected override void UpdateInput() {

@@ -13,12 +13,17 @@ public class AppSettings {
     public float WindowY { get; set; } = 200;
     public float WindowWidth { get; set; } = 400;
     public float WindowHeight { get; set; } = 300;
+    public bool IsMaximized { get; set; } = false;
 }
 
 public class JitApp : Window {
     public static Window CreateWindow() {
         var settings = Shell.LoadSettings<AppSettings>();
-        return new JitApp(new Vector2(settings.WindowX, settings.WindowY), new Vector2(settings.WindowWidth, settings.WindowHeight), settings);
+        var win = new JitApp(new Vector2(settings.WindowX, settings.WindowY), new Vector2(settings.WindowWidth, settings.WindowHeight), settings);
+        if (settings.IsMaximized) {
+            win.SetMaximized(true, new Rectangle(0, 0, G.GraphicsDevice.Viewport.Width, G.GraphicsDevice.Viewport.Height - 40));
+        }
+        return win;
     }
 
     private readonly string notifPath = Shell.GetAppResourcePath("notif.wav");
@@ -31,15 +36,27 @@ public class JitApp : Window {
         _settings = settings;
 
         OnResize += () => {
-            _settings.WindowWidth = Size.X;
-            _settings.WindowHeight = Size.Y;
+            if (IsMaximized) {
+                _settings.WindowWidth = RestoreBounds.Width;
+                _settings.WindowHeight = RestoreBounds.Height;
+            } else {
+                _settings.WindowWidth = Size.X;
+                _settings.WindowHeight = Size.Y;
+            }
+            _settings.IsMaximized = IsMaximized;
             Shell.SaveSettings(_settings);
         };
 
         OnMove += () => {
             if (Opacity < 0.9f) return;
-            _settings.WindowX = Position.X;
-            _settings.WindowY = Position.Y;
+            if (IsMaximized) {
+                _settings.WindowX = RestoreBounds.X;
+                _settings.WindowY = RestoreBounds.Y;
+            } else {
+                _settings.WindowX = Position.X;
+                _settings.WindowY = Position.Y;
+            }
+            _settings.IsMaximized = IsMaximized;
             Shell.SaveSettings(_settings);
         };
 
