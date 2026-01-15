@@ -12,7 +12,7 @@ namespace TheGame.Core.UI.Controls;
 /// <summary>
 /// A multiline text editing control similar to a Windows TextBox with multiline support.
 /// </summary>
-public class TextArea : UIControl {
+public class TextArea : ValueControl<string> {
     private List<string> _lines = new() { "" };
     private int _cursorLine = 0;
     private int _cursorCol = 0;
@@ -29,7 +29,7 @@ public class TextArea : UIControl {
     private bool _maxWidthDirty = true;
     private static readonly RasterizerState _scissorRasterizer = new RasterizerState { ScissorTestEnable = true, CullMode = CullMode.None };
 
-    public string Text {
+    public new string Value {
         get => string.Join("\n", _lines);
         set {
             _lines = new List<string>((value ?? "").Split('\n'));
@@ -39,8 +39,14 @@ public class TextArea : UIControl {
             _selStartLine = 0;
             _selStartCol = 0;
             _maxWidthDirty = true;
-            OnTextChanged?.Invoke(Text);
+            base.Value = Value; // Trigger OnValueChanged
         }
+    }
+    
+    // Backwards compatibility alias
+    public string Text {
+        get => Value;
+        set => Value = value;
     }
 
     public string Placeholder { get; set; } = "";
@@ -49,9 +55,9 @@ public class TextArea : UIControl {
     public int FontSize { get; set; } = 16;
     public bool DrawBackground { get; set; } = true;
 
-    public Action<string> OnTextChanged { get; set; }
+    // OnTextChanged is now inherited as OnValueChanged from ValueControl<string>
 
-    public TextArea(Vector2 position, Vector2 size) : base(position, size) {
+    public TextArea(Vector2 position, Vector2 size) : base(position, size, "") {
         ConsumesInput = true;
         BackgroundColor = new Color(30, 30, 30);
         BorderColor = new Color(60, 60, 60);
@@ -134,7 +140,7 @@ public class TextArea : UIControl {
                 }
                 ResetSelection();
                 _maxWidthDirty = true;
-                OnTextChanged?.Invoke(Text);
+                OnValueChanged?.Invoke(Value);
             }
 
             // Delete
@@ -147,7 +153,7 @@ public class TextArea : UIControl {
                     _lines.RemoveAt(_cursorLine + 1);
                 }
                 _maxWidthDirty = true;
-                OnTextChanged?.Invoke(Text);
+                OnValueChanged?.Invoke(Value);
             }
 
             // Enter
@@ -160,7 +166,7 @@ public class TextArea : UIControl {
                 _cursorCol = 0;
                 ResetSelection();
                 _maxWidthDirty = true;
-                OnTextChanged?.Invoke(Text);
+                OnValueChanged?.Invoke(Value);
             }
 
             // Tab
@@ -170,7 +176,7 @@ public class TextArea : UIControl {
                 _cursorCol += 4;
                 ResetSelection();
                 _maxWidthDirty = true;
-                OnTextChanged?.Invoke(Text);
+                OnValueChanged?.Invoke(Value);
             }
 
             // Character input
@@ -181,7 +187,7 @@ public class TextArea : UIControl {
                 _cursorCol++;
                 ResetSelection();
                 _maxWidthDirty = true;
-                OnTextChanged?.Invoke(Text);
+                OnValueChanged?.Invoke(Value);
             }
 
             InputManager.IsKeyboardConsumed = true;
@@ -283,7 +289,7 @@ public class TextArea : UIControl {
         _cursorLine = startLine;
         _cursorCol = startCol;
         ResetSelection();
-        OnTextChanged?.Invoke(Text);
+        OnValueChanged?.Invoke(Value);
     }
 
     private void GetSelectionRange(out int startLine, out int startCol, out int endLine, out int endCol) {

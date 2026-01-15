@@ -79,7 +79,7 @@ public class NotepadWindow : Window {
             Placeholder = "Start typing...",
             DrawBackground = false  // Allow window blur to show through
         };
-        _textArea.OnTextChanged += (text) => {
+        _textArea.OnValueChanged += (text) => {
             if (!_isModified) {
                 _isModified = true;
                 UpdateTitle();
