@@ -33,6 +33,7 @@ public abstract class UIElement {
 
     public System.Action OnResize { get; set; }
     public System.Action OnMove { get; set; }
+    public virtual Vector2 ClientSize => Size;
     public bool IsVisible { get; set; } = true;
     public bool ConsumesInput { get; set; } = true; // If true, mouse/keyboard input is blocked for elements below
     public bool IsActive { get; set; } = true;
@@ -150,6 +151,11 @@ public abstract class UIElement {
         if (Children.Remove(child)) {
             child.Parent = null;
         }
+    }
+
+    public void ClearChildren() {
+        foreach (var child in Children) child.Parent = null;
+        Children.Clear();
     }
 
     public void BringToFront(UIElement child) {

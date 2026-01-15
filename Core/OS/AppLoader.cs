@@ -81,7 +81,7 @@ public class AppLoader {
             _appPaths[manifest.AppId] = appFolderPath;
 
             // Register app factory with Shell
-            Shell.RegisterApp(manifest.AppId, () => {
+            Shell.UI.RegisterApp(manifest.AppId, () => {
                 return CreateWindowFromAssembly(assembly, manifest, hostPath);
             });
 

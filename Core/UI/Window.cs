@@ -32,6 +32,7 @@ public class Window : UIElement {
 
     public bool IsMaximized => _isMaximized;
     public Rectangle RestoreBounds => _restoreRect;
+    public bool LayoutDirty { get; set; }
 
     // Animation / Minimize state
     private Vector2 _preMinimizeSize;
@@ -59,7 +60,7 @@ public class Window : UIElement {
 
     // Animation Properties
 
-    public Vector2 ClientSize => Size - new Vector2(0, TitleBarHeight);
+    public override Vector2 ClientSize => Size - new Vector2(0, TitleBarHeight);
 
     public void AnimateOpen(Rectangle fromBounds) {
         Vector2 targetPos = Position;
@@ -265,6 +266,11 @@ public class Window : UIElement {
     }
 
     protected override void UpdateInput() {
+        if (LayoutDirty && !InputManager.IsMouseButtonDown(MouseButton.Left)) {
+            TheGame.Core.OS.Shell.UI.SaveWindowLayout(this);
+            LayoutDirty = false;
+        }
+
         if (!IsVisible) return;
 
         // 1. Capture state before we potentially modify IsMouseConsumed

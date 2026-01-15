@@ -8,21 +8,13 @@ using TheGame.Core.OS;
 namespace NotepadApp;
 
 public class AppSettings {
-    public float WindowX { get; set; } = 200;
-    public float WindowY { get; set; } = 150;
-    public float WindowWidth { get; set; } = 700;
-    public float WindowHeight { get; set; } = 500;
-    public bool IsMaximized { get; set; } = false;
+    // App-specific settings only
 }
 
 public class Program {
     public static Window CreateWindow() {
-        var settings = Shell.LoadSettings<AppSettings>();
-        var win = new NotepadWindow(new Vector2(settings.WindowX, settings.WindowY), new Vector2(settings.WindowWidth, settings.WindowHeight), settings);
-        if (settings.IsMaximized) {
-            win.SetMaximized(true, new Rectangle(0, 0, G.GraphicsDevice.Viewport.Width, G.GraphicsDevice.Viewport.Height - 40));
-        }
-        return win;
+        var settings = Shell.Settings.Load<AppSettings>();
+        return new NotepadWindow(new Vector2(100, 100), new Vector2(700, 500), settings);
     }
 }
 
@@ -32,40 +24,16 @@ public class NotepadWindow : Window {
     private MenuBar _menuBar;
     private string _currentFilePath = null;
     private bool _isModified = false;
-    private bool _needsSave = false;
     private const float MenuBarHeight = 26f;
 
     public NotepadWindow(Vector2 pos, Vector2 size, AppSettings settings) : base(pos, size) {
         Title = "Untitled - Notepad";
         _settings = settings;
+        AppId = "NOTEPAD"; // Required for automatic persistence
 
         SetupUI();
 
-        OnResize += () => {
-            LayoutUI();
-            if (IsMaximized) {
-                _settings.WindowWidth = RestoreBounds.Width;
-                _settings.WindowHeight = RestoreBounds.Height;
-            } else {
-                _settings.WindowWidth = Size.X;
-                _settings.WindowHeight = Size.Y;
-            }
-            _settings.IsMaximized = IsMaximized;
-            _needsSave = true;
-        };
-
-        OnMove += () => {
-            if (Opacity < 0.9f) return;
-            if (IsMaximized) {
-                _settings.WindowX = RestoreBounds.X;
-                _settings.WindowY = RestoreBounds.Y;
-            } else {
-                _settings.WindowX = Position.X;
-                _settings.WindowY = Position.Y;
-            }
-            _settings.IsMaximized = IsMaximized;
-            _needsSave = true;
-        };
+        OnResize += () => LayoutUI();
     }
 
     private void SetupUI() {
@@ -100,7 +68,7 @@ public class NotepadWindow : Window {
 
         _menuBar.AddMenu("Help", m => {
             m.AddItem("About Notepad", () => {
-                NotificationManager.Instance.ShowNotification("Notepad", "A simple text editor for TheGame OS.");
+                Shell.Notifications.Show("Notepad", "A simple text editor for TheGame OS.");
             });
         });
 
@@ -118,14 +86,6 @@ public class NotepadWindow : Window {
             }
         };
         AddChild(_textArea);
-    }
-
-    public override void Update(GameTime gameTime) {
-        base.Update(gameTime);
-        if (_needsSave && !TheGame.Core.Input.InputManager.IsMouseButtonDown(TheGame.Core.Input.MouseButton.Left)) {
-            Shell.SaveSettings(_settings);
-            _needsSave = false;
-        }
     }
 
     private void LayoutUI() {
@@ -149,7 +109,7 @@ public class NotepadWindow : Window {
     }
 
     private void OpenFile() {
-        Shell.PickFile("Open", "C:\\Users\\Admin\\Documents", (path) => {
+        Shell.UI.PickFile("Open", "C:\\Users\\Admin\\Documents", (path) => {
             if (string.IsNullOrEmpty(path)) return;
             try {
                 string content = VirtualFileSystem.Instance.ReadAllText(path);
@@ -158,7 +118,7 @@ public class NotepadWindow : Window {
                 _isModified = false;
                 UpdateTitle();
             } catch (Exception ex) {
-                NotificationManager.Instance.ShowNotification("Error", $"Failed to open file: {ex.Message}");
+                Shell.Notifications.Show("Error", $"Failed to open file: {ex.Message}");
             }
         });
     }
@@ -176,7 +136,7 @@ public class NotepadWindow : Window {
             ? "Untitled.txt"
             : System.IO.Path.GetFileName(_currentFilePath);
 
-        Shell.SaveFile("Save As", "C:\\Users\\Admin\\Documents", defaultName, (path) => {
+        Shell.UI.SaveFile("Save As", "C:\\Users\\Admin\\Documents", defaultName, (path) => {
             if (!string.IsNullOrEmpty(path)) {
                 DoSave(path);
             }
@@ -189,9 +149,9 @@ public class NotepadWindow : Window {
             _currentFilePath = path;
             _isModified = false;
             UpdateTitle();
-            NotificationManager.Instance.ShowNotification("Notepad", $"Saved: {System.IO.Path.GetFileName(path)}");
+            Shell.Notifications.Show("Notepad", $"Saved: {System.IO.Path.GetFileName(path)}");
         } catch (Exception ex) {
-            NotificationManager.Instance.ShowNotification("Error", $"Failed to save: {ex.Message}");
+            Shell.Notifications.Show("Error", $"Failed to save: {ex.Message}");
         }
     }
 

@@ -94,10 +94,10 @@ public class DesktopScene : Core.Scenes.Scene {
         NotificationManager.Instance.OnNotificationDismissed += DismissToastById;
 
         // Play Startup Sound
-        Shell.PlaySound("C:\\Windows\\Media\\startup.wav");
+        Shell.Audio.PlaySound("C:\\Windows\\Media\\startup.wav");
 
         // Demo notification
-        Shell.ShowNotification("Welcome!", "The notification system is ready.", null, null, new List<NotificationAction> {
+        Shell.Notifications.Show("Welcome!", "The notification system is ready.", null, null, new List<NotificationAction> {
             new NotificationAction { Label = "Got it", OnClick = () => DebugLogger.Log("User acknowledged.") }
         });
 
@@ -214,7 +214,7 @@ public class DesktopScene : Core.Scenes.Scene {
                                     Shell.RefreshExplorers("$Recycle.Bin");
                                 }
                             });
-                            Shell.OpenWindow(mb);
+                            Shell.UI.OpenWindow(mb);
                         }
                     }
                 });
@@ -268,13 +268,13 @@ public class DesktopScene : Core.Scenes.Scene {
                         var mb = new MessageBox("Recycle Bin", "Are you sure you want to permanently delete all items in the Recycle Bin?", MessageBoxButtons.YesNo, (confirmed) => {
                             if (confirmed) {
                                 VirtualFileSystem.Instance.EmptyRecycleBin();
-                                Shell.PlaySound("C:\\Windows\\Media\\trash_empty.wav");
+                                Shell.Audio.PlaySound("C:\\Windows\\Media\\trash_empty.wav");
                                 DebugLogger.Log("Trash Emptied.");
                                 LoadDesktopIcons();
                                 Shell.RefreshExplorers("$Recycle.Bin");
                             }
                         });
-                        Shell.OpenWindow(mb);
+                        Shell.UI.OpenWindow(mb);
                     }
                 },
                 new MenuItem {
@@ -287,7 +287,7 @@ public class DesktopScene : Core.Scenes.Scene {
                                 Shell.RefreshExplorers("$Recycle.Bin");
                             }
                         });
-                        Shell.OpenWindow(mb);
+                        Shell.UI.OpenWindow(mb);
                     }
                 },
                 new MenuItem { Text = "Properties", Action = () => DebugLogger.Log("Trash Properties") }

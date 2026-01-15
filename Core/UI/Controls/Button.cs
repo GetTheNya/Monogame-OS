@@ -19,8 +19,7 @@ public class Button : UIControl {
     }
 
     protected override void OnClick() {
-        DebugLogger.Log($"Button Clicked: {Text}");
-        TheGame.Core.OS.Shell.PlaySound("C:\\Windows\\Media\\click.wav", 0.5f);
+        TheGame.Core.OS.Shell.Audio.PlaySound("C:\\Windows\\Media\\click.wav", 0.5f);
         OnClickAction?.Invoke();
         base.OnClick();
     }
