@@ -49,6 +49,7 @@ public class Window : UIElement {
     private Vector2 _renderSnapPos;
     private Vector2 _renderSnapSize;
     private float _snapPreviewOpacity;
+    private bool _obscuredByAnotherWindow;
 
     public string Title { get; set; } = "Window";
     public Texture2D Icon { get; set; }
@@ -120,6 +121,7 @@ public class Window : UIElement {
     }
 
     public override void Update(GameTime gameTime) {
+        _obscuredByAnotherWindow = InputManager.IsMouseConsumed;
         UpdateButtons();
         base.Update(gameTime);
     }
@@ -272,6 +274,10 @@ public class Window : UIElement {
         }
 
         if (!IsVisible) return;
+        
+        // If another window or overlay already took the mouse, we don't react at all
+        // (unless we are already in the middle of a drag/resize operation)
+        if (_obscuredByAnotherWindow && !_isDragging && !_isResizing) return;
 
         // 1. Capture state before we potentially modify IsMouseConsumed
         bool inputConsumedByChild = InputManager.IsMouseConsumed;
@@ -289,15 +295,16 @@ public class Window : UIElement {
         bool isJustPressed = isHoveringRaw && InputManager.IsMouseButtonJustPressed(MouseButton.Left, ignoreConsumed: true);
 
         // 2. Hover cursor logic (Always check if hovering over window)
+        const int ResizeEdge = 6;
         if (isHoveringRaw) {
+            var mouseP = InputManager.MousePosition;
+            Rectangle bounds = new Rectangle((int)AbsolutePosition.X, (int)AbsolutePosition.Y, (int)Size.X, (int)Size.Y);
+
             if (!_isMaximized && CanResize) {
-                const int Edge = 5;
-                var mouseP = InputManager.MousePosition;
-                Rectangle bounds = new Rectangle((int)AbsolutePosition.X, (int)AbsolutePosition.Y, (int)Size.X, (int)Size.Y);
-                bool left = mouseP.X >= bounds.Left && mouseP.X <= bounds.Left + Edge;
-                bool right = mouseP.X >= bounds.Right - Edge && mouseP.X <= bounds.Right;
-                bool top = mouseP.Y >= bounds.Top && mouseP.Y <= bounds.Top + Edge;
-                bool bottom = mouseP.Y >= bounds.Bottom - Edge && mouseP.Y <= bounds.Bottom;
+                bool left = mouseP.X >= bounds.Left && mouseP.X <= bounds.Left + ResizeEdge;
+                bool right = mouseP.X >= bounds.Right - ResizeEdge && mouseP.X <= bounds.Right;
+                bool top = mouseP.Y >= bounds.Top && mouseP.Y <= bounds.Top + ResizeEdge;
+                bool bottom = mouseP.Y >= bounds.Bottom - ResizeEdge && mouseP.Y <= bounds.Bottom;
 
                 if ((left && top) || (right && bottom)) CustomCursor.Instance.SetCursor(CursorType.DiagonalNW);
                 else if ((right && top) || (left && bottom)) CustomCursor.Instance.SetCursor(CursorType.DiagonalNE);
@@ -312,7 +319,6 @@ public class Window : UIElement {
                 }
             } else {
                 // Maximized: just pointer on title bar
-                var mouseP = InputManager.MousePosition;
                 Rectangle titleBarRect = new Rectangle((int)AbsolutePosition.X, (int)AbsolutePosition.Y, (int)Size.X, TitleBarHeight);
                 if (titleBarRect.Contains(mouseP)) {
                     CustomCursor.Instance.SetCursor(CursorType.Pointer);
@@ -325,16 +331,12 @@ public class Window : UIElement {
         if (isJustPressed && !_isMaximized && CanResize) {
             var mousePos = InputManager.MousePosition;
             Rectangle bounds = new Rectangle((int)AbsolutePosition.X, (int)AbsolutePosition.Y, (int)Size.X, (int)Size.Y);
-            // Inflate bounds slightly for hit detection so it's easier to grab outside
-            Rectangle hitBounds = bounds;
-            hitBounds.Inflate(4, 4);
             
-            if (hitBounds.Contains(mousePos)) {
-                const int Edge = 10; // Hit area thickness
-                bool left = mousePos.X >= hitBounds.Left && mousePos.X <= bounds.Left + Edge;
-                bool right = mousePos.X >= bounds.Right - Edge && mousePos.X <= hitBounds.Right;
-                bool top = mousePos.Y >= hitBounds.Top && mousePos.Y <= bounds.Top + Edge;
-                bool bottom = mousePos.Y >= bounds.Bottom - Edge && mousePos.Y <= hitBounds.Bottom;
+            if (bounds.Contains(mousePos)) {
+                bool left = mousePos.X >= bounds.Left && mousePos.X <= bounds.Left + ResizeEdge;
+                bool right = mousePos.X >= bounds.Right - ResizeEdge && mousePos.X <= bounds.Right;
+                bool top = mousePos.Y >= bounds.Top && mousePos.Y <= bounds.Top + ResizeEdge;
+                bool bottom = mousePos.Y >= bounds.Bottom - ResizeEdge && mousePos.Y <= bounds.Bottom;
 
                 if (left || right || top || bottom) {
                     _isResizing = true;

@@ -24,6 +24,17 @@ public class TextInput : ValueControl<string> {
     private float _targetScrollX = 0f;
     private static readonly RasterizerState _scissorRasterizer = new RasterizerState { ScissorTestEnable = true, CullMode = CullMode.None };
 
+    // Override Value to reset cursor/selection when changed programmatically
+    public new string Value {
+        get => base.Value;
+        set {
+            base.Value = value;
+            _cursorPos = value?.Length ?? 0;
+            _selectionEnd = _cursorPos;
+            _targetScrollX = 0;
+        }
+    }
+
     public TextInput(Vector2 position, Vector2 size) : base(position, size, "") {
         ConsumesInput = true;
     }
@@ -155,6 +166,15 @@ public class TextInput : ValueControl<string> {
 
     private void EnsureCursorVisible() {
         if (GameContent.FontSystem == null) return;
+        if (string.IsNullOrEmpty(Value)) {
+            _cursorPos = 0;
+            _targetScrollX = 0;
+            return;
+        }
+        
+        // Clamp cursor position to valid range
+        _cursorPos = Math.Clamp(_cursorPos, 0, Value.Length);
+        
         var font = GameContent.FontSystem.GetFont(20);
         float cursorX = _cursorPos == 0 ? 0 : font.MeasureString(Value.Substring(0, _cursorPos)).X;
 
@@ -264,12 +284,12 @@ public class TextInput : ValueControl<string> {
                 spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, DepthStencilState.None, rasterizerState);
 
                 // Selection
-                if (HasSelection()) {
-                    int start = Math.Min(_cursorPos, _selectionEnd);
-                    int end = Math.Max(_cursorPos, _selectionEnd);
+                if (HasSelection() && !string.IsNullOrEmpty(Value)) {
+                    int start = Math.Clamp(Math.Min(_cursorPos, _selectionEnd), 0, Value.Length);
+                    int end = Math.Clamp(Math.Max(_cursorPos, _selectionEnd), 0, Value.Length);
 
                     float x1 = start == 0 ? 0 : font.MeasureString(Value.Substring(0, start)).X;
-                    float x2 = font.MeasureString(Value.Substring(0, end)).X;
+                    float x2 = end == 0 ? 0 : font.MeasureString(Value.Substring(0, end)).X;
 
                     batch.FillRectangle(textPos + new Vector2(x1, 0), new Vector2(x2 - x1, font.LineHeight), FocusedBorderColor * (0.3f * AbsoluteOpacity));
                 }
@@ -282,7 +302,8 @@ public class TextInput : ValueControl<string> {
 
                 // Cursor
                 if (_showCursor || (HasSelection() && IsFocused)) {
-                    float textWidth = _cursorPos == 0 ? 0 : font.MeasureString(Value.Substring(0, _cursorPos)).X;
+                    int clampedCursor = Math.Clamp(_cursorPos, 0, Value?.Length ?? 0);
+                    float textWidth = clampedCursor == 0 || string.IsNullOrEmpty(Value) ? 0 : font.MeasureString(Value.Substring(0, clampedCursor)).X;
                     batch.FillRectangle(textPos + new Vector2(textWidth + 1, 0), new Vector2(2, font.LineHeight), FocusedBorderColor * AbsoluteOpacity);
                 }
 

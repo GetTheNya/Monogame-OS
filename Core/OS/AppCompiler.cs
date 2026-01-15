@@ -33,6 +33,10 @@ public class AppCompiler {
             // MonoGame
             MetadataReference.CreateFromFile(typeof(Microsoft.Xna.Framework.Game).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(Microsoft.Xna.Framework.Graphics.SpriteBatch).Assembly.Location),
+
+            // FontStashSharp
+            MetadataReference.CreateFromFile(typeof(FontStashSharp.FontSystem).Assembly.Location),
+            MetadataReference.CreateFromFile(Assembly.Load("FontStashSharp.MonoGame").Location),
             
             // Our assemblies
             MetadataReference.CreateFromFile(Assembly.GetExecutingAssembly().Location),

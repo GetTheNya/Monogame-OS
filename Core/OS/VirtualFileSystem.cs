@@ -174,6 +174,12 @@ public class VirtualFileSystem {
         
         if (s == d) return;
 
+        // Prevent moving system folders
+        if (s.Contains("$RECYCLE.BIN") && !destVirtualPath.ToUpper().Contains("$RECYCLE.BIN")) {
+             DebugLogger.Log("Access Denied: Cannot move system directory.");
+             return;
+        }
+
         // Prevent moving a directory into itself or its own subdirectory
         if (d.StartsWith(s + Path.DirectorySeparatorChar)) {
             DebugLogger.Log("Cannot move a directory into its own subdirectory.");
@@ -204,6 +210,9 @@ public class VirtualFileSystem {
         // Trim trailing slash for directories so Path.GetFileName works
         string normalizedPath = virtualPath.Replace('/', '\\').TrimEnd('\\');
         if (normalizedPath.Length <= 2 && normalizedPath.Contains(':')) return; // Don't recycle drives
+        
+        // Don't recycle the Recycle Bin itself or its parent
+        if (normalizedPath.ToUpper().Contains("$RECYCLE.BIN")) return;
 
         string fileName = Path.GetFileName(normalizedPath);
         string recycleBin = "C:\\$Recycle.Bin\\";

@@ -98,7 +98,10 @@ public class ScrollPanel : Panel {
 
         // Restore
         spriteBatch.GraphicsDevice.ScissorRectangle = oldRect;
+        
+        // Restart with the PARENT's scissor state if it was active
+        var restoreRs = new RasterizerState { ScissorTestEnable = oldRect != spriteBatch.GraphicsDevice.Viewport.Bounds };
         shapeBatch.Begin();
-        spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+        spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, restoreRs);
     }
 }

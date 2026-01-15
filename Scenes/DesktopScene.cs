@@ -145,7 +145,7 @@ public class DesktopScene : Core.Scenes.Scene {
         var dirs = Core.OS.VirtualFileSystem.Instance.GetDirectories(desktopPath);
 
         // Combine files and all folders for desktop display
-        var itemsList = files.Concat(dirs);
+        var itemsList = files.Concat(dirs).Where(i => !i.Contains("$Recycle.Bin"));
         if (_sortType == "Name") itemsList = itemsList.OrderBy(System.IO.Path.GetFileName);
         else if (_sortType == "Type") itemsList = itemsList.OrderBy(System.IO.Path.GetExtension);
         else if (_sortType == "Size") itemsList = itemsList.OrderBy(f => { try { return new System.IO.FileInfo(VirtualFileSystem.Instance.ToHostPath(f)).Length; } catch { return 0; } });
@@ -157,7 +157,10 @@ public class DesktopScene : Core.Scenes.Scene {
         float gap = 20;
 
         foreach (var item in items) {
-            string fileName = System.IO.Path.GetFileNameWithoutExtension(item);
+            string fileName = System.IO.Path.GetFileName(item);
+            if (fileName.ToLower().EndsWith(".slnk") || fileName.ToLower().EndsWith(".sapp")) {
+                fileName = System.IO.Path.GetFileNameWithoutExtension(item);
+            }
             Texture2D iconTex = Shell.GetIcon(item);
 
             var icon = new DesktopIcon(Vector2.Zero, fileName, iconTex);

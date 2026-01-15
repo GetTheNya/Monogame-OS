@@ -131,14 +131,14 @@ public static class Shell {
 
         public static void OpenWindow(Window win, Rectangle? startBounds = null) {
             if (WindowLayer != null) {
+                ApplyWindowLayout(win);
                 if (startBounds.HasValue) win.AnimateOpen(startBounds.Value);
-                else ApplyWindowLayout(win);
 
                 WindowLayer.AddChild(win);
                 Window.ActiveWindow = win;
 
-                win.OnMove += () => win.LayoutDirty = true;
-                win.OnResize += () => win.LayoutDirty = true;
+                win.OnMove += () => { win.LayoutDirty = true; SaveWindowLayout(win); };
+                win.OnResize += () => { win.LayoutDirty = true; SaveWindowLayout(win); };
             }
         }
 

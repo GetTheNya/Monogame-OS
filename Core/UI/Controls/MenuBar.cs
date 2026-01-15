@@ -176,9 +176,10 @@ public class MenuBar : UIControl {
 
         Parent?.AddChild(_dropdownPanel);
 
+        var panel = _dropdownPanel;
         // Animate in
-        TheGame.Core.Animation.Tweener.To(_dropdownPanel, p => _dropdownPanel.Position = p, startPos, targetPos, 0.15f, TheGame.Core.Animation.Easing.EaseOutQuad);
-        TheGame.Core.Animation.Tweener.To(_dropdownPanel, o => _dropdownPanel.Opacity = o, 0f, 1f, 0.15f, TheGame.Core.Animation.Easing.Linear);
+        TheGame.Core.Animation.Tweener.To(panel, p => panel.Position = p, startPos, targetPos, 0.15f, TheGame.Core.Animation.Easing.EaseOutQuad);
+        TheGame.Core.Animation.Tweener.To(panel, o => panel.Opacity = o, 0f, 1f, 0.15f, TheGame.Core.Animation.Easing.Linear);
     }
 
     private void CloseDropdown() {
