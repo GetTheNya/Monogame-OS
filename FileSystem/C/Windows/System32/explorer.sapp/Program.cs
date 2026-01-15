@@ -363,11 +363,19 @@ public class FileListItem : UIElement {
     public bool IsDir { get; }
     public bool IsSelected { get; set; }
     public bool IsHovered { get; set; }
+    
+    private readonly Texture2D _cachedIcon;
+    private readonly string _displayName;
 
     public FileListItem(string path, bool isDir) : base(Vector2.Zero, Vector2.Zero) {
         Path = path;
         IsDir = isDir;
         ConsumesInput = false; // Parent handles input
+        
+        // Cache icon and name at creation time - NOT in Draw()
+        _cachedIcon = Shell.GetIcon(path);
+        _displayName = System.IO.Path.GetFileName(path.TrimEnd('\\'));
+        if (string.IsNullOrEmpty(_displayName)) _displayName = path;
     }
 
     public override void Draw(SpriteBatch spriteBatch, ShapeBatch batch) {
@@ -381,15 +389,11 @@ public class FileListItem : UIElement {
             batch.FillRectangle(AbsolutePosition, Size, bgColor, rounded: 3);
         }
 
-        string name = System.IO.Path.GetFileName(Path.TrimEnd('\\'));
-        if (string.IsNullOrEmpty(name)) name = Path;
-
-        var icon = Shell.GetIcon(Path);
-        if (icon != null) {
-            spriteBatch.Draw(icon, new Rectangle((int)AbsolutePosition.X + 4, (int)AbsolutePosition.Y + 4, 20, 20), Color.White * AbsoluteOpacity);
+        if (_cachedIcon != null) {
+            spriteBatch.Draw(_cachedIcon, new Rectangle((int)AbsolutePosition.X + 4, (int)AbsolutePosition.Y + 4, 20, 20), Color.White * AbsoluteOpacity);
         }
 
         var font = GameContent.FontSystem.GetFont(16);
-        font.DrawText(batch, name, AbsolutePosition + new Vector2(30, 5), Color.White * AbsoluteOpacity);
+        font.DrawText(batch, _displayName, AbsolutePosition + new Vector2(30, 5), Color.White * AbsoluteOpacity);
     }
 }

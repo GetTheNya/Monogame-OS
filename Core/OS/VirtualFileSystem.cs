@@ -12,6 +12,9 @@ public class VirtualFileSystem {
     public static VirtualFileSystem Instance => _instance ??= new VirtualFileSystem();
 
     private string _hostRoot;
+    
+    // Cached recycle bin state to avoid disk I/O every frame
+    private bool? _isRecycleBinEmptyCache = null;
 
     public void Initialize(string hostRoot) {
         // Register Apps first so they are available for shortcuts
@@ -230,6 +233,7 @@ public class VirtualFileSystem {
         SaveTrashInfo(destPath, virtualPath);
         
         Move(normalizedPath, destPath);
+        InvalidateRecycleBinCache();
         Shell.RefreshDesktop?.Invoke();
     }
 
@@ -264,6 +268,7 @@ public class VirtualFileSystem {
         foreach (var file in Directory.GetFiles(hostPath)) File.Delete(file);
         foreach (var dir in Directory.GetDirectories(hostPath)) Directory.Delete(dir, true);
         
+        InvalidateRecycleBinCache();
         // Metadata is already deleted by the above if it was in that folder
     }
 
@@ -306,6 +311,7 @@ public class VirtualFileSystem {
         }
 
         Move(normalized, restorePath);
+        InvalidateRecycleBinCache();
         
         // Clean up metadata
         string metadataPath = "C:\\$Recycle.Bin\\$trash_info.json";
@@ -331,11 +337,25 @@ public class VirtualFileSystem {
     }
 
     public bool IsRecycleBinEmpty() {
+        // Return cached value if available to avoid disk I/O every frame
+        if (_isRecycleBinEmptyCache.HasValue) return _isRecycleBinEmptyCache.Value;
+        
         string trashPath = "C:\\$Recycle.Bin\\";
         // Ignore metadata file $trash_info.json
-        var files = GetFiles(trashPath).Where(f => !f.EndsWith("$trash_info.json")).ToArray();
+        var files = GetFiles(trashPath);
         var dirs = GetDirectories(trashPath);
-        return files.Length == 0 && dirs.Length == 0;
+        
+        int fileCount = 0;
+        foreach (var f in files) {
+            if (!f.EndsWith("$trash_info.json")) fileCount++;
+        }
+        
+        _isRecycleBinEmptyCache = fileCount == 0 && dirs.Length == 0;
+        return _isRecycleBinEmptyCache.Value;
+    }
+    
+    public void InvalidateRecycleBinCache() {
+        _isRecycleBinEmptyCache = null;
     }
 
     public string GetAppHomeDirectory(string appId) {

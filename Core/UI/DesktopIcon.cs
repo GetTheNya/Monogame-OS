@@ -13,7 +13,16 @@ namespace TheGame.Core.UI;
 /// </summary>
 public class DesktopIcon : UIElement {
     public Texture2D Icon { get; set; }
-    public string Label { get; set; }
+    private string _label;
+    public string Label { 
+        get => _label; 
+        set {
+            if (_label != value) {
+                _label = value;
+                _cachedLabelSize = Vector2.Zero;
+            }
+        }
+    }
     public string VirtualPath { get; set; }
     public Action<DesktopIcon> OnSelectedAction { get; set; }
     public Action<DesktopIcon, Vector2> OnDragAction { get; set; }
@@ -27,6 +36,8 @@ public class DesktopIcon : UIElement {
     public Color LabelColor { get; set; } = Color.White;
     public Color SelectionColor { get; set; } = new Color(0, 102, 204, 100); // semi-transparent blue
     public Color SelectionBorderColor { get; set; } = new Color(0, 102, 204);
+    
+    private Vector2 _cachedLabelSize = Vector2.Zero;
 
     public DesktopIcon(Vector2 position, string label, Texture2D icon = null) {
         Position = position;
@@ -92,13 +103,16 @@ public class DesktopIcon : UIElement {
                 // Only start drag if mouse has moved >5 pixels
                 if (!DragDropManager.Instance.IsActive && Vector2.Distance(currentMousePos, _dragStartPos) > 5f) {
                     // If dragging a selected icon, drag all selected icons
-                    if (IsSelected) {
-                        var selectedPaths = Parent?.Children.OfType<DesktopIcon>()
-                            .Where(i => i.IsSelected && !string.IsNullOrEmpty(i.VirtualPath))
-                            .Select(i => i.VirtualPath)
-                            .ToList();
+                    if (IsSelected && Parent != null) {
+                        // Manual iteration to avoid LINQ allocations
+                        var selectedPaths = new System.Collections.Generic.List<string>();
+                        for (int i = 0; i < Parent.Children.Count; i++) {
+                            if (Parent.Children[i] is DesktopIcon di && di.IsSelected && !string.IsNullOrEmpty(di.VirtualPath)) {
+                                selectedPaths.Add(di.VirtualPath);
+                            }
+                        }
                         
-                        if (selectedPaths != null && selectedPaths.Count > 1) {
+                        if (selectedPaths.Count > 1) {
                              DragDropManager.Instance.BeginDrag(selectedPaths, Position);
                         } else {
                              DragDropManager.Instance.BeginDrag(this, Position);
@@ -155,9 +169,12 @@ public class DesktopIcon : UIElement {
         if (!string.IsNullOrEmpty(Label) && GameContent.FontSystem != null) {
             var font = GameContent.FontSystem.GetFont(14);
             if (font != null) {
-                var textSize = font.MeasureString(Label);
+                if (_cachedLabelSize == Vector2.Zero) {
+                    _cachedLabelSize = font.MeasureString(Label);
+                }
+                
                 // Wrap text if too long? For now just center it and allow overlap
-                Vector2 labelPos = absPos + new Vector2((Size.X - textSize.X) / 2, iconSize + 10);
+                Vector2 labelPos = absPos + new Vector2((Size.X - _cachedLabelSize.X) / 2, iconSize + 10);
                 
                 // Shadow/Outline for readability on any background
                 font.DrawText(batch, Label, labelPos + new Vector2(1, 1), Color.Black);

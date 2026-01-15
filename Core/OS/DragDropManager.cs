@@ -20,6 +20,10 @@ public class DragDropManager {
     private Vector2 _dragSourcePosition;
     private Dictionary<DesktopIcon, Vector2> _dragOriginalPositions;
     private bool _isActive;
+    
+    // Cached icon and label to avoid per-frame lookups
+    private Texture2D _cachedDragIcon;
+    private string _cachedDragLabel;
 
     public bool IsActive => _isActive;
     public object DragData => _dragData;
@@ -44,6 +48,21 @@ public class DragDropManager {
         _dragSourcePosition = sourcePosition;
         _isActive = true;
         _dragOriginalPositions.Clear();
+        
+        // Cache icon and label at drag start - NOT in DrawDragVisual()
+        _cachedDragIcon = null;
+        _cachedDragLabel = null;
+        
+        if (data is string path) {
+            _cachedDragIcon = Shell.GetIcon(path);
+            _cachedDragLabel = System.IO.Path.GetFileName(path);
+        } else if (data is List<string> list && list.Count > 0) {
+            _cachedDragIcon = Shell.GetIcon(list[0]);
+            _cachedDragLabel = $"{list.Count} items";
+        } else if (data is DesktopIcon dIcon) {
+            _cachedDragIcon = dIcon.Icon;
+            _cachedDragLabel = dIcon.Label;
+        }
     }
 
     /// <summary>
@@ -104,55 +123,29 @@ public class DragDropManager {
     /// Should be called during the main draw loop.
     /// </summary>
     public void DrawDragVisual(SpriteBatch sb, ShapeBatch sbatch) {
-        if (!_isActive || _dragData == null) return;
+        if (!_isActive || _dragData == null || _cachedDragIcon == null) return;
 
         Shell.IsRenderingDrag = true;
         try {
             Vector2 mousePos = InputManager.MousePosition.ToVector2();
+            float iconSize = 48f;
+            float scale = iconSize / (float)_cachedDragIcon.Width;
 
-            if (_dragData is string path) {
-                Texture2D icon = Shell.GetIcon(path);
-                float scale = 48f / (float)icon.Width;
-                sb.Draw(icon, mousePos, null, Color.White * 0.8f, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
-                
-                var name = System.IO.Path.GetFileName(path);
-                if (!string.IsNullOrEmpty(name)) {
-                     var font = GameContent.FontSystem.GetFont(18);
-                     font.DrawText(sbatch, name, mousePos + new Vector2(40, 10), Color.White);
+            if (_dragData is List<string> list && list.Count > 1) {
+                // Draw stack for multiple items
+                for (int i = 2; i >= 0; i--) {
+                    Vector2 offset = new Vector2(i * 5, i * 5);
+                    sb.Draw(_cachedDragIcon, mousePos + offset, null, Color.White * (0.8f - (i * 0.2f)), 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
                 }
-            } 
-            else if (_dragData is DesktopIcon dIcon) {
-                // Draw icon texture at mouse
-                float iconSize = 48f;
-                Vector2 iconPos = mousePos;
-                
-                if (dIcon.Icon != null) {
-                    sb.Draw(dIcon.Icon, new Rectangle((int)iconPos.X, (int)iconPos.Y, (int)iconSize, (int)iconSize), Color.White * 0.7f);
-                } else {
-                    sbatch.FillRectangle(iconPos, new Vector2(iconSize, iconSize), new Color(200, 200, 200, 100));
-                }
-
-                // Draw label at mouse
-                if (!string.IsNullOrEmpty(dIcon.Label)) {
-                    var font = GameContent.FontSystem.GetFont(14);
-                    var textSize = font.MeasureString(dIcon.Label);
-                    Vector2 labelPos = mousePos + new Vector2((iconSize - textSize.X) / 2, iconSize + 5);
-                    font.DrawText(sbatch, dIcon.Label, labelPos, Color.White * 0.9f);
-                }
+            } else {
+                // Single item
+                sb.Draw(_cachedDragIcon, mousePos, null, Color.White * 0.8f, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
             }
-            else if (_dragData is List<string> list && list.Count > 0) {
-                 var first = list[0];
-                 Texture2D icon = Shell.GetIcon(first);
-                 float scale = 48f / (float)icon.Width;
-                 
-                 // Draw stack
-                 for(int i=2; i>=0; i--) {
-                      Vector2 offset = new Vector2(i*5, i*5);
-                      sb.Draw(icon, mousePos + offset, null, Color.White * (0.8f - (i*0.2f)), 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
-                 }
-                 
-                 var font = GameContent.FontSystem.GetFont(18);
-                 font.DrawText(sbatch, $"{list.Count} items", mousePos + new Vector2(50, 10), Color.White);
+
+            // Draw label
+            if (!string.IsNullOrEmpty(_cachedDragLabel)) {
+                var font = GameContent.FontSystem.GetFont(18);
+                font.DrawText(sbatch, _cachedDragLabel, mousePos + new Vector2(50, 10), Color.White);
             }
         } finally {
             Shell.IsRenderingDrag = false;

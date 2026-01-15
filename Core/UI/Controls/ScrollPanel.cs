@@ -11,6 +11,10 @@ public class ScrollPanel : Panel {
     public float ScrollY { get; set; } = 0f;
     private float _contentHeight = 0f;
     private float _targetScrollY = 0f;
+    
+    // Cached RasterizerStates to avoid per-frame allocations
+    private static readonly RasterizerState _scissorRasterizer = new RasterizerState { ScissorTestEnable = true };
+    private static readonly RasterizerState _noScissorRasterizer = new RasterizerState { ScissorTestEnable = false };
 
     public ScrollPanel(Vector2 position, Vector2 size) : base(position, size) {
         BackgroundColor = Color.Transparent;
@@ -79,11 +83,9 @@ public class ScrollPanel : Panel {
         }
         
         spriteBatch.GraphicsDevice.ScissorRectangle = finalScissor;
-
-        var rs = new RasterizerState { ScissorTestEnable = true };
         
         shapeBatch.Begin(); 
-        spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, rs);
+        spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, _scissorRasterizer);
 
         DrawSelf(spriteBatch, shapeBatch);
 
@@ -100,8 +102,9 @@ public class ScrollPanel : Panel {
         spriteBatch.GraphicsDevice.ScissorRectangle = oldRect;
         
         // Restart with the PARENT's scissor state if it was active
-        var restoreRs = new RasterizerState { ScissorTestEnable = oldRect != spriteBatch.GraphicsDevice.Viewport.Bounds };
+        bool parentHadScissor = oldRect != spriteBatch.GraphicsDevice.Viewport.Bounds;
         shapeBatch.Begin();
-        spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, restoreRs);
+        spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, parentHadScissor ? _scissorRasterizer : _noScissorRasterizer);
     }
 }
+

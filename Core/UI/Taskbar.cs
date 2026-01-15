@@ -26,6 +26,8 @@ public class Taskbar : Panel {
 
     // Track windows independently of their Z-order
     private List<Window> _trackedWindows = new();
+    private Dictionary<Window, float> _cachedButtonWidths = new();
+    private float _lastMaxAllowed = 0f;
 
     public Taskbar(Vector2 position, Vector2 size, UIElement windowLayer, UIElement startMenu) : base(position, size) {
         Instance = this;
@@ -97,7 +99,11 @@ public class Taskbar : Panel {
                 
                 float cumulativeX = centerOffset;
                 for (int i = 0; i < _trackedWindows.Count; i++) {
-                    float btnWidth = CalculateButtonWidth(_trackedWindows[i].Title, maxAllowed);
+                    var win = _trackedWindows[i];
+                    if (!_cachedButtonWidths.TryGetValue(win, out float btnWidth) || _lastMaxAllowed != maxAllowed) {
+                        btnWidth = CalculateButtonWidth(win.Title, maxAllowed);
+                        _cachedButtonWidths[win] = btnWidth;
+                    }
                     float mid = cumulativeX + (btnWidth / 2f);
 
                     if (i < _dragSourceIndex) {
@@ -116,6 +122,7 @@ public class Taskbar : Panel {
 
                     cumulativeX += btnWidth + Padding;
                 }
+                _lastMaxAllowed = maxAllowed;
 
                 // Validity checks to prevent crash
                 if (targetIndex != _dragSourceIndex &&
@@ -226,6 +233,7 @@ public class Taskbar : Panel {
             var trackedWin = _trackedWindows[i];
             if (!currentWindows.Contains(trackedWin)) {
                 _trackedWindows.RemoveAt(i);
+                _cachedButtonWidths.Remove(trackedWin);
                 
                 // Find the specific button for this window
                 var btn = _windowListPanel.Children.FirstOrDefault(c => c.Tag == trackedWin) as Button;
@@ -260,7 +268,10 @@ public class Taskbar : Panel {
             if (child is Button btn) {
                 // If button is still attached to a window, update its properties
                 if (btn.Tag is Window win) {
-                    float width = CalculateButtonWidth(win.Title, maxAllowedCur);
+                    if (!_cachedButtonWidths.TryGetValue(win, out float width) || _lastMaxAllowed != maxAllowedCur) {
+                        width = CalculateButtonWidth(win.Title, maxAllowedCur);
+                        _cachedButtonWidths[win] = width;
+                    }
                     bool isActive = (win == Window.ActiveWindow);
 
                     btn.Text = win.Title;
@@ -272,6 +283,7 @@ public class Taskbar : Panel {
                     else if (!win.IsVisible) btn.BackgroundColor = new Color(40, 40, 40, 150);
                     else btn.BackgroundColor = new Color(50, 50, 50);
                 }
+                _lastMaxAllowed = maxAllowedCur;
 
                 // Dragging Visual Override
                 if (btn == _draggingButton) {
@@ -386,26 +398,12 @@ public class Taskbar : Panel {
         foreach (var child in Children) {
             if (child == _windowListPanel) {
                 // Draw all buttons EXCEPT the one being dragged
-                // implementing barrier flushes BETWEEN buttons to prevent icon bleeding
                 foreach (var btn in _windowListPanel.Children) {
                     if (btn == _draggingButton) continue;
-
                     btn.Draw(spriteBatch, batch);
-
-                    // Barrier Flush between buttons
-                    batch.End();
-                    spriteBatch.End();
-                    batch.Begin();
-                    spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
                 }
             } else {
                 child.Draw(spriteBatch, batch);
-
-                // Consistency flush
-                batch.End();
-                spriteBatch.End();
-                batch.Begin();
-                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
             }
         }
 

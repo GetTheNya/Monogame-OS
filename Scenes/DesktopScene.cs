@@ -588,10 +588,6 @@ public class DesktopScene : Core.Scenes.Scene {
             foreach (var child in Children) {
                 if (!child.IsVisible) continue;
                 child.Draw(spriteBatch, shapeBatch);
-                shapeBatch.End();
-                spriteBatch.End();
-                shapeBatch.Begin();
-                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
             }
             if (_isSelecting && _marqueeRect != Rectangle.Empty) {
                 shapeBatch.FillRectangle(_marqueeRect.Location.ToVector2(), _marqueeRect.Size.ToVector2(), new Color(0, 102, 204, 50));

@@ -121,7 +121,10 @@ public class NotificationHistoryPanel : UIElement {
     private void RefreshContent() {
         if (_isClearing) return;
 
-        foreach (var c in _scrollPanel.Children.ToArray()) _scrollPanel.RemoveChild(c);
+        // Manual removal to avoid ToArray allocation
+        for (int i = _scrollPanel.Children.Count - 1; i >= 0; i--) {
+            _scrollPanel.RemoveChild(_scrollPanel.Children[i]);
+        }
         _items.Clear();
 
         float y = Padding;
@@ -133,21 +136,27 @@ public class NotificationHistoryPanel : UIElement {
             return;
         }
 
-        var grouped = history.GroupBy(n => n.Timestamp.Date);
-        foreach (var group in grouped) {
-            string dateLabel = group.Key == DateTime.Today ? "Today" :
-                               group.Key == DateTime.Today.AddDays(-1) ? "Yesterday" :
-                               group.Key.ToString("MMMM d");
-            _scrollPanel.AddChild(new Label(new Vector2(Padding, y), dateLabel) { FontSize = 12, Color = Color.Gray });
-            y += 25;
-
-            foreach (var notif in group) {
-                var item = new NotificationHistoryItem(new Vector2(Padding, y), new Vector2(PanelWidth - Padding * 2, ItemHeight - 10), notif);
-                item.OnDismiss = () => OnItemDismissed(item);
-                _scrollPanel.AddChild(item);
-                _items.Add(item);
-                y += ItemHeight;
+        // Manual date grouping to avoid GroupBy allocation
+        DateTime lastDate = DateTime.MinValue;
+        for (int i = 0; i < history.Count; i++) {
+            var notif = history[i];
+            DateTime notifDate = notif.Timestamp.Date;
+            
+            // Add date header if new date
+            if (notifDate != lastDate) {
+                lastDate = notifDate;
+                string dateLabel = notifDate == DateTime.Today ? "Today" :
+                                   notifDate == DateTime.Today.AddDays(-1) ? "Yesterday" :
+                                   notifDate.ToString("MMMM d");
+                _scrollPanel.AddChild(new Label(new Vector2(Padding, y), dateLabel) { FontSize = 12, Color = Color.Gray });
+                y += 25;
             }
+
+            var item = new NotificationHistoryItem(new Vector2(Padding, y), new Vector2(PanelWidth - Padding * 2, ItemHeight - 10), notif);
+            item.OnDismiss = () => OnItemDismissed(item);
+            _scrollPanel.AddChild(item);
+            _items.Add(item);
+            y += ItemHeight;
         }
 
         _scrollPanel.UpdateContentHeight(y + Padding);

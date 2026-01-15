@@ -137,8 +137,8 @@ public static class Shell {
                 WindowLayer.AddChild(win);
                 Window.ActiveWindow = win;
 
-                win.OnMove += () => { win.LayoutDirty = true; SaveWindowLayout(win); };
-                win.OnResize += () => { win.LayoutDirty = true; SaveWindowLayout(win); };
+                win.OnMove += () => win.LayoutDirty = true;
+                win.OnResize += () => win.LayoutDirty = true;
             }
         }
 

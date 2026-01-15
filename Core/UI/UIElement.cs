@@ -65,10 +65,11 @@ public abstract class UIElement {
     public virtual void Update(GameTime gameTime) {
         if (!IsActive || !IsVisible) return;
 
-        // Create a temporary copy to avoid crash if children are added/removed during update
-        var childrenCopy = Children.ToArray();
-        for (int i = childrenCopy.Length - 1; i >= 0; i--) {
-            childrenCopy[i].Update(gameTime);
+        // Iterate in reverse using index to avoid allocation and handle removal
+        for (int i = Children.Count - 1; i >= 0; i--) {
+            if (i < Children.Count) { // Check bounds in case child was removed
+                Children[i].Update(gameTime);
+            }
         }
 
         UpdateInput();

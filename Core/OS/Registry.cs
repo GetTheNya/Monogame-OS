@@ -10,6 +10,43 @@ public static class Registry {
     private const string REGISTRY_PATH = "C:\\Windows\\System32\\config\\registry.json";
     private static JsonObject _cachedRoot;
     private static bool _isDirty;
+    
+    // Debounce timer - only save after delay to avoid disk thrashing
+    private static float _saveTimer = 0f;
+    private const float SAVE_DELAY = 1.0f; // seconds
+
+    public static void Initialize() {
+        EnsureLoaded();
+    }
+
+    public static void Update(float deltaTime) {
+        if (_isDirty) {
+            _saveTimer += deltaTime;
+            if (_saveTimer >= SAVE_DELAY) {
+                FlushToDisk();
+            }
+        }
+    }
+
+    private static bool _isWriting = false;
+
+    public static void FlushToDisk() {
+        if (!_isDirty || _cachedRoot == null || _isWriting) return;
+        
+        string json = _cachedRoot.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        _isDirty = false;
+        _saveTimer = 0f;
+        
+        _isWriting = true;
+        System.Threading.Tasks.Task.Run(() => {
+            try {
+                VirtualFileSystem.Instance.WriteAllText(REGISTRY_PATH, json);
+            } catch { }
+            finally {
+                _isWriting = false;
+            }
+        });
+    }
 
     private static void EnsureLoaded() {
         if (_cachedRoot != null) return;
@@ -29,12 +66,9 @@ public static class Registry {
         }
     }
 
-    private static void Save() {
-        if (!_isDirty || _cachedRoot == null) return;
-        
-        string json = _cachedRoot.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
-        VirtualFileSystem.Instance.WriteAllText(REGISTRY_PATH, json);
-        _isDirty = false;
+    private static void MarkDirty() {
+        _isDirty = true;
+        _saveTimer = 0f; // Reset timer on new changes
     }
 
     private static JsonObject NavigateToKey(string path, bool createIfMissing) {
@@ -116,8 +150,7 @@ public static class Registry {
             }
             
             parent[keyName] = valNode;
-            _isDirty = true;
-            Save();
+            MarkDirty();
         }
     }
 
@@ -157,8 +190,7 @@ public static class Registry {
         JsonObject parent = NavigateToKey(parentPath, false);
         if (parent != null && parent.ContainsKey(keyName)) {
             parent.Remove(keyName);
-            _isDirty = true;
-            Save();
+            MarkDirty();
         }
     }
 }

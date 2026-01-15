@@ -36,13 +36,24 @@ public class NotificationManager {
     private List<Notification> _history = new();
     public IReadOnlyList<Notification> History => _history;
     
+    // Cached unread count to avoid LINQ every access
+    private int _unreadCount = 0;
+    
     public event Action<Notification> OnNotificationAdded;
     public event Action<string> OnNotificationDismissed;
     public event Action OnHistoryCleared;
 
-    public int UnreadCount => _history.FindAll(n => !n.IsRead).Count;
+    public int UnreadCount => _unreadCount;
 
     private NotificationManager() { }
+    
+    private void UpdateUnreadCount() {
+        int count = 0;
+        for (int i = 0; i < _history.Count; i++) {
+            if (!_history[i].IsRead) count++;
+        }
+        _unreadCount = count;
+    }
 
     /// <summary>
     /// Shows a new notification toast and adds it to history. Returns the notification ID.
@@ -58,6 +69,7 @@ public class NotificationManager {
         };
 
         _history.Insert(0, notification); // Newest first
+        _unreadCount++;
         OnNotificationAdded?.Invoke(notification);
         DebugLogger.Log($"Notification: {title}");
         return notification.Id;
@@ -68,7 +80,10 @@ public class NotificationManager {
     /// </summary>
     public void MarkAsRead(string notificationId) {
         var notif = _history.Find(n => n.Id == notificationId);
-        if (notif != null) notif.IsRead = true;
+        if (notif != null && !notif.IsRead) {
+            notif.IsRead = true;
+            _unreadCount = Math.Max(0, _unreadCount - 1);
+        }
     }
 
     /// <summary>
@@ -76,13 +91,21 @@ public class NotificationManager {
     /// </summary>
     public void MarkAllAsRead() {
         foreach (var n in _history) n.IsRead = true;
+        _unreadCount = 0;
     }
 
     /// <summary>
     /// Removes a specific notification from history and dismisses its toast.
     /// </summary>
     public void Dismiss(string notificationId) {
-        _history.RemoveAll(n => n.Id == notificationId);
+        // Check if we're removing an unread notification
+        for (int i = 0; i < _history.Count; i++) {
+            if (_history[i].Id == notificationId) {
+                if (!_history[i].IsRead) _unreadCount = Math.Max(0, _unreadCount - 1);
+                _history.RemoveAt(i);
+                break;
+            }
+        }
         OnNotificationDismissed?.Invoke(notificationId);
     }
 
@@ -91,6 +114,7 @@ public class NotificationManager {
     /// </summary>
     public void ClearHistory() {
         _history.Clear();
+        _unreadCount = 0;
         OnHistoryCleared?.Invoke();
     }
 }
