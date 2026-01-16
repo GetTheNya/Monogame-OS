@@ -15,7 +15,7 @@ public class TabPage {
 }
 
 public class TabControl : UIElement {
-    private Panel _sidebar;
+    private ScrollPanel _sidebar;
     private Panel _contentArea;
     private List<TabPage> _pages = new();
     private int _selectedIndex = -1;
@@ -26,12 +26,12 @@ public class TabControl : UIElement {
     public Color ActiveTabColor { get; set; } = new Color(50, 50, 50);
     public Color AccentColor { get; set; } = new Color(0, 120, 215);
 
-    public Panel Sidebar => _sidebar;
+    public ScrollPanel Sidebar => _sidebar;
     public Panel ContentArea => _contentArea;
     public event Action<int> OnTabChanged;
 
     public TabControl(Vector2 position, Vector2 size) : base(position, size) {
-        _sidebar = new Panel(Vector2.Zero, new Vector2(SidebarWidth, size.Y)) {
+        _sidebar = new ScrollPanel(Vector2.Zero, new Vector2(SidebarWidth, size.Y)) {
             BackgroundColor = SidebarColor,
             BorderThickness = 0
         };

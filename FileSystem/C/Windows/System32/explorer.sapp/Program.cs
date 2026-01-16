@@ -29,7 +29,7 @@ public class FileExplorerWindow : Window {
     public string CurrentPath => _currentPath;
     private AppSettings _settings;
     private FileListPanel _fileList;
-    private Panel _sidebar;
+    private ScrollPanel _sidebar;
     private MenuBar _menuBar;
     private TextInput _pathInput;
     private const float SidebarWidth = 180f;
@@ -74,7 +74,7 @@ public class FileExplorerWindow : Window {
         AddChild(_pathInput);
 
         // Sidebar
-        _sidebar = new Panel(new Vector2(0, 66), new Vector2(SidebarWidth, ClientSize.Y - 66)) {
+        _sidebar = new ScrollPanel(new Vector2(0, 66), new Vector2(SidebarWidth, ClientSize.Y - 66)) {
             BackgroundColor = new Color(30, 30, 30),
             BorderThickness = 0
         };

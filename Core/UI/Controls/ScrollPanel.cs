@@ -36,6 +36,7 @@ public class ScrollPanel : Panel {
     private float _scrollbarAlphaH = 0f;
     private float _scrollbarHoverAlphaV = 0f;
     private float _scrollbarHoverAlphaH = 0f;
+    private bool _scrollbarPriorityConsumed = false;
     
     // Cached RasterizerStates to avoid per-frame allocations
     private static readonly RasterizerState _scissorRasterizer = new RasterizerState { ScissorTestEnable = true };
@@ -145,6 +146,7 @@ public class ScrollPanel : Panel {
         // Custom prioritization:
         // 1. If we click on a scrollbar, we consume it BEFORE children see it.
         // BUT only if input wasn't already consumed by a parent (e.g. Window resize edge)
+        _scrollbarPriorityConsumed = false;
         if (!InputManager.IsMouseConsumed) {
             var trackV = GetScrollbarTrackRectV();
             var trackH = GetScrollbarTrackRectH();
@@ -153,6 +155,7 @@ public class ScrollPanel : Panel {
             
             if ((overV || overH) && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
                  InputManager.IsMouseConsumed = true;
+                 _scrollbarPriorityConsumed = true; // Track that WE consumed it
             }
         }
 
@@ -236,7 +239,7 @@ public class ScrollPanel : Panel {
             bool isOverThumb = thumbRect.Contains(InputManager.MousePosition);
             _scrollbarHoverAlphaV = MathHelper.Lerp(_scrollbarHoverAlphaV, (isOverThumb || _isDraggingScrollbarV) ? 1f : 0f, 0.2f);
 
-            if (!_isDraggingScrollbarV && overTrackV && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
+            if (!_isDraggingScrollbarV && overTrackV && InputManager.IsMouseButtonJustPressed(MouseButton.Left, ignoreConsumed: _scrollbarPriorityConsumed)) {
                 if (isOverThumb) {
                     _isDraggingScrollbarV = true;
                     _scrollbarDragOffsetV = InputManager.MousePosition.Y - thumbRect.Y;
@@ -256,7 +259,7 @@ public class ScrollPanel : Panel {
             bool isOverThumb = thumbRect.Contains(InputManager.MousePosition);
             _scrollbarHoverAlphaH = MathHelper.Lerp(_scrollbarHoverAlphaH, (isOverThumb || _isDraggingScrollbarH) ? 1f : 0f, 0.2f);
 
-            if (!_isDraggingScrollbarH && overTrackH && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
+            if (!_isDraggingScrollbarH && overTrackH && InputManager.IsMouseButtonJustPressed(MouseButton.Left, ignoreConsumed: _scrollbarPriorityConsumed)) {
                 if (isOverThumb) {
                     _isDraggingScrollbarH = true;
                     _scrollbarDragOffsetH = InputManager.MousePosition.X - thumbRect.X;
