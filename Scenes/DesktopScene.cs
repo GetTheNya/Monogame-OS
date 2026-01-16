@@ -31,6 +31,7 @@ public class DesktopScene : Core.Scenes.Scene {
 
     private RenderTarget2D _mainTarget;
     private Texture2D _wallpaperTexture;
+    private string _wallpaperPath;
 
     // Notification System
     private NotificationHistoryPanel _notificationPanel;
@@ -400,7 +401,12 @@ public class DesktopScene : Core.Scenes.Scene {
             string path = Settings.Personalization.WallpaperPath;
             string hostPath = VirtualFileSystem.Instance.ToHostPath(path);
             if (System.IO.File.Exists(hostPath)) {
-                _wallpaperTexture?.Dispose();
+                // Unload previous wallpaper from cache if exists
+                if (_wallpaperPath != null) {
+                    Core.ImageLoader.Unload(_wallpaperPath);
+                }
+                
+                _wallpaperPath = hostPath;
                 _wallpaperTexture = Core.ImageLoader.Load(G.GraphicsDevice, hostPath);
             }
         } catch (Exception ex) {
