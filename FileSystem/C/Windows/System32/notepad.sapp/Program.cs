@@ -21,7 +21,7 @@ public class Program {
     }
 
     public static Window CreateWindow(string[] args) {
-        var settings = Shell.Settings.Load<AppSettings>();
+        var settings = Shell.AppSettings.Load<AppSettings>();
         string filePath = args != null && args.Length > 0 ? args[0] : null;
         return new NotepadWindow(new Vector2(100, 100), new Vector2(700, 500), settings, filePath);
     }

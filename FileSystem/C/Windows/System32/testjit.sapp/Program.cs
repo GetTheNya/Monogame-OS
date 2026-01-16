@@ -13,7 +13,7 @@ public class AppSettings {
 
 public class JitApp : Window {
     public static Window CreateWindow() {
-        var settings = Shell.Settings.Load<AppSettings>();
+        var settings = Shell.AppSettings.Load<AppSettings>();
         return new JitApp(new Vector2(100, 100), new Vector2(400, 300), settings);
     }
 
@@ -36,7 +36,7 @@ public class JitApp : Window {
             OnClickAction = () => {
                 _settings.Counter++;
                 _counterLabel.Text = $"Counter: {_settings.Counter}";
-                Shell.Settings.Save(_settings);
+                Shell.AppSettings.Save(_settings);
                 Shell.Notifications.Show("Success", "Settings saved!", null, null);
                 Shell.Audio.PlaySound(notifPath);
             }

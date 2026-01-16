@@ -14,7 +14,7 @@ public class SettingsWindow : Window {
     private AppSettings _settings;
 
     public static Window CreateWindow() {
-        var settings = Shell.Settings.Load<AppSettings>();
+        var settings = Shell.AppSettings.Load<AppSettings>();
         return new SettingsWindow(new Vector2(100, 100), new Vector2(600, 500), settings);
     }
 

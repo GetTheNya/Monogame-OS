@@ -282,7 +282,7 @@ public static class Shell {
         }
     }
 
-    public static class Settings {
+    public static class AppSettings {
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static void Save<T>(T settings) {
             string appId = AppLoader.Instance.GetAppIdFromAssembly(Assembly.GetCallingAssembly());

@@ -11,6 +11,7 @@ using TheGame.Core.UI.Controls;
 using TheGame.Core.OS;
 using TheGame.Core.Input;
 using TheGame.Graphics;
+using MessageBox = TheGame.Core.UI.MessageBox;
 
 namespace FileExplorerApp;
 
@@ -20,7 +21,7 @@ public class AppSettings {
 
 public class FileExplorerWindow : Window {
     public static Window CreateWindow() {
-        var settings = Shell.Settings.Load<AppSettings>();
+        var settings = Shell.AppSettings.Load<AppSettings>();
         return new FileExplorerWindow(new Vector2(100, 100), new Vector2(850, 600), settings);
     }
 
@@ -150,7 +151,7 @@ public class FileExplorerWindow : Window {
             _currentPath = path;
             _pathInput.Value = path;
             _settings.LastPath = path;
-            Shell.Settings.Save(_settings);
+            Shell.AppSettings.Save(_settings);
             RefreshList();
         }
     }
