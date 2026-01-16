@@ -122,7 +122,7 @@ public class FileExplorerWindow : Window {
             TextAlign = TextAlign.Left,
             Icon = icon
         };
-        btn.OnClickAction = () => NavigateTo(path == "COMPUTER" ? "COMPUTER" : path);
+        btn.OnClickAction = () => NavigateTo(path);
         _sidebar.AddChild(btn);
         y += 35;
     }
