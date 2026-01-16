@@ -528,20 +528,7 @@ public class FileListPanel : ScrollPanel {
             menuItems.Add(new MenuItem { Text = "Open", Action = () => _window.NavigateTo(item.Path) });
             menuItems.Add(new MenuItem { 
                 Text = "Empty Recycle Bin", 
-                Action = () => {
-                    var mb = new MessageBox("Empty Recycle Bin", 
-                        "Are you sure you want to permanently delete all items in the Recycle Bin?", 
-                        MessageBoxButtons.YesNo, (confirmed) => {
-                        if (confirmed) {
-                            VirtualFileSystem.Instance.EmptyRecycleBin();
-                            Shell.Audio.PlaySound("C:\\Windows\\Media\\trash_empty.wav");
-                            _window.RefreshList();
-                            Shell.RefreshDesktop?.Invoke();
-                            Shell.RefreshExplorers();
-                        }
-                    });
-                    Shell.UI.OpenWindow(mb);
-                }
+                Action = () => Shell.PromptEmptyRecycleBin()
             });
             menuItems.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path) });
         } else if (item.IsDir) {

@@ -269,18 +269,7 @@ public class DesktopScene : Core.Scenes.Scene {
             _contextMenu.Show(InputManager.MousePosition.ToVector2(), new List<MenuItem> {
                 new MenuItem { Text = "Open", Action = () => Shell.Execute(trashPath, _trashIconEl.Bounds) },
                 new MenuItem {
-                    Text = "Empty Recycle Bin", Action = () => {
-                        var mb = new MessageBox("Recycle Bin", "Are you sure you want to permanently delete all items in the Recycle Bin?", MessageBoxButtons.YesNo, (confirmed) => {
-                            if (confirmed) {
-                                VirtualFileSystem.Instance.EmptyRecycleBin();
-                                Shell.Audio.PlaySound("C:\\Windows\\Media\\trash_empty.wav");
-                                DebugLogger.Log("Trash Emptied.");
-                                LoadDesktopIcons();
-                                Shell.RefreshExplorers("$Recycle.Bin");
-                            }
-                        });
-                        Shell.UI.OpenWindow(mb);
-                    }
+                    Text = "Empty Recycle Bin", Action = () => Shell.PromptEmptyRecycleBin()
                 },
                 new MenuItem {
                     Text = "Restore All", Action = () => {

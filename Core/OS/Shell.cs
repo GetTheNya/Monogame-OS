@@ -88,6 +88,20 @@ public static class Shell {
         }
     }
 
+    public static void PromptEmptyRecycleBin() {
+        var mb = new MessageBox("Empty Recycle Bin", 
+            "Are you sure you want to permanently delete all items in the Recycle Bin?", 
+            MessageBoxButtons.YesNo, (confirmed) => {
+            if (confirmed) {
+                VirtualFileSystem.Instance.EmptyRecycleBin();
+                Audio.PlaySound("C:\\Windows\\Media\\trash_empty.wav");
+                RefreshDesktop?.Invoke();
+                RefreshExplorers();
+            }
+        });
+        UI.OpenWindow(mb);
+    }
+
     public static Texture2D GetIcon(string virtualPath) {
         if (string.IsNullOrEmpty(virtualPath)) return GameContent.FileIcon;
         if (virtualPath.ToUpper().Contains("$RECYCLE.BIN")) return VirtualFileSystem.Instance.IsRecycleBinEmpty() ? GameContent.TrashEmptyIcon : GameContent.TrashFullIcon;
