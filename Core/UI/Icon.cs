@@ -20,29 +20,11 @@ public class Icon : UIElement {
         var destRect = new Rectangle((int)absPos.X, (int)absPos.Y, (int)Size.X, (int)Size.Y);
 
         if (Texture != null) {
-            // We need to use SpriteBatch for textures.
-            // Assumption: SpriteBatch.Begin() has been called by Root or Scene.
-            // DesktopScene calls _uiManager.Draw, which calls Root.Draw...
-            // But we don't have a global Begin() for SpriteBatch yet in DesktopScene/UIManager!
-            // Wait, standard MonoGame SpriteBatch needs Begin() before Draw().
-            // DesktopScene has `_uiManager.Draw(spriteBatch, shapeBatch)`.
-            // Does it Begin/End?
-            // UIManager.Draw calls `_root.Draw`.
-            // The method signature assumes passed batches are ready? 
-            // ShapeBatch handles Begin/End internally often? Or we should manage it.
-            // ShapeBatch in TheGame usually requires Begin/End.
-            // In DesktopScene:
-            /*
-                shapeBatch.Begin();
-                ...
-                _uiManager.Draw(spriteBatch, shapeBatch);
-                ...
-                shapeBatch.End();
-            */
-            // But SpriteBatch is currently unused in DesktopScene logic until now.
-            // Check DesktopScene.Draw again.
-            
-            spriteBatch.Draw(Texture, destRect, SourceRect, Tint);
+            float scaleX = Size.X / Texture.Width;
+            float scaleY = Size.Y / Texture.Height;
+            // DrawTexture usually takes a single scale. If non-uniform scaling is needed, we'd need a different ShapeBatch method.
+            // But usually UI icons are square/uniform.
+            batch.DrawTexture(Texture, absPos, Tint * AbsoluteOpacity, scaleX);
         } else {
             // Placeholder
             batch.FillRectangle(absPos, Size, Color.Magenta); // Missing texture color

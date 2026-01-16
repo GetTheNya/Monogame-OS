@@ -244,7 +244,7 @@ public class FileListPanel : ScrollPanel {
         if (!IsVisible) return;
 
         Vector2 mouse = InputManager.MousePosition.ToVector2();
-        bool inBounds = Bounds.Contains(mouse.ToPoint());
+        bool inBounds = Bounds.Contains(mouse.ToPoint()) && !InputManager.IsMouseConsumed;
 
         // Find hovered item
         FileListItem hoveredItem = null;
@@ -333,11 +333,13 @@ public class FileListPanel : ScrollPanel {
             InputManager.IsMouseConsumed = true;
         }
 
-        // Scroll input
-        if (inBounds) {
+        // Scroll input - only if in bounds and not consumed
+        if (inBounds && HasScrollableContent()) {
             float scrollDelta = InputManager.ScrollDelta;
             if (scrollDelta != 0) {
-                ScrollY += (scrollDelta / 120f) * 60f;
+                TargetScrollY += (scrollDelta / 120f) * 60f;
+                ClampScroll();
+                InputManager.IsMouseConsumed = true;
             }
         }
     }
@@ -391,7 +393,9 @@ public class FileListItem : UIElement {
         }
 
         if (_cachedIcon != null) {
-            spriteBatch.Draw(_cachedIcon, new Rectangle((int)AbsolutePosition.X + 4, (int)AbsolutePosition.Y + 4, 20, 20), Color.White * AbsoluteOpacity);
+            float iconSize = 20f;
+            float scale = iconSize / _cachedIcon.Width;
+            batch.DrawTexture(_cachedIcon, AbsolutePosition + new Vector2(4, 4), Color.White * AbsoluteOpacity, scale);
         }
 
         var font = GameContent.FontSystem.GetFont(16);

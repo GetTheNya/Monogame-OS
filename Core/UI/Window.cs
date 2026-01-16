@@ -122,6 +122,46 @@ public class Window : UIElement {
 
     public override void Update(GameTime gameTime) {
         _obscuredByAnotherWindow = InputManager.IsMouseConsumed;
+        
+        // CRITICAL: Check for resize/drag BEFORE children update
+        // This prevents clicking on resize edges from triggering controls underneath
+        if (IsVisible && !_obscuredByAnotherWindow && !_isDragging && !_isResizing) {
+            const int ResizeEdge = 6;
+            bool isHoveringRaw = InputManager.IsMouseHovering(Bounds, ignoreConsumed: true);
+            bool isJustPressed = isHoveringRaw && InputManager.IsMouseButtonJustPressed(MouseButton.Left, ignoreConsumed: true);
+            
+            // Check for resize edge clicks FIRST (before children can consume input)
+            if (isJustPressed && !_isMaximized && CanResize) {
+                var mousePos = InputManager.MousePosition;
+                Rectangle bounds = new Rectangle((int)AbsolutePosition.X, (int)AbsolutePosition.Y, (int)Size.X, (int)Size.Y);
+                
+                if (bounds.Contains(mousePos)) {
+                    bool left = mousePos.X >= bounds.Left && mousePos.X <= bounds.Left + ResizeEdge;
+                    bool right = mousePos.X >= bounds.Right - ResizeEdge && mousePos.X <= bounds.Right;
+                    bool top = mousePos.Y >= bounds.Top && mousePos.Y <= bounds.Top + ResizeEdge;
+                    bool bottom = mousePos.Y >= bounds.Bottom - ResizeEdge && mousePos.Y <= bounds.Bottom;
+
+                    if (left || right || top || bottom) {
+                        // Consume input IMMEDIATELY before children can see it
+                        InputManager.IsMouseConsumed = true;
+                        _isResizing = true;
+                        _resizeDir = Vector2.Zero;
+                        if (left) _resizeDir.X = -1;
+                        if (right) _resizeDir.X = 1;
+                        if (top) _resizeDir.Y = -1;
+                        if (bottom) _resizeDir.Y = 1;
+
+                        _resizeStartMouse = mousePos.ToVector2();
+                        _resizeStartSize = Size;
+                        _resizeStartPos = Position;
+
+                        ActiveWindow = this;
+                        Parent?.BringToFront(this);
+                    }
+                }
+            }
+        }
+        
         UpdateButtons();
         base.Update(gameTime);
     }
@@ -322,38 +362,6 @@ public class Window : UIElement {
                 Rectangle titleBarRect = new Rectangle((int)AbsolutePosition.X, (int)AbsolutePosition.Y, (int)Size.X, TitleBarHeight);
                 if (titleBarRect.Contains(mouseP)) {
                     CustomCursor.Instance.SetCursor(CursorType.Pointer);
-                }
-            }
-        }
-
-        // 3. Resizing logic - Check using RAW input to take priority over children
-        // Window chrome (borders) should always be grabbable even if a full-screen child control exists
-        if (isJustPressed && !_isMaximized && CanResize) {
-            var mousePos = InputManager.MousePosition;
-            Rectangle bounds = new Rectangle((int)AbsolutePosition.X, (int)AbsolutePosition.Y, (int)Size.X, (int)Size.Y);
-            
-            if (bounds.Contains(mousePos)) {
-                bool left = mousePos.X >= bounds.Left && mousePos.X <= bounds.Left + ResizeEdge;
-                bool right = mousePos.X >= bounds.Right - ResizeEdge && mousePos.X <= bounds.Right;
-                bool top = mousePos.Y >= bounds.Top && mousePos.Y <= bounds.Top + ResizeEdge;
-                bool bottom = mousePos.Y >= bounds.Bottom - ResizeEdge && mousePos.Y <= bounds.Bottom;
-
-                if (left || right || top || bottom) {
-                    _isResizing = true;
-                    _resizeDir = Vector2.Zero;
-                    if (left) _resizeDir.X = -1;
-                    if (right) _resizeDir.X = 1;
-                    if (top) _resizeDir.Y = -1;
-                    if (bottom) _resizeDir.Y = 1;
-
-                    _resizeStartMouse = mousePos.ToVector2();
-                    _resizeStartSize = Size;
-                    _resizeStartPos = Position;
-
-                    InputManager.IsMouseConsumed = true;
-                    ActiveWindow = this;
-                    Parent?.BringToFront(this);
-                    return; // Resize takes total priority
                 }
             }
         }
@@ -638,7 +646,8 @@ public class Window : UIElement {
         if (Icon != null && Size.X > controlButtonsWidth + 40) {
             float iconSize = 18f;
             float iconY = absPos.Y + (TitleBarHeight - iconSize) / 2f;
-            spriteBatch.Draw(Icon, new Rectangle((int)(absPos.X + 10), (int)iconY, (int)iconSize, (int)iconSize), Color.White * AbsoluteOpacity);
+            float scale = iconSize / Icon.Width;
+            batch.DrawTexture(Icon, new Vector2(absPos.X + 10, iconY), Color.White * AbsoluteOpacity, scale);
             titleXOffset += iconSize + 8;
         }
 

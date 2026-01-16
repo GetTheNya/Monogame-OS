@@ -49,8 +49,9 @@ public class Button : UIControl {
         // Draw Icon if present
         if (Icon != null) {
             iconSize = size.Y - (padding * 2);
-            var iconRect = new Rectangle((int)(drawPos.X + padding), (int)(drawPos.Y + padding), (int)iconSize, (int)iconSize);
-            spriteBatch.Draw(Icon, iconRect, Color.White * AbsoluteOpacity);
+            var iconPos = new Vector2(drawPos.X + padding, drawPos.Y + padding);
+            float scale = iconSize / Icon.Width;
+            batch.DrawTexture(Icon, iconPos, Color.White * AbsoluteOpacity, scale);
         }
 
         // Text (Centering logic with truncation)

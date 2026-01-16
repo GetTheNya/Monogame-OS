@@ -152,7 +152,9 @@ public class NotificationHistoryPanel : UIElement {
                 y += 25;
             }
 
-            var item = new NotificationHistoryItem(new Vector2(Padding, y), new Vector2(PanelWidth - Padding * 2, ItemHeight - 10), notif);
+            // Account for scrollbar width (8px + 2px margin on each side = 12px total)
+            float itemWidth = PanelWidth - Padding * 2 - 12;
+            var item = new NotificationHistoryItem(new Vector2(Padding, y), new Vector2(itemWidth, ItemHeight - 10), notif);
             item.OnDismiss = () => OnItemDismissed(item);
             _scrollPanel.AddChild(item);
             _items.Add(item);

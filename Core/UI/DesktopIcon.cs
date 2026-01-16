@@ -158,7 +158,8 @@ public class DesktopIcon : UIElement {
         Vector2 iconPos = absPos + new Vector2((Size.X - iconSize) / 2, 5);
         
         if (Icon != null) {
-            spriteBatch.Draw(Icon, new Rectangle((int)iconPos.X, (int)iconPos.Y, (int)iconSize, (int)iconSize), Color.White);
+            float scale = iconSize / Icon.Width;
+            batch.DrawTexture(Icon, iconPos, Color.White * AbsoluteOpacity, scale);
         } else {
             // Placeholder icon
             batch.FillRectangle(iconPos, new Vector2(iconSize, iconSize), new Color(200, 200, 200, 150));
