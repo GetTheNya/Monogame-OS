@@ -33,6 +33,13 @@ public static class Shell {
         }
     }
 
+    // Hot Reload Control
+    public static bool HotReloadEnabled {
+        get => AppHotReloadManager.Instance.Enabled;
+        set => AppHotReloadManager.Instance.Enabled = value;
+    }
+
+
     public static void CloseExplorers(string pathFilter) {
         if (WindowLayer == null || string.IsNullOrEmpty(pathFilter)) return;
         string filter = pathFilter.ToUpper().TrimEnd('\\') + "\\";

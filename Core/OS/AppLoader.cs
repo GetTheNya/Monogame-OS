@@ -16,6 +16,7 @@ public class AppLoader {
 
     private Dictionary<string, Assembly> _compiledApps = new Dictionary<string, Assembly>();
     private Dictionary<string, string> _appPaths = new Dictionary<string, string>();
+    private Dictionary<string, List<Window>> _runningInstances = new Dictionary<string, List<Window>>();
 
     private AppLoader() { }
 
@@ -85,6 +86,9 @@ public class AppLoader {
                 return CreateWindowFromAssembly(assembly, manifest, hostPath, args);
             });
 
+            // Start hot reload watching
+            AppHotReloadManager.Instance.StartWatching(manifest.AppId, appFolderPath);
+
             DebugLogger.Log($"Successfully loaded app: {manifest.Name} ({manifest.AppId})");
             return true;
 
@@ -128,6 +132,9 @@ public class AppLoader {
             
             if (result is Window window) {
                 window.AppId = manifest.AppId; // Set the AppId from manifest
+                
+                // Track running instance
+                TrackWindowInstance(manifest.AppId, window);
                 
                 // Try to load custom icon
                 string iconName = manifest.Icon ?? "icon.png";
@@ -201,5 +208,132 @@ public class AppLoader {
         // Check if this assembly is one of our loaded apps
         if (_appPaths.ContainsKey(name.ToUpper())) return name.ToUpper();
         return null;
+    }
+
+    /// <summary>
+    /// Reloads an app by recompiling its source and updating the assembly.
+    /// Closes all running instances of the app.
+    /// </summary>
+    public bool ReloadApp(string appId, out List<string> diagnostics) {
+        diagnostics = new List<string>();
+        
+        if (string.IsNullOrEmpty(appId)) {
+            diagnostics.Add("AppId is null or empty");
+            return false;
+        }
+
+        string upperAppId = appId.ToUpper();
+
+        if (!_appPaths.TryGetValue(upperAppId, out string appVirtualPath)) {
+            diagnostics.Add($"App {appId} is not loaded");
+            return false;
+        }
+
+        try {
+            // Close all running instances
+            CloseAllInstances(upperAppId);
+
+            string hostPath = VirtualFileSystem.Instance.ToHostPath(appVirtualPath);
+            if (!Directory.Exists(hostPath)) {
+                diagnostics.Add($"App folder not found: {appVirtualPath}");
+                return false;
+            }
+
+            // Read manifest
+            string manifestPath = Path.Combine(hostPath, "manifest.json");
+            if (!File.Exists(manifestPath)) {
+                diagnostics.Add($"manifest.json not found in {appVirtualPath}");
+                return false;
+            }
+
+            string manifestJson = File.ReadAllText(manifestPath);
+            AppManifest manifest = AppManifest.FromJson(manifestJson);
+
+            // Gather all .cs source files
+            var sourceFiles = new Dictionary<string, string>();
+            foreach (var file in Directory.GetFiles(hostPath, "*.cs", SearchOption.AllDirectories)) {
+                string relativePath = Path.GetRelativePath(hostPath, file);
+                string sourceCode = File.ReadAllText(file);
+                sourceFiles[relativePath] = sourceCode;
+            }
+
+            if (sourceFiles.Count == 0) {
+                diagnostics.Add("No source files found");
+                return false;
+            }
+
+            // Recompile with a unique assembly name to avoid conflicts
+            string assemblyName = $"{manifest.AppId}_{DateTime.Now.Ticks}";
+            Assembly assembly = AppCompiler.Instance.Compile(sourceFiles, assemblyName, out diagnostics);
+            
+            if (assembly == null) {
+                return false;
+            }
+
+            // Update the compiled assembly
+            _compiledApps[upperAppId] = assembly;
+
+            // Re-register app factory with Shell
+            Shell.UI.RegisterApp(upperAppId, (args) => {
+                return CreateWindowFromAssembly(assembly, manifest, hostPath, args);
+            });
+
+            DebugLogger.Log($"Successfully reloaded app: {manifest.Name} ({upperAppId})");
+            return true;
+
+        } catch (Exception ex) {
+            diagnostics.Add($"Exception during reload: {ex.Message}");
+            DebugLogger.Log($"Error reloading app {appId}: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Track a window instance for an app.
+    /// </summary>
+    private void TrackWindowInstance(string appId, Window window) {
+        if (string.IsNullOrEmpty(appId) || window == null) return;
+        
+        string upperAppId = appId.ToUpper();
+        if (!_runningInstances.ContainsKey(upperAppId)) {
+            _runningInstances[upperAppId] = new List<Window>();
+        }
+        
+        _runningInstances[upperAppId].Add(window);
+    }
+
+
+    /// <summary>
+    /// Close all running instances of an app.
+    /// </summary>
+    private void CloseAllInstances(string appId) {
+        if (string.IsNullOrEmpty(appId)) return;
+        
+        string upperAppId = appId.ToUpper();
+        if (_runningInstances.TryGetValue(upperAppId, out var instances)) {
+            // Create a copy to avoid modification during iteration
+            var instancesCopy = new List<Window>(instances);
+            foreach (var window in instancesCopy) {
+                try {
+                    window.Close();
+                } catch (Exception ex) {
+                    DebugLogger.Log($"Error closing window during reload: {ex.Message}");
+                }
+            }
+            instances.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Get all running instances of an app.
+    /// </summary>
+    public List<Window> GetRunningInstances(string appId) {
+        if (string.IsNullOrEmpty(appId)) return new List<Window>();
+        
+        string upperAppId = appId.ToUpper();
+        if (_runningInstances.TryGetValue(upperAppId, out var instances)) {
+            return new List<Window>(instances);
+        }
+        return new List<Window>();
     }
 }

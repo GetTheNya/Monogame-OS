@@ -335,6 +335,9 @@ public class DesktopScene : Core.Scenes.Scene {
     }
 
     public override void Update(GameTime gameTime) {
+        // Process hot reload on main thread
+        AppHotReloadManager.Instance.Update();
+        
         _uiManager.Update(gameTime);
         Core.Animation.Tweener.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
 
