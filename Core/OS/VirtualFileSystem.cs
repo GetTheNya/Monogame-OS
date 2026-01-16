@@ -177,8 +177,9 @@ public class VirtualFileSystem {
         
         if (s == d) return;
 
-        // Prevent moving system folders
-        if (s.Contains("$RECYCLE.BIN") && !destVirtualPath.ToUpper().Contains("$RECYCLE.BIN")) {
+        // Prevent moving the $Recycle.Bin folder itself (but allow moving items inside it)
+        string normalizedSource = sourceVirtualPath.Replace('/', '\\').TrimEnd('\\').ToUpper();
+        if (normalizedSource == "C:\\$RECYCLE.BIN" && !destVirtualPath.ToUpper().Contains("$RECYCLE.BIN")) {
              DebugLogger.Log("Access Denied: Cannot move system directory.");
              return;
         }
@@ -205,6 +206,34 @@ public class VirtualFileSystem {
             // Notify AppLoader about path changes (recursively updates any .sapp paths inside)
             AppLoader.Instance.UpdateAppPath(sourceVirtualPath, destVirtualPath);
         }
+
+        // Clean up trash info if moving OUT of recycle bin
+        if (s.Contains("$RECYCLE.BIN") && !d.Contains("$RECYCLE.BIN")) {
+            RemoveTrashInfo(sourceVirtualPath);
+        }
+
+        // Trigger refreshes if moving into/out of Recycle Bin
+        if (s.Contains("$RECYCLE.BIN") || d.Contains("$RECYCLE.BIN")) {
+            InvalidateRecycleBinCache();
+            Shell.RefreshDesktop?.Invoke();
+            Shell.RefreshExplorers();
+        }
+    }
+
+    private void RemoveTrashInfo(string trashVirtualPath) {
+        string metadataPath = "C:\\$Recycle.Bin\\$trash_info.json";
+        if (!Exists(metadataPath)) return;
+        try {
+            string json = ReadAllText(metadataPath);
+            var info = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+            if (info != null) {
+                string normalized = trashVirtualPath.Replace('/', '\\').TrimEnd('\\');
+                string fileName = Path.GetFileName(normalized);
+                if (info.Remove(fileName)) {
+                    WriteAllText(metadataPath, System.Text.Json.JsonSerializer.Serialize(info));
+                }
+            }
+        } catch { }
     }
 
     public void Recycle(string virtualPath) {
@@ -332,7 +361,11 @@ public class VirtualFileSystem {
         var files = GetFiles(trashPath);
         var dirs = GetDirectories(trashPath);
 
-        foreach (var file in files) Restore(file);
+        foreach (var file in files) {
+            // Skip metadata file
+            if (file.EndsWith("$trash_info.json")) continue;
+            Restore(file);
+        }
         foreach (var dir in dirs) Restore(dir);
     }
 
@@ -347,7 +380,7 @@ public class VirtualFileSystem {
         
         int fileCount = 0;
         foreach (var f in files) {
-            if (!f.EndsWith("$trash_info.json")) fileCount++;
+            if (!f.EndsWith("$trash_info.json", StringComparison.OrdinalIgnoreCase)) fileCount++;
         }
         
         _isRecycleBinEmptyCache = fileCount == 0 && dirs.Length == 0;

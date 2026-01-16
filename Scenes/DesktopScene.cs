@@ -236,9 +236,7 @@ public class DesktopScene : Core.Scenes.Scene {
             _iconPositions[trashPath] = trashPos;
         }
 
-        var trashFiles = VirtualFileSystem.Instance.GetFiles(trashPath);
-        var trashDirs = VirtualFileSystem.Instance.GetDirectories(trashPath);
-        Texture2D trashIcon = (trashFiles.Length > 0 || trashDirs.Length > 0) ? GameContent.TrashFullIcon : GameContent.TrashEmptyIcon;
+        var trashIcon = VirtualFileSystem.Instance.IsRecycleBinEmpty() ? GameContent.TrashEmptyIcon : GameContent.TrashFullIcon;
 
         _trashIconEl = new DesktopIcon(trashPos, "Recycle Bin", trashIcon);
         _trashIconEl.VirtualPath = trashPath;
@@ -638,6 +636,13 @@ public class DesktopScene : Core.Scenes.Scene {
             string fileName = System.IO.Path.GetFileName(sourcePath.TrimEnd('\\', '/'));
             string destPath = System.IO.Path.Combine(desktopPath, fileName);
             if (sourcePath.ToUpper() == destPath.ToUpper()) return null;
+            
+            // Don't move the $Recycle.Bin folder itself (but allow moving items inside it)
+            string normalizedSource = sourcePath.Replace('/', '\\').TrimEnd('\\').ToUpper();
+            if (normalizedSource == "C:\\$RECYCLE.BIN") {
+                return null;
+            }
+            
             if (VirtualFileSystem.Instance.Exists(destPath)) {
                 string name = System.IO.Path.GetFileNameWithoutExtension(fileName);
                 string ext = System.IO.Path.GetExtension(fileName);

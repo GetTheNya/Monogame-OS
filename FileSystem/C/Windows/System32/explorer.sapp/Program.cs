@@ -161,7 +161,7 @@ public class FileExplorerWindow : Window {
         if (_isComputerMode) {
             items = VirtualFileSystem.Instance.GetDrives();
         } else {
-            var files = VirtualFileSystem.Instance.GetFiles(_currentPath);
+            var files = VirtualFileSystem.Instance.GetFiles(_currentPath).Where(f => !f.EndsWith("$trash_info.json", StringComparison.OrdinalIgnoreCase));
             var dirs = VirtualFileSystem.Instance.GetDirectories(_currentPath).Where(d => !d.Contains("$Recycle.Bin"));
             items = dirs.Concat(files);
         }
