@@ -14,10 +14,9 @@ public class AppSettings {
 public class Program {
     static Program() {
         // Register file type associations - AppId is auto-detected
-        Shell.File.RegisterFileTypeHandler(".txt");
-        Shell.File.RegisterFileTypeHandler(".log");
-        Shell.File.RegisterFileTypeHandler(".json");
-        Shell.File.RegisterFileTypeHandler(".cs");
+        foreach (var extension in NotepadWindow.SupportedExtensions) {
+            Shell.File.RegisterFileTypeHandler(extension);
+        }
     }
 
     public static Window CreateWindow(string[] args) {
@@ -28,6 +27,8 @@ public class Program {
 }
 
 public class NotepadWindow : Window {
+    public static readonly string[] SupportedExtensions = new[] { ".txt", ".log", ".json", ".cs" };
+
     private AppSettings _settings;
     private TextArea _textArea;
     private MenuBar _menuBar;
@@ -135,18 +136,17 @@ public class NotepadWindow : Window {
     }
 
     private void OpenFile() {
-        Shell.UI.PickFile("Open", "C:\\Users\\Admin\\Documents", (path) => {
-            if (string.IsNullOrEmpty(path)) return;
-            try {
-                string content = VirtualFileSystem.Instance.ReadAllText(path);
-                _textArea.Text = content ?? "";
-                _currentFilePath = path;
-                _isModified = false;
-                UpdateTitle();
-            } catch (Exception ex) {
-                Shell.Notifications.Show("Error", $"Failed to open file: {ex.Message}");
-            }
-        });
+        var picker = new FilePickerWindow(
+            "Select file",
+            "C:\\",
+            "",
+            FilePickerMode.Open,
+            (selectedPath) => {
+                LoadFile(selectedPath);
+            },
+            SupportedExtensions
+        );
+        Shell.UI.OpenWindow(picker);
     }
 
     private void SaveFile() {
@@ -162,11 +162,18 @@ public class NotepadWindow : Window {
             ? "Untitled.txt"
             : System.IO.Path.GetFileName(_currentFilePath);
 
-        Shell.UI.SaveFile("Save As", "C:\\Users\\Admin\\Documents", defaultName, (path) => {
-            if (!string.IsNullOrEmpty(path)) {
-                DoSave(path);
-            }
-        });
+        var picker = new FilePickerWindow(
+            "Save As",
+            "C:\\",
+            defaultName,
+            FilePickerMode.Save,
+            (selectedPath) => {
+                if (string.IsNullOrEmpty(selectedPath)) return;
+                DoSave(selectedPath);
+            },
+            SupportedExtensions
+        );
+        Shell.UI.OpenWindow(picker);
     }
 
     private void DoSave(string path) {

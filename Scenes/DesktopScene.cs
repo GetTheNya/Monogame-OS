@@ -47,13 +47,9 @@ public class DesktopScene : Core.Scenes.Scene {
         var screenWidth = viewport.Width;
         var screenHeight = viewport.Height;
 
-        try {
-            string wallpaperPath = VirtualFileSystem.Instance.ToHostPath("C:\\Windows\\Web\\Wallpaper\\img0.jpg");
-            if (System.IO.File.Exists(wallpaperPath))
-                _wallpaperTexture = Core.ImageLoader.Load(G.GraphicsDevice, wallpaperPath);
-        }
-        catch {
-        }
+        // Load wallpaper from settings
+        LoadWallpaper();
+        Settings.Personalization.OnWallpaperChanged = LoadWallpaper;
 
         // 0. Shell Overlay Layer - Context Menus (Created first so others can reference it)
         _contextMenu = new ContextMenu();
@@ -373,7 +369,7 @@ public class DesktopScene : Core.Scenes.Scene {
 
         spriteBatch.Begin();
         if (_wallpaperTexture != null) {
-            spriteBatch.Draw(_wallpaperTexture, new Rectangle(0, 0, gd.Viewport.Width, gd.Viewport.Height), Color.White);
+            DrawWallpaper(spriteBatch, gd.Viewport);
         }
         spriteBatch.End();
 
@@ -397,6 +393,72 @@ public class DesktopScene : Core.Scenes.Scene {
         _iconPositions.Clear();
         LoadDesktopIcons();
         Shell.RefreshExplorers(); // Refresh explorers too for consistent view
+    }
+
+    private void LoadWallpaper() {
+        try {
+            string path = Settings.Personalization.WallpaperPath;
+            string hostPath = VirtualFileSystem.Instance.ToHostPath(path);
+            if (System.IO.File.Exists(hostPath)) {
+                _wallpaperTexture?.Dispose();
+                _wallpaperTexture = Core.ImageLoader.Load(G.GraphicsDevice, hostPath);
+            }
+        } catch (Exception ex) {
+            DebugLogger.Log($"Error loading wallpaper: {ex.Message}");
+        }
+    }
+
+    private void DrawWallpaper(SpriteBatch sb, Viewport vp) {
+        if (_wallpaperTexture == null) return;
+        
+        string mode = Settings.Personalization.WallpaperDrawMode;
+        Rectangle screen = new Rectangle(0, 0, vp.Width, vp.Height);
+        
+        switch (mode) {
+            case "Fill": // Cover screen, crop if needed
+                float scaleX = (float)vp.Width / _wallpaperTexture.Width;
+                float scaleY = (float)vp.Height / _wallpaperTexture.Height;
+                float scale = Math.Max(scaleX, scaleY);
+                int w = (int)(_wallpaperTexture.Width * scale);
+                int h = (int)(_wallpaperTexture.Height * scale);
+                int x = (vp.Width - w) / 2;
+                int y = (vp.Height - h) / 2;
+                sb.Draw(_wallpaperTexture, new Rectangle(x, y, w, h), Color.White);
+                break;
+                
+            case "Fit": // Fit entire image, may have bars
+                scaleX = (float)vp.Width / _wallpaperTexture.Width;
+                scaleY = (float)vp.Height / _wallpaperTexture.Height;
+                scale = Math.Min(scaleX, scaleY);
+                w = (int)(_wallpaperTexture.Width * scale);
+                h = (int)(_wallpaperTexture.Height * scale);
+                x = (vp.Width - w) / 2;
+                y = (vp.Height - h) / 2;
+                sb.Draw(_wallpaperTexture, new Rectangle(x, y, w, h), Color.White);
+                break;
+                
+            case "Stretch": // Distort to fill
+                sb.Draw(_wallpaperTexture, screen, Color.White);
+                break;
+                
+            case "Tile": // Repeat pattern
+                for (int ty = 0; ty < vp.Height; ty += _wallpaperTexture.Height) {
+                    for (int tx = 0; tx < vp.Width; tx += _wallpaperTexture.Width) {
+                        sb.Draw(_wallpaperTexture, new Vector2(tx, ty), Color.White);
+                    }
+                }
+                break;
+                
+            case "Center": // Original size, centered
+                x = (vp.Width - _wallpaperTexture.Width) / 2;
+                y = (vp.Height - _wallpaperTexture.Height) / 2;
+                sb.Draw(_wallpaperTexture, new Vector2(x, y), Color.White);
+                break;
+                
+            default:
+                sb.Draw(_wallpaperTexture, screen, Color.White);
+                break;
+        }
     }
 
 

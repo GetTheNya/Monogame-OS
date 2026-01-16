@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework;
 using TheGame.Core.UI;
 using TheGame.Core.UI.Controls;
 using TheGame.Core.OS;
+using SettingsApp.Panels;
 
 namespace SettingsApp;
 
@@ -43,10 +44,7 @@ public class SettingsWindow : Window {
     }
 
     private Panel CreatePersonalizationTab() {
-        var p = new Panel(Vector2.Zero, Vector2.Zero);
-        p.AddChild(new Label(new Vector2(10, 10), "Wallpaper") { TextColor = Color.White });
-        // TODO: Wallpaper picker
-        return p;
+        return new PersonalizationPanel();
     }
 
     private Panel CreateSystemTab() {

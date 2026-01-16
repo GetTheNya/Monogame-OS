@@ -21,6 +21,7 @@ public class FilePickerWindow : Window {
     private Action<string> _onFilePicked;
     private string _currentPath;
     private string _defaultName;
+    private string[] _fileExtensions; // Filter by file extensions (e.g., [".jpg", ".png"])
     
     // UI Elements
     private Label _pathLabel;
@@ -34,7 +35,7 @@ public class FilePickerWindow : Window {
     private const float TopHeight = 40f;
     private const float BottomHeight = 50f;
 
-    public FilePickerWindow(string title, string defaultPath, string defaultName, FilePickerMode mode, Action<string> onFilePicked) 
+    public FilePickerWindow(string title, string defaultPath, string defaultName, FilePickerMode mode, Action<string> onFilePicked, string[] fileExtensions = null) 
         : base(Vector2.Zero, new Vector2(600, 450)) // Default size
     {
         Title = title;
@@ -42,6 +43,7 @@ public class FilePickerWindow : Window {
         _onFilePicked = onFilePicked;
         _currentPath = string.IsNullOrEmpty(defaultPath) ? "C:\\" : defaultPath;
         _defaultName = defaultName ?? "";
+        _fileExtensions = fileExtensions;
 
         // Ensure path exists, default to C:\ if not
         if (!VirtualFileSystem.Instance.Exists(_currentPath)) {
@@ -173,10 +175,16 @@ public class FilePickerWindow : Window {
                 y += itemHeight;
             }
 
-            // Files
+            // Files with filtering
             var files = VirtualFileSystem.Instance.GetFiles(_currentPath);
             foreach (var file in files) {
                 string fileName = Path.GetFileName(file);
+                
+                // Filter by extension if specified
+                if (_fileExtensions != null && _fileExtensions.Length > 0) {
+                    string ext = Path.GetExtension(file).ToLower();
+                    if (!_fileExtensions.Contains(ext)) continue;
+                }
                 
                 var btn = new Button(new Vector2(5, y), new Vector2(itemWidth, itemHeight), fileName) {
                     BackgroundColor = Color.Transparent,
