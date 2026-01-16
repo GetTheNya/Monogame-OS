@@ -81,8 +81,8 @@ public class AppLoader {
             _appPaths[manifest.AppId] = appFolderPath;
 
             // Register app factory with Shell
-            Shell.UI.RegisterApp(manifest.AppId, () => {
-                return CreateWindowFromAssembly(assembly, manifest, hostPath);
+            Shell.UI.RegisterApp(manifest.AppId, (args) => {
+                return CreateWindowFromAssembly(assembly, manifest, hostPath, args);
             });
 
             DebugLogger.Log($"Successfully loaded app: {manifest.Name} ({manifest.AppId})");
@@ -94,7 +94,7 @@ public class AppLoader {
         }
     }
 
-    private Window CreateWindowFromAssembly(Assembly assembly, AppManifest manifest, string hostPath) {
+    private Window CreateWindowFromAssembly(Assembly assembly, AppManifest manifest, string hostPath, string[] args) {
         try {
             DebugLogger.Log($"AppLoader: Creating window for {manifest.AppId} using {manifest.EntryClass}.{manifest.EntryMethod}");
             
@@ -112,8 +112,20 @@ public class AppLoader {
                 return null;
             }
 
-            // Invoke the method
-            object result = entryMethod.Invoke(null, null);
+            // Try to invoke with args first (new signature), fall back to no args (old signature)
+            object result = null;
+            try {
+                result = entryMethod.Invoke(null, new object[] { args });
+            } catch (TargetParameterCountException) {
+                // Old apps don't accept args, try calling with no parameters
+                try {
+                    result = entryMethod.Invoke(null, null);
+                } catch (Exception ex) {
+                    DebugLogger.Log($"AppLoader: Failed to invoke {manifest.EntryMethod}: {ex.Message}");
+                    return null;
+                }
+            }
+            
             if (result is Window window) {
                 window.AppId = manifest.AppId; // Set the AppId from manifest
                 

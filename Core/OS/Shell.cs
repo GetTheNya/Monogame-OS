@@ -63,6 +63,34 @@ public static class Shell {
         UI.InternalInitialize();
     }
 
+    public static class File {
+        public static void RegisterFileTypeHandler(string extension, string appId = null) {
+            // Auto-detect appId from calling assembly if not provided
+            if (string.IsNullOrEmpty(appId)) {
+                var callingAssembly = Assembly.GetCallingAssembly();
+                appId = AppLoader.Instance.GetAppIdFromAssembly(callingAssembly);
+                if (string.IsNullOrEmpty(appId)) {
+                    DebugLogger.Log($"RegisterFileTypeHandler: Could not detect AppId from calling assembly");
+                    return;
+                }
+                DebugLogger.Log($"RegisterFileTypeHandler: Auto-detected AppId: {appId}");
+            }
+            
+            DebugLogger.Log($"Registering file type handler for {extension} -> {appId}");
+            if (string.IsNullOrEmpty(extension) || string.IsNullOrEmpty(appId)) return;
+            extension = extension.ToLower();
+            if (!extension.StartsWith(".")) extension = "." + extension;
+            TheGame.Core.OS.Registry.SetValue($"FileAssociations\\{extension}", appId);
+        }
+
+        public static string GetFileTypeHandler(string extension) {
+            if (string.IsNullOrEmpty(extension)) return null;
+            extension = extension.ToLower();
+            if (!extension.StartsWith(".")) extension = "." + extension;
+            return TheGame.Core.OS.Registry.GetValue<string>($"FileAssociations\\{extension}", null);
+        }
+    }
+
     public static void RefreshExplorers(string pathFilter = null) {
         if (WindowLayer == null) return;
         foreach (var child in WindowLayer.Children) {
@@ -82,9 +110,33 @@ public static class Shell {
 
     public static void Execute(string virtualPath, Rectangle? startBounds = null) {
         string ext = System.IO.Path.GetExtension(virtualPath).ToLower();
-        var handler = UI.GetFileHandler(ext);
-        if (handler != null) {
-            handler.Execute(virtualPath, startBounds);
+        DebugLogger.Log($"Shell.Execute: {virtualPath}, extension: {ext}");
+        
+        // Handle system file types (.sapp, .slnk) through built-in handlers first
+        // These should never go through file associations
+        if (ext == ".sapp" || ext == ".slnk") {
+            var handler = UI.GetFileHandler(ext);
+            if (handler != null) {
+                handler.Execute(virtualPath, startBounds);
+                return;
+            }
+        }
+        
+        // Check registry for user file type associations
+        string appId = File.GetFileTypeHandler(ext);
+        DebugLogger.Log($"File.GetFileTypeHandler({ext}) returned: {appId ?? "null"}");
+        if (!string.IsNullOrEmpty(appId)) {
+            var win = UI.CreateAppWindow(appId, virtualPath);
+            if (win != null) {
+                UI.OpenWindow(win, startBounds);
+                return;
+            }
+        }
+        
+        // Fall back to other hardcoded handlers
+        var handler2 = UI.GetFileHandler(ext);
+        if (handler2 != null) {
+            handler2.Execute(virtualPath, startBounds);
             return;
         }
 
@@ -102,7 +154,7 @@ public static class Shell {
     // --- Nested API Classes ---
 
     public static class UI {
-        private static Dictionary<string, Func<Window>> _appRegistry = new();
+        private static Dictionary<string, Func<string[], Window>> _appRegistry = new();
         private static Dictionary<string, FileHandler> _handlers = new();
 
         internal static void InternalInitialize() {
@@ -110,13 +162,20 @@ public static class Shell {
             RegisterHandler(new AppHandler());
         }
 
-        public static void RegisterApp(string appId, Func<Window> factory) {
+        public static void RegisterApp(string appId, Func<string[], Window> factory) {
             _appRegistry[appId.ToUpper()] = factory;
         }
 
-        public static Window CreateAppWindow(string appId) {
+        public static Window CreateAppWindow(string appId, params string[] args) {
             if (string.IsNullOrEmpty(appId)) return null;
-            if (_appRegistry.TryGetValue(appId.ToUpper(), out var factory)) return factory();
+            string upperAppId = appId.ToUpper();
+            DebugLogger.Log($"CreateAppWindow: Looking for {appId} (uppercase: {upperAppId})");
+            DebugLogger.Log($"  Registry has {_appRegistry.Count} apps: {string.Join(", ", _appRegistry.Keys)}");
+            if (_appRegistry.TryGetValue(upperAppId, out var factory)) {
+                DebugLogger.Log($"  Found factory for {upperAppId}");
+                return factory(args ?? new string[0]);
+            }
+            DebugLogger.Log($"  No factory found for {upperAppId}");
             return null;
         }
 

@@ -270,7 +270,7 @@ public class FileListPanel : ScrollPanel {
         bool isDoubleClick = inBounds && hoveredItem != null && InputManager.IsDoubleClick(MouseButton.Left, ignoreConsumed: true);
         if (isDoubleClick) {
             if (hoveredItem.IsDir) _window.NavigateTo(hoveredItem.Path);
-            else Shell.Execute(hoveredItem.Path);
+            else Shell.Execute(hoveredItem.Path, hoveredItem.Bounds);
             InputManager.IsMouseConsumed = true;
             return; // Don't process single click logic on double-click
         }
@@ -320,7 +320,8 @@ public class FileListPanel : ScrollPanel {
             float y = Math.Min(_selectionStart.Y, mouse.Y);
             float w = Math.Abs(_selectionStart.X - mouse.X);
             float h = Math.Abs(_selectionStart.Y - mouse.Y);
-            _marqueeRect = new Rectangle((int)x, (int)y, (int)w, (int)h);
+            var rawRect = new Rectangle((int)x, (int)y, (int)w, (int)h);
+            _marqueeRect = Rectangle.Intersect(rawRect, Bounds);
 
             bool ctrl = Keyboard.GetState().IsKeyDown(Keys.LeftControl);
             foreach (var item in _items) {
@@ -383,7 +384,7 @@ public class FileListItem : UIElement {
 
         var bgColor = Color.Transparent;
         if (IsSelected) bgColor = new Color(0, 120, 215, 80);
-        else if (IsHovered) bgColor = new Color(255, 255, 255, 20);
+        else if (IsHovered) bgColor = new Color(0, 0, 0, 50);
 
         if (bgColor != Color.Transparent) {
             batch.FillRectangle(AbsolutePosition, Size, bgColor, rounded: 3);

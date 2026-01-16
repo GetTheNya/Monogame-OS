@@ -12,9 +12,18 @@ public class AppSettings {
 }
 
 public class Program {
-    public static Window CreateWindow() {
+    static Program() {
+        // Register file type associations - AppId is auto-detected
+        Shell.File.RegisterFileTypeHandler(".txt");
+        Shell.File.RegisterFileTypeHandler(".log");
+        Shell.File.RegisterFileTypeHandler(".json");
+        Shell.File.RegisterFileTypeHandler(".cs");
+    }
+
+    public static Window CreateWindow(string[] args) {
         var settings = Shell.Settings.Load<AppSettings>();
-        return new NotepadWindow(new Vector2(100, 100), new Vector2(700, 500), settings);
+        string filePath = args != null && args.Length > 0 ? args[0] : null;
+        return new NotepadWindow(new Vector2(100, 100), new Vector2(700, 500), settings, filePath);
     }
 }
 
@@ -26,12 +35,17 @@ public class NotepadWindow : Window {
     private bool _isModified = false;
     private const float MenuBarHeight = 26f;
 
-    public NotepadWindow(Vector2 pos, Vector2 size, AppSettings settings) : base(pos, size) {
+    public NotepadWindow(Vector2 pos, Vector2 size, AppSettings settings, string filePath = null) : base(pos, size) {
         Title = "Untitled - Notepad";
         _settings = settings;
         AppId = "NOTEPAD"; // Required for automatic persistence
 
         SetupUI();
+
+        // Load file if provided
+        if (!string.IsNullOrEmpty(filePath) && VirtualFileSystem.Instance.Exists(filePath)) {
+            LoadFile(filePath);
+        }
 
         OnResize += () => LayoutUI();
     }
@@ -106,6 +120,18 @@ public class NotepadWindow : Window {
         _textArea.Text = "";
         _isModified = false;
         UpdateTitle();
+    }
+
+    public void LoadFile(string path) {
+        try {
+            string content = VirtualFileSystem.Instance.ReadAllText(path);
+            _textArea.Text = content ?? "";
+            _currentFilePath = path;
+            _isModified = false;
+            UpdateTitle();
+        } catch (Exception ex) {
+            Shell.Notifications.Show("Error", $"Failed to open file: {ex.Message}");
+        }
     }
 
     private void OpenFile() {

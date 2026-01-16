@@ -523,7 +523,8 @@ public class DesktopScene : Core.Scenes.Scene {
                     float y = Math.Min(_selectionStart.Y, currentMouseVec.Y);
                     float w = Math.Abs(_selectionStart.X - currentMouseVec.X);
                     float h = Math.Abs(_selectionStart.Y - currentMouseVec.Y);
-                    _marqueeRect = new Rectangle((int)x, (int)y, (int)w, (int)h);
+                    var rawRect = new Rectangle((int)x, (int)y, (int)w, (int)h);
+                    _marqueeRect = Rectangle.Intersect(rawRect, Bounds);
                     foreach (var child in Children) if (child is DesktopIcon icon) icon.IsSelected = _marqueeRect.Intersects(icon.Bounds);
                     InputManager.IsMouseConsumed = true;
                 } else {
