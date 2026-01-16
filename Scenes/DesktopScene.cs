@@ -204,6 +204,7 @@ public class DesktopScene : Core.Scenes.Scene {
                 _contextMenu.Show(InputManager.MousePosition.ToVector2(), new List<MenuItem> {
                     new MenuItem { Text = "Open", Action = () => Shell.Execute(item, icon.Bounds) },
                     new MenuItem { Text = "Run as Administrator", Action = () => Shell.Execute(item, icon.Bounds) },
+                    new MenuItem { Text = "Rename", Action = () => icon.StartRename() },
                     new MenuItem { Text = "Properties", Action = () => DebugLogger.Log($"Properties for {fileName}") },
                     new MenuItem {
                         Text = "Delete", Action = () => {
@@ -218,6 +219,10 @@ public class DesktopScene : Core.Scenes.Scene {
                         }
                     }
                 });
+            };
+            icon.OnRenamed = () => {
+                LoadDesktopIcons();
+                Shell.RefreshExplorers();
             };
             _desktopLayer.AddChild(icon);
         }

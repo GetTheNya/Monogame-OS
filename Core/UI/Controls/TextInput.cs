@@ -92,7 +92,7 @@ public class TextInput : ValueControl<string> {
             if (InputManager.IsKeyRepeated(Keys.Back)) {
                 if (HasSelection()) DeleteSelection();
                 else if (_cursorPos > 0) {
-                    Value = Value.Remove(_cursorPos - 1, 1);
+                    base.Value = Value.Remove(_cursorPos - 1, 1);
                     _cursorPos--;
                     _selectionEnd = _cursorPos;
                 }
@@ -102,7 +102,7 @@ public class TextInput : ValueControl<string> {
             if (InputManager.IsKeyRepeated(Keys.Delete)) {
                 if (HasSelection()) DeleteSelection();
                 else if (_cursorPos < Value.Length) {
-                    Value = Value.Remove(_cursorPos, 1);
+                    base.Value = Value.Remove(_cursorPos, 1);
                 }
             }
 
@@ -116,7 +116,7 @@ public class TextInput : ValueControl<string> {
             foreach (var c in InputManager.GetTypedChars()) {
                 if (char.IsControl(c)) continue;
                 if (HasSelection()) DeleteSelection();
-                Value = Value.Insert(_cursorPos, c.ToString());
+                base.Value = Value.Insert(_cursorPos, c.ToString());
                 _cursorPos++;
                 _selectionEnd = _cursorPos;
                 TheGame.Core.DebugLogger.Log($"TextInput Char: {c} (Total: {Value})");
@@ -152,9 +152,31 @@ public class TextInput : ValueControl<string> {
     private bool HasSelection() => _cursorPos != _selectionEnd;
 
     private void DeleteSelection() {
+        if (string.IsNullOrEmpty(Value)) {
+            _cursorPos = 0;
+            _selectionEnd = 0;
+            return;
+        }
+        
+        // Clamp selection indices to valid range
+        _cursorPos = Math.Clamp(_cursorPos, 0, Value.Length);
+        _selectionEnd = Math.Clamp(_selectionEnd, 0, Value.Length);
+        
         int start = Math.Min(_cursorPos, _selectionEnd);
         int length = Math.Abs(_cursorPos - _selectionEnd);
-        Value = Value.Remove(start, length);
+        
+        // Ensure we don't exceed string bounds
+        if (start >= Value.Length) {
+            _cursorPos = Value.Length;
+            _selectionEnd = _cursorPos;
+            return;
+        }
+        
+        length = Math.Min(length, Value.Length - start);
+        
+        if (length > 0) {
+            Value = Value.Remove(start, length);
+        }
         _cursorPos = start;
         _selectionEnd = _cursorPos;
     }

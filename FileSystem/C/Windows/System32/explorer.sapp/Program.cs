@@ -210,6 +210,11 @@ public class FileListPanel : ScrollPanel {
     private Vector2 _dragStartPos;
     private string _dragSourcePath;
     private FileListItem _dropTargetItem;
+    
+    // Rename functionality
+    private TextInput _renameInput;
+    private string _renamingPath;
+    private bool _isRenaming = false;
 
     public FileListPanel(Vector2 pos, Vector2 size, FileExplorerWindow window) : base(pos, size) {
         _window = window;
@@ -240,10 +245,133 @@ public class FileListPanel : ScrollPanel {
         }
         UpdateContentHeight(y + 20);
     }
+    
+    public void StartRename(string path) {
+        if (_isRenaming || string.IsNullOrEmpty(path)) return;
+        
+        _isRenaming = true;
+        _renamingPath = path;
+        
+        string currentName = System.IO.Path.GetFileName(path.TrimEnd('\\'));
+        bool isFile = !VirtualFileSystem.Instance.IsDirectory(path);
+        
+        // For files, remove extension
+        string editName = isFile ? System.IO.Path.GetFileNameWithoutExtension(currentName) : currentName;
+        
+        // Find item position
+        var item = _items.FirstOrDefault(i => i.Path == path);
+        if (item == null) {
+            _isRenaming = false;
+            return;
+        }
+        
+        // Create text input positioned over filename (x=30 for icon offset)
+        var absPos = AbsolutePosition;
+        _renameInput = new TextInput(
+            new Vector2(absPos.X + item.Position.X + 30, absPos.Y + item.Position.Y + 4),
+            new Vector2(item.Size.X - 35, 20)
+        ) {
+            Value = editName,
+            BackgroundColor = Color.White,
+            TextColor = Color.Black
+        };
+        _renameInput.OnSubmit += CompleteRename;
+        _renameInput.IsFocused = true;
+    }
+    
+    private void CompleteRename(string newName) {
+        if (!_isRenaming) return;
+        
+        try {
+            if (string.IsNullOrWhiteSpace(newName)) {
+                CancelRename();
+                return;
+            }
+            
+            char[] invalidChars = System.IO.Path.GetInvalidFileNameChars();
+            if (newName.Any(c => invalidChars.Contains(c))) {
+                Shell.Notifications.Show("Invalid Name", "Filename contains invalid characters.");
+                CancelRename();
+                return;
+            }
+            
+            string directory = System.IO.Path.GetDirectoryName(_renamingPath.TrimEnd('\\'));
+            bool isFile = !VirtualFileSystem.Instance.IsDirectory(_renamingPath);
+            
+            // For files, preserve extension
+            if (isFile) {
+                string extension = System.IO.Path.GetExtension(_renamingPath);
+                if (!newName.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) {
+                    newName += extension;
+                }
+            }
+            
+            string newPath = System.IO.Path.Combine(directory, newName);
+            
+            // Check if already exists
+            if (VirtualFileSystem.Instance.Exists(newPath) && 
+                !newPath.Equals(_renamingPath, StringComparison.OrdinalIgnoreCase)) {
+                Shell.Notifications.Show("Name Conflict", "A file or folder with that name already exists.");
+                CancelRename();
+                return;
+            }
+            
+            // Don't rename if name didn't change
+            if (newPath.Equals(_renamingPath, StringComparison.OrdinalIgnoreCase)) {
+                CancelRename();
+                return;
+            }
+            
+            // Perform rename
+            VirtualFileSystem.Instance.Move(_renamingPath, newPath);
+            
+            // Refresh and update selection
+            _selectedPaths.Remove(_renamingPath);
+            _selectedPaths.Add(newPath);
+            _window.RefreshList();
+            Shell.RefreshDesktop?.Invoke();
+            Shell.RefreshExplorers();
+            
+        } catch (Exception ex) {
+            Shell.Notifications.Show("Rename Error", ex.Message);
+        } finally {
+            _isRenaming = false;
+            _renameInput = null;
+            _renamingPath = null;
+        }
+    }
+    
+    private void CancelRename() {
+        _isRenaming = false;
+        _renameInput = null;
+        _renamingPath = null;
+    }
 
+    public override void Update(GameTime gameTime) {
+        base.Update(gameTime);
+        
+        // Update rename input
+        if (_isRenaming && _renameInput != null) {
+            var item = _items.FirstOrDefault(i => i.Path == _renamingPath);
+            if (item != null) {
+                var absPos = AbsolutePosition;
+                _renameInput.Position = new Vector2(absPos.X + item.Position.X + 30, absPos.Y + item.Position.Y + 4);
+                _renameInput.Update(gameTime);
+            }
+            
+            // Cancel on Escape or click outside
+            if (InputManager.IsKeyJustPressed(Microsoft.Xna.Framework.Input.Keys.Escape)) {
+                CancelRename();
+            } else if (InputManager.IsMouseButtonJustPressed(MouseButton.Left) && 
+                       _renameInput != null && !_renameInput.Bounds.Contains(InputManager.MousePosition)) {
+                CompleteRename(_renameInput.Value);
+            }
+        }
+    }
+    
     protected override void UpdateInput() {
         // Don't call base.UpdateInput() here - we handle everything manually
-        if (!IsVisible) return;
+        if (!IsVisible || _isRenaming) return;
 
         Vector2 mouse = InputManager.MousePosition.ToVector2();
         bool inBounds = Bounds.Contains(mouse.ToPoint()) && !InputManager.IsMouseConsumed;
@@ -390,6 +518,9 @@ public class FileListPanel : ScrollPanel {
             // .sapp app context menu
             menuItems.Add(new MenuItem { Text = "Run", Action = () => Shell.Execute(item.Path, item.Bounds) });
             menuItems.Add(new MenuItem { Text = "Open as Folder", Action = () => _window.NavigateTo(item.Path) });
+            if (_selectedPaths.Count == 1) {
+                menuItems.Add(new MenuItem { Text = "Rename", Action = () => RenameItem(item.Path) });
+            }
             menuItems.Add(new MenuItem { Text = "Delete", Action = () => DeleteItems() });
             menuItems.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path) });
         } else if (isRecycleBin) {
@@ -416,11 +547,17 @@ public class FileListPanel : ScrollPanel {
         } else if (item.IsDir) {
             // Regular folder context menu
             menuItems.Add(new MenuItem { Text = "Open", Action = () => _window.NavigateTo(item.Path) });
+            if (_selectedPaths.Count == 1) {
+                menuItems.Add(new MenuItem { Text = "Rename", Action = () => RenameItem(item.Path) });
+            }
             menuItems.Add(new MenuItem { Text = "Delete", Action = () => DeleteItems() });
             menuItems.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path) });
         } else {
             // File context menu
             menuItems.Add(new MenuItem { Text = "Open", Action = () => Shell.Execute(item.Path, item.Bounds) });
+            if (_selectedPaths.Count == 1) {
+                menuItems.Add(new MenuItem { Text = "Rename", Action = () => RenameItem(item.Path) });
+            }
             menuItems.Add(new MenuItem { Text = "Delete", Action = () => DeleteItems() });
             menuItems.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path) });
         }
@@ -459,6 +596,10 @@ public class FileListPanel : ScrollPanel {
         string info = $"Name: {name}\nType: {type}\nLocation: {fullPath}";
         Shell.Notifications.Show("Properties", info);
     }
+    
+    private void RenameItem(string itemPath) {
+        StartRename(itemPath);
+    }
 
     public override void Draw(SpriteBatch spriteBatch, ShapeBatch shapeBatch) {
         base.Draw(spriteBatch, shapeBatch);
@@ -467,6 +608,11 @@ public class FileListPanel : ScrollPanel {
         if (_isSelecting && _marqueeRect.Width > 0 && _marqueeRect.Height > 0) {
             shapeBatch.FillRectangle(_marqueeRect.Location.ToVector2(), _marqueeRect.Size.ToVector2(), new Color(0, 120, 215, 40));
             shapeBatch.BorderRectangle(_marqueeRect.Location.ToVector2(), _marqueeRect.Size.ToVector2(), new Color(0, 120, 215, 150), 1f);
+        }
+        
+        // Draw rename input on top
+        if (_isRenaming && _renameInput != null) {
+            _renameInput.Draw(spriteBatch, shapeBatch);
         }
     }
 }

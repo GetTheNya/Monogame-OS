@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework.Graphics;
 using TheGame.Core.Input;
 using TheGame.Core.OS;
 using TheGame.Graphics;
+using TheGame.Core.UI.Controls;
 
 namespace TheGame.Core.UI;
 
@@ -38,6 +39,11 @@ public class DesktopIcon : UIElement {
     public Color SelectionBorderColor { get; set; } = new Color(0, 102, 204);
     
     private Vector2 _cachedLabelSize = Vector2.Zero;
+    
+    // Rename functionality
+    private TextInput _renameInput;
+    private bool _isRenaming = false;
+    public Action OnRenamed;
 
     public DesktopIcon(Vector2 position, string label, Texture2D icon = null) {
         Position = position;
@@ -46,8 +52,26 @@ public class DesktopIcon : UIElement {
         Icon = icon;
     }
 
+    public override void Update(GameTime gameTime) {
+        base.Update(gameTime);
+        
+        // Update rename input
+        if (_isRenaming && _renameInput != null) {
+            _renameInput.Position = AbsolutePosition + new Vector2(0, 58);
+            _renameInput.Update(gameTime);
+            
+            // Cancel on Escape or click outside
+            if (InputManager.IsKeyJustPressed(Microsoft.Xna.Framework.Input.Keys.Escape)) {
+                CancelRename();
+            } else if (InputManager.IsMouseButtonJustPressed(MouseButton.Left) && 
+                       !_renameInput.Bounds.Contains(InputManager.MousePosition)) {
+                CompleteRename(_renameInput.Value);
+            }
+        }
+    }
+    
     protected override void UpdateInput() {
-        if (!IsVisible) return;
+        if (!IsVisible || _isRenaming) return;
 
         // Input capture order:
         // 1. Check for mouse hovering and basic clicks (left, right, double)
@@ -137,6 +161,99 @@ public class DesktopIcon : UIElement {
             }
         }
     }
+    
+    public void StartRename() {
+        if (_isRenaming || string.IsNullOrEmpty(VirtualPath)) return;
+        
+        _isRenaming = true;
+        string currentName = System.IO.Path.GetFileName(VirtualPath.TrimEnd('\\'));
+        
+        // For files, remove extension (will be added back)
+        bool isFile = !VirtualFileSystem.Instance.IsDirectory(VirtualPath);
+        if (isFile) {
+            currentName = System.IO.Path.GetFileNameWithoutExtension(currentName);
+        }
+        
+        // Create text input positioned over the label
+        var absPos = AbsolutePosition;
+        float iconSize = 48f;
+        float labelY = absPos.Y + iconSize + 10;
+        
+        _renameInput = new TextInput(new Vector2(absPos.X, labelY), new Vector2(Size.X, 20)) {
+            Value = currentName,
+            BackgroundColor = Color.White,
+            TextColor = Color.Black
+        };
+        _renameInput.OnSubmit += CompleteRename;
+        _renameInput.IsFocused = true;
+    }
+    
+    private void CompleteRename(string newName) {
+        if (!_isRenaming) return;
+        
+        try {
+            // Validate
+            if (string.IsNullOrWhiteSpace(newName)) {
+                CancelRename();
+                return;
+            }
+            
+            char[] invalidChars = System.IO.Path.GetInvalidFileNameChars();
+            if (newName.Any(c => invalidChars.Contains(c))) {
+                Shell.Notifications.Show("Invalid Name", "Filename contains invalid characters.");
+                CancelRename();
+                return;
+            }
+            
+            string directory = System.IO.Path.GetDirectoryName(VirtualPath.TrimEnd('\\'));
+            bool isFile = !VirtualFileSystem.Instance.IsDirectory(VirtualPath);
+            
+            // For files, preserve extension
+            if (isFile) {
+                string extension = System.IO.Path.GetExtension(VirtualPath);
+                if (!newName.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) {
+                    newName += extension;
+                }
+            }
+            
+            string newPath = System.IO.Path.Combine(directory, newName);
+            
+            // Check if already exists
+            if (VirtualFileSystem.Instance.Exists(newPath) && 
+                !newPath.Equals(VirtualPath, StringComparison.OrdinalIgnoreCase)) {
+                Shell.Notifications.Show("Name Conflict", "A file or folder with that name already exists.");
+                CancelRename();
+                return;
+            }
+            
+            // Don't rename if name didn't change
+            if (newPath.Equals(VirtualPath, StringComparison.OrdinalIgnoreCase)) {
+                CancelRename();
+                return;
+            }
+            
+            // Perform rename
+            VirtualFileSystem.Instance.Move(VirtualPath, newPath);
+            
+            // Update icon
+            VirtualPath = newPath;
+            Label = System.IO.Path.GetFileName(newPath.TrimEnd('\\'));
+            
+            // Notify parent to refresh
+            OnRenamed?.Invoke();
+            
+        } catch (Exception ex) {
+            Shell.Notifications.Show("Rename Error", ex.Message);
+        } finally {
+            _isRenaming = false;
+            _renameInput = null;
+        }
+    }
+    
+    private void CancelRename() {
+        _isRenaming = false;
+        _renameInput = null;
+    }
 
     protected override void DrawSelf(SpriteBatch spriteBatch, ShapeBatch batch) {
         // Hide icon from normal layer if it's being dragged (so it can be drawn in overlay)
@@ -166,8 +283,10 @@ public class DesktopIcon : UIElement {
             batch.BorderRectangle(iconPos, new Vector2(iconSize, iconSize), Color.White, thickness: 1f);
         }
 
-        // Draw Label
-        if (!string.IsNullOrEmpty(Label) && GameContent.FontSystem != null) {
+        // Draw Label or Rename Input
+        if (_isRenaming && _renameInput != null) {
+            _renameInput.Draw(spriteBatch, batch);
+        } else if (!string.IsNullOrEmpty(Label) && GameContent.FontSystem != null) {
             var font = GameContent.FontSystem.GetFont(14);
             if (font != null) {
                 if (_cachedLabelSize == Vector2.Zero) {
