@@ -59,7 +59,7 @@ public abstract class UIElement {
     public Vector2 AbsolutePosition => (Parent?.AbsolutePosition ?? Vector2.Zero) + (Parent?.GetChildOffset(this) ?? Vector2.Zero) + Position;
     public Rectangle Bounds => new Rectangle(AbsolutePosition.ToPoint(), Size.ToPoint());
 
-    public bool IsMouseOver { get; private set; }
+    public bool IsMouseOver { get; protected set; }
     public bool IsFocused { get; set; }
 
     public virtual void Update(GameTime gameTime) {

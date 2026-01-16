@@ -10,22 +10,40 @@ namespace SettingsApp.Panels;
 public class PersonalizationPanel : Panel {
     public PersonalizationPanel() : base(Vector2.Zero, Vector2.Zero) {
         BackgroundColor = Color.Transparent;
+        BorderThickness = 0;
         SetupUI();
+    }
+    
+    public override void Update(GameTime gameTime) {
+        base.Update(gameTime);
+        
+        float maxR = 0;
+        float maxB = 0;
+        foreach (var child in Children) {
+            if (!child.IsVisible) continue;
+            maxR = Math.Max(maxR, child.Position.X + child.Size.X);
+            maxB = Math.Max(maxB, child.Position.Y + child.Size.Y);
+        }
+        
+        // Cap width to parent if possible to avoid horizontal scrollbars for small overflows
+        float parentWidth = Parent?.ClientSize.X ?? maxR;
+        Size = new Vector2(Math.Max(parentWidth, maxR), maxB + 40); // More padding
     }
     
     private void SetupUI() {
         float y = 20;
+        float contentWidth = 600; // Reasonable content width
         
         // Wallpaper Section
         AddChild(new Label(new Vector2(20, y), "Wallpaper") { FontSize = 20 });
         y += 35;
         
-        var pathInput = new TextInput(new Vector2(20, y), new Vector2(400, 30)) {
+        var pathInput = new TextInput(new Vector2(20, y), new Vector2(Math.Min(400, contentWidth - 150), 30)) {
             Value = Settings.Personalization.WallpaperPath
         };
         AddChild(pathInput);
         
-        var browseBtn = new Button(new Vector2(430, y), new Vector2(100, 30), "Browse") {
+        var browseBtn = new Button(new Vector2(Math.Min(430, contentWidth - 120), y), new Vector2(100, 30), "Browse") {
             OnClickAction = () => {
                 var picker = new FilePickerWindow(
                     "Select Wallpaper",
@@ -78,5 +96,7 @@ public class PersonalizationPanel : Panel {
         AddChild(new Label(new Vector2(20, y), "Tile - Repeat pattern") { FontSize = 14, TextColor = Color.Gray });
         y += 20;
         AddChild(new Label(new Vector2(20, y), "Center - Original size, centered") { FontSize = 14, TextColor = Color.Gray });
+        y += 20;
+        
     }
 }

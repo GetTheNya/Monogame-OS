@@ -26,6 +26,11 @@ public class ComboBox : ValueControl<int> {
         base.Update(gameTime);
         float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
 
+        // Close dropdown if parent is fading out (window closing)
+        if (_isOpen && AbsoluteOpacity < 0.5f) {
+            _isOpen = false;
+        }
+
         float targetOpen = _isOpen ? 1f : 0f;
         _openAnim = MathHelper.Lerp(_openAnim, targetOpen, MathHelper.Clamp(dt * 15f, 0, 1));
 
@@ -61,8 +66,10 @@ public class ComboBox : ValueControl<int> {
                     }
                 }
 
+                // Close dropdown if clicking outside (no need to consume input)
                 if (!itemClicked) {
                     _isOpen = false;
+                    // Note: not consuming input here allows the close animation to play smoothly
                 }
             }
         }
@@ -74,20 +81,20 @@ public class ComboBox : ValueControl<int> {
         var absPos = AbsolutePosition;
 
         // Current Selection Box
-        batch.FillRectangle(absPos, Size, CurrentBackgroundColor * Opacity, rounded: 3f);
-        batch.BorderRectangle(absPos, Size, BorderColor * Opacity, thickness: 1f, rounded: 3f);
+        batch.FillRectangle(absPos, Size, CurrentBackgroundColor * AbsoluteOpacity, rounded: 3f);
+        batch.BorderRectangle(absPos, Size, BorderColor * AbsoluteOpacity, thickness: 1f, rounded: 3f);
 
         if (GameContent.FontSystem != null) {
             var font = GameContent.FontSystem.GetFont(20);
             float textY = (Size.Y - font.LineHeight) / 2f;
-            font.DrawText(batch, SelectedItem, absPos + new Vector2(10, textY), TextColor * Opacity);
+            font.DrawText(batch, SelectedItem, absPos + new Vector2(10, textY), TextColor * AbsoluteOpacity);
 
             // Arrow icon
-            font.DrawText(batch, "▼", absPos + new Vector2(Size.X - 20, Size.Y / 2f), Color.Gray * Opacity, rotation: _arrowRotation, origin: new Vector2(8, 8));
+            font.DrawText(batch, "▼", absPos + new Vector2(Size.X - 20, Size.Y / 2f), Color.Gray * AbsoluteOpacity, rotation: _arrowRotation, origin: new Vector2(8, 8));
         }
 
-        // Dropdown Items
-        if (_openAnim > 0.01f) {
+        // Dropdown Items - only draw if parent is visible enough
+        if (_openAnim > 0.01f && AbsoluteOpacity > 0.1f) {
             for (int i = 0; i < Items.Count; i++) {
                 float itemY = absPos.Y + Size.Y + i * (_itemHeight * _openAnim);
                 Vector2 itemPos = new Vector2(absPos.X, itemY);
@@ -99,13 +106,13 @@ public class ComboBox : ValueControl<int> {
                     itemColor = HoverColor;
                 }
 
-                batch.FillRectangle(itemPos, new Vector2(Size.X, _itemItemHeightAnimationFix()), itemColor * (Opacity * _openAnim));
-                batch.BorderRectangle(itemPos, new Vector2(Size.X, _itemItemHeightAnimationFix()), BorderColor * (0.3f * _openAnim), thickness: 1f);
+                batch.FillRectangle(itemPos, new Vector2(Size.X, _itemItemHeightAnimationFix()), itemColor * (AbsoluteOpacity * _openAnim));
+                batch.BorderRectangle(itemPos, new Vector2(Size.X, _itemItemHeightAnimationFix()), BorderColor * (AbsoluteOpacity * 0.3f * _openAnim), thickness: 1f);
 
                 if (GameContent.FontSystem != null && _openAnim > 0.5f) {
                     var font = GameContent.FontSystem.GetFont(18);
                     float itemTextY = (_itemHeight - font.LineHeight) / 2f;
-                    font.DrawText(batch, Items[i], itemPos + new Vector2(10, itemTextY), TextColor * (Opacity * _openAnim));
+                    font.DrawText(batch, Items[i], itemPos + new Vector2(10, itemTextY), TextColor * (AbsoluteOpacity * _openAnim));
                 }
             }
         }

@@ -10,7 +10,7 @@ namespace TheGame.Core.UI.Controls;
 public class TabPage {
     public string Title { get; set; }
     public Texture2D Icon { get; set; }
-    public Panel Content { get; set; }
+    public ScrollPanel Content { get; set; }
     public Button TabButton { get; internal set; }
 }
 
@@ -39,7 +39,8 @@ public class TabControl : UIElement {
 
         _contentArea = new Panel(new Vector2(SidebarWidth, 0), new Vector2(size.X - SidebarWidth, size.Y)) {
             BackgroundColor = Color.Transparent,
-            BorderThickness = 0
+            BorderThickness = 0,
+            ConsumesInput = false
         };
         AddChild(_contentArea);
     }
@@ -48,7 +49,7 @@ public class TabControl : UIElement {
         var page = new TabPage {
             Title = title,
             Icon = icon,
-            Content = new Panel(Vector2.Zero, _contentArea.Size) {
+            Content = new ScrollPanel(Vector2.Zero, _contentArea.Size) {
                 BackgroundColor = Color.Transparent,
                 BorderThickness = 0,
                 IsVisible = false
@@ -101,9 +102,7 @@ public class TabControl : UIElement {
     public Panel GetPageContent(int index) => _pages[index].Content;
 
     public override void Update(GameTime gameTime) {
-        base.Update(gameTime);
-
-        // Layout maintenance
+        // Layout maintenance BEFORE base.Update (so children get fresh sizes)
         _sidebar.Size = new Vector2(SidebarWidth, Size.Y);
         _contentArea.Position = new Vector2(SidebarWidth, 0);
         _contentArea.Size = new Vector2(Size.X - SidebarWidth, Size.Y);
@@ -112,6 +111,8 @@ public class TabControl : UIElement {
             page.Content.Size = _contentArea.Size;
             page.TabButton.Size = new Vector2(SidebarWidth - 10, 35);
         }
+
+        base.Update(gameTime);
     }
 
     protected override void DrawSelf(SpriteBatch spriteBatch, ShapeBatch batch) {

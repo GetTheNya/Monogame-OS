@@ -365,15 +365,8 @@ public class FileListPanel : ScrollPanel {
             InputManager.IsMouseConsumed = true;
         }
 
-        // Scroll input - only if in bounds and not consumed
-        if (inBounds && HasScrollableContent()) {
-            float scrollDelta = InputManager.ScrollDelta;
-            if (scrollDelta != 0) {
-                TargetScrollY += (scrollDelta / 120f) * 60f;
-                ClampScroll();
-                InputManager.IsMouseConsumed = true;
-            }
-        }
+        // Call base to handle scrollbars and mouse wheel
+        base.UpdateInput();
     }
 
     private void UpdateSelectionVisuals() {

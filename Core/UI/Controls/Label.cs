@@ -15,12 +15,28 @@ public class Label : UIElement {
         ConsumesInput = false;
     }
 
+    public override void Update(GameTime gameTime) {
+        base.Update(gameTime);
+        
+        // Update size based on text measurement
+        if (!string.IsNullOrEmpty(Text) && GameContent.FontSystem != null) {
+            var font = GameContent.FontSystem.GetFont(FontSize);
+            if (font != null) {
+                Size = font.MeasureString(Text);
+            }
+        } else {
+            Size = Vector2.Zero;
+        }
+    }
+
     public override void Draw(SpriteBatch spriteBatch, ShapeBatch batch) {
         if (!IsVisible || string.IsNullOrEmpty(Text)) return;
 
         if (GameContent.FontSystem != null) {
             var font = GameContent.FontSystem.GetFont(FontSize);
-            font.DrawText(batch, Text, AbsolutePosition, Color * AbsoluteOpacity);
+            if (font != null) {
+                font.DrawText(batch, Text, AbsolutePosition, Color * AbsoluteOpacity);
+            }
         }
     }
 }

@@ -15,6 +15,7 @@ public static class InputManager {
     // UI Consumption flags
     public static bool IsMouseConsumed { get; set; }
     public static bool IsKeyboardConsumed { get; set; }
+    public static bool IsScrollConsumed { get; set; }
     
     // Character Input Buffer
     private static List<char> _charBuffer = new();
@@ -54,6 +55,7 @@ public static class InputManager {
         _charBuffer.Clear();
         IsMouseConsumed = false;
         IsKeyboardConsumed = false;
+        IsScrollConsumed = false;
         _isDoubleClickFrame = false;
 
         float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
