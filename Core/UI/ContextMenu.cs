@@ -164,7 +164,7 @@ public class ContextMenu : Panel {
         }
 
         // Close logic
-        if (InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
+        if (_parentMenu == null && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
             if (!IsMouseOverAnyMenu()) {
                  CloseAll();
             }
