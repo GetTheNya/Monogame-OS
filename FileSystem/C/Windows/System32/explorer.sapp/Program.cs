@@ -208,6 +208,7 @@ public class FileListPanel : ScrollPanel {
     private bool _isDragging;
     private Vector2 _dragStartPos;
     private string _dragSourcePath;
+    private FileListItem _dropTargetItem;
 
     public FileListPanel(Vector2 pos, Vector2 size, FileExplorerWindow window) : base(pos, size) {
         _window = window;
@@ -253,26 +254,56 @@ public class FileListPanel : ScrollPanel {
             if (item.IsHovered) hoveredItem = item;
         }
 
+        // Update drop target highlight during drag
+        if (Shell.IsDragging && hoveredItem != null && hoveredItem.IsDir) {
+            _dropTargetItem = hoveredItem;
+        } else {
+            _dropTargetItem = null;
+        }
+        UpdateDropTargetVisuals();
+
         // Handle active drag release
         if (InputManager.IsMouseButtonJustReleased(MouseButton.Left)) {
-            if (DragDropManager.Instance.IsActive && inBounds) {
-                var dropped = DragDropManager.Instance.DragData;
+            if (Shell.IsDragging && inBounds) {
+                var dropped = Shell.DraggedItem;
                 string targetPath = hoveredItem != null && hoveredItem.IsDir ? hoveredItem.Path : _window.CurrentPath;
                 _window.HandleDropData(dropped, targetPath);
-                DragDropManager.Instance.EndDrag();
+                Shell.EndDrag();
             }
             _isDragging = false;
             _isSelecting = false;
             _marqueeRect = Rectangle.Empty;
+            _dropTargetItem = null;
+            UpdateDropTargetVisuals();
         }
 
         // Double-click - check BEFORE consuming input
         bool isDoubleClick = inBounds && hoveredItem != null && InputManager.IsDoubleClick(MouseButton.Left, ignoreConsumed: true);
         if (isDoubleClick) {
-            if (hoveredItem.IsDir) _window.NavigateTo(hoveredItem.Path);
-            else Shell.Execute(hoveredItem.Path, hoveredItem.Bounds);
+            if (hoveredItem.IsDir) {
+                // Check if it's a .sapp app - execute it instead of navigating
+                if (hoveredItem.Path.ToLower().EndsWith(".sapp")) {
+                    Shell.Execute(hoveredItem.Path, hoveredItem.Bounds);
+                } else {
+                    _window.NavigateTo(hoveredItem.Path);
+                }
+            } else {
+                Shell.Execute(hoveredItem.Path, hoveredItem.Bounds);
+            }
             InputManager.IsMouseConsumed = true;
             return; // Don't process single click logic on double-click
+        }
+
+        // Right-click context menu
+        if (inBounds && hoveredItem != null && InputManager.IsMouseButtonJustPressed(MouseButton.Right)) {
+            if (!_selectedPaths.Contains(hoveredItem.Path)) {
+                _selectedPaths.Clear();
+                _selectedPaths.Add(hoveredItem.Path);
+                UpdateSelectionVisuals();
+            }
+            ShowContextMenu(hoveredItem);
+            InputManager.IsMouseConsumed = true;
+            return;
         }
 
         // Handle clicks
@@ -304,12 +335,12 @@ public class FileListPanel : ScrollPanel {
             InputManager.IsMouseConsumed = true;
         }
 
-        // Handle dragging to start DragDropManager
-        if (_isDragging && InputManager.IsMouseButtonDown(MouseButton.Left) && !DragDropManager.Instance.IsActive) {
+        // Handle dragging to start Shell drag
+        if (_isDragging && InputManager.IsMouseButtonDown(MouseButton.Left) && !Shell.IsDragging) {
             if (Vector2.Distance(_dragStartPos, mouse) > 6) {
                 var paths = _selectedPaths.Count > 0 ? _selectedPaths.ToList() : new List<string> { _dragSourcePath };
-                if (paths.Count > 1) DragDropManager.Instance.BeginDrag(paths, _dragStartPos);
-                else DragDropManager.Instance.BeginDrag(paths[0], _dragStartPos);
+                if (paths.Count > 1) Shell.BeginDrag(paths, _dragStartPos);
+                else Shell.BeginDrag(paths[0], _dragStartPos);
                 _isDragging = false;
             }
         }
@@ -350,6 +381,91 @@ public class FileListPanel : ScrollPanel {
         }
     }
 
+    private void UpdateDropTargetVisuals() {
+        foreach (var item in _items) {
+            item.IsDropTarget = (item == _dropTargetItem);
+        }
+    }
+
+    private void ShowContextMenu(FileListItem item) {
+        var menuItems = new List<MenuItem>();
+        bool isSapp = item.IsDir && item.Path.ToLower().EndsWith(".sapp");
+        bool isRecycleBin = item.Path.ToUpper().Contains("$RECYCLE.BIN");
+
+        if (isSapp) {
+            // .sapp app context menu
+            menuItems.Add(new MenuItem { Text = "Run", Action = () => Shell.Execute(item.Path, item.Bounds) });
+            menuItems.Add(new MenuItem { Text = "Open as Folder", Action = () => _window.NavigateTo(item.Path) });
+            menuItems.Add(new MenuItem { Text = "Delete", Action = () => DeleteItems() });
+            menuItems.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path) });
+        } else if (isRecycleBin) {
+            // Recycle Bin context menu
+            menuItems.Add(new MenuItem { Text = "Open", Action = () => _window.NavigateTo(item.Path) });
+            menuItems.Add(new MenuItem { 
+                Text = "Empty Recycle Bin", 
+                Action = () => {
+                    var mb = new MessageBox("Empty Recycle Bin", 
+                        "Are you sure you want to permanently delete all items in the Recycle Bin?", 
+                        MessageBoxButtons.YesNo, (confirmed) => {
+                        if (confirmed) {
+                            VirtualFileSystem.Instance.EmptyRecycleBin();
+                            Shell.Audio.PlaySound("C:\\Windows\\Media\\trash_empty.wav");
+                            _window.RefreshList();
+                            Shell.RefreshDesktop?.Invoke();
+                            Shell.RefreshExplorers();
+                        }
+                    });
+                    Shell.UI.OpenWindow(mb);
+                }
+            });
+            menuItems.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path) });
+        } else if (item.IsDir) {
+            // Regular folder context menu
+            menuItems.Add(new MenuItem { Text = "Open", Action = () => _window.NavigateTo(item.Path) });
+            menuItems.Add(new MenuItem { Text = "Delete", Action = () => DeleteItems() });
+            menuItems.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path) });
+        } else {
+            // File context menu
+            menuItems.Add(new MenuItem { Text = "Open", Action = () => Shell.Execute(item.Path, item.Bounds) });
+            menuItems.Add(new MenuItem { Text = "Delete", Action = () => DeleteItems() });
+            menuItems.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path) });
+        }
+
+        Shell.GlobalContextMenu?.Show(InputManager.MousePosition.ToVector2(), menuItems);
+    }
+
+    private void DeleteItems() {
+        var itemsToDelete = _selectedPaths.ToList();
+        if (itemsToDelete.Count == 0) return;
+
+        string message = itemsToDelete.Count == 1 
+            ? $"Are you sure you want to move '{System.IO.Path.GetFileName(itemsToDelete[0])}' to the Recycle Bin?"
+            : $"Are you sure you want to move {itemsToDelete.Count} items to the Recycle Bin?";
+
+        var mb = new MessageBox("Delete", message, MessageBoxButtons.YesNo, (confirmed) => {
+            if (confirmed) {
+                foreach (var path in itemsToDelete) {
+                    VirtualFileSystem.Instance.Recycle(path);
+                }
+                _selectedPaths.Clear();
+                _window.RefreshList();
+                Shell.RefreshDesktop?.Invoke();
+                Shell.RefreshExplorers();
+            }
+        });
+        Shell.UI.OpenWindow(mb);
+    }
+
+    private void ShowProperties(string path) {
+        string name = System.IO.Path.GetFileName(path.TrimEnd('\\'));
+        bool isDir = VirtualFileSystem.Instance.IsDirectory(path);
+        string type = isDir ? "Folder" : "File";
+        string fullPath = path;
+        
+        string info = $"Name: {name}\nType: {type}\nLocation: {fullPath}";
+        Shell.Notifications.Show("Properties", info);
+    }
+
     public override void Draw(SpriteBatch spriteBatch, ShapeBatch shapeBatch) {
         base.Draw(spriteBatch, shapeBatch);
 
@@ -366,6 +482,7 @@ public class FileListItem : UIElement {
     public bool IsDir { get; }
     public bool IsSelected { get; set; }
     public bool IsHovered { get; set; }
+    public bool IsDropTarget { get; set; }
     
     private readonly Texture2D _cachedIcon;
     private readonly string _displayName;
@@ -390,6 +507,12 @@ public class FileListItem : UIElement {
 
         if (bgColor != Color.Transparent) {
             batch.FillRectangle(AbsolutePosition, Size, bgColor, rounded: 3);
+        }
+
+        // Draw drop target highlight
+        if (IsDropTarget && IsDir) {
+            batch.BorderRectangle(AbsolutePosition, Size, new Color(0, 120, 215, 200), thickness: 2f, rounded: 3);
+            batch.FillRectangle(AbsolutePosition, Size, new Color(0, 120, 215, 30), rounded: 3);
         }
 
         if (_cachedIcon != null) {

@@ -24,7 +24,16 @@ public static class Shell {
     public static void AddOverlayElement(UIElement element) => OnAddOverlayElement?.Invoke(element);
     public static void DrawDrag(SpriteBatch sb, ShapeBatch sbatch) => DragDropManager.Instance.DrawDragVisual(sb, sbatch);
 
-    // Backward compatibility wrapper for DraggedItem
+    // Drag and Drop API
+    /// <summary>
+    /// Checks if a drag operation is currently active.
+    /// </summary>
+    public static bool IsDragging => DragDropManager.Instance.IsActive;
+
+    /// <summary>
+    /// Gets or sets the currently dragged item. Setting to null ends the drag.
+    /// Note: For proper snap-back behavior, use BeginDrag() with source position.
+    /// </summary>
     public static object DraggedItem {
         get => DragDropManager.Instance.DragData;
         set {
@@ -32,6 +41,31 @@ public static class Shell {
             else DragDropManager.Instance.EndDrag();
         }
     }
+
+    /// <summary>
+    /// Begins a drag operation with source position for snap-back.
+    /// </summary>
+    public static void BeginDrag(object data, Vector2 sourcePosition) 
+        => DragDropManager.Instance.BeginDrag(data, sourcePosition);
+
+    /// <summary>
+    /// Ends the current drag operation (successful drop).
+    /// </summary>
+    public static void EndDrag() 
+        => DragDropManager.Instance.EndDrag();
+
+    /// <summary>
+    /// Cancels the drag and restores original positions.
+    /// </summary>
+    public static void CancelDrag() 
+        => DragDropManager.Instance.CancelDrag();
+
+    /// <summary>
+    /// Checks if a specific item is currently being dragged.
+    /// </summary>
+    public static bool IsItemBeingDragged(object item) 
+        => DragDropManager.Instance.IsItemDragged(item);
+
 
     // Hot Reload Control
     public static bool HotReloadEnabled {
