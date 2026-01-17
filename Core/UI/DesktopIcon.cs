@@ -30,10 +30,13 @@ public class DesktopIcon : UIElement {
     public Action OnDropAction { get; set; }
     
     public bool IsSelected { get; set; }
+    public bool IsDragging => _isDragging;
     private bool _isDragging;
     private Vector2 _dragOffset;
     private Vector2 _dragStartPos;
+    private Vector2 _lastDragTargetPos;
     
+    public Vector2 DragDelta { get; set; } = Vector2.Zero;
     public Color LabelColor { get; set; } = Color.White;
     public Color SelectionColor { get; set; } = new Color(0, 102, 204, 100); // semi-transparent blue
     public Color SelectionBorderColor { get; set; } = new Color(0, 102, 204);
@@ -111,6 +114,7 @@ public class DesktopIcon : UIElement {
             } else if (isJustPressed) {
                 // Start dragging only if it's not a double-click
                 _isDragging = true;
+                _lastDragTargetPos = InputManager.MousePosition.ToVector2() - _dragOffset;
             }
 
             if (isRightPressed) {
@@ -124,11 +128,10 @@ public class DesktopIcon : UIElement {
             if (InputManager.IsMouseButtonDown(MouseButton.Left)) {
                 Vector2 currentMousePos = InputManager.MousePosition.ToVector2();
                 
-                // Only start drag if mouse has moved >5 pixels
+                Vector2 targetPos = currentMousePos - _dragOffset;
+                
                 if (!DragDropManager.Instance.IsActive && Vector2.Distance(currentMousePos, _dragStartPos) > 5f) {
-                    // If dragging a selected icon, drag all selected icons
                     if (IsSelected && Parent != null) {
-                        // Manual iteration to avoid LINQ allocations
                         var selectedPaths = new System.Collections.Generic.List<string>();
                         for (int i = 0; i < Parent.Children.Count; i++) {
                             if (Parent.Children[i] is DesktopIcon di && di.IsSelected && !string.IsNullOrEmpty(di.VirtualPath)) {
@@ -137,27 +140,32 @@ public class DesktopIcon : UIElement {
                         }
                         
                         if (selectedPaths.Count > 1) {
-                             DragDropManager.Instance.BeginDrag(selectedPaths, Position);
+                             DragDropManager.Instance.BeginDrag(selectedPaths, Position, _dragOffset);
                         } else {
-                             DragDropManager.Instance.BeginDrag(this, Position);
+                             DragDropManager.Instance.BeginDrag(this, Position, _dragOffset);
                         }
                     } else {
-                        DragDropManager.Instance.BeginDrag(this, Position);
+                        DragDropManager.Instance.BeginDrag(this, Position, _dragOffset);
                     }
+                    _lastDragTargetPos = targetPos; // Initialize last target
                 }
                 
-                Vector2 oldPos = Position;
-                Position = currentMousePos - _dragOffset;
-                Vector2 delta = Position - oldPos;
+                // Calculate frame delta
+                Vector2 delta = targetPos - _lastDragTargetPos;
+                _lastDragTargetPos = targetPos;
 
-                if (delta != Vector2.Zero && IsSelected) {
+                // Notify about drag movement (for group drag), but DON'T actually move this icon
+                // CRITICAL: Only notify if the drag is actually active (passed threshold)
+                if (delta != Vector2.Zero && IsSelected && DragDropManager.Instance.IsActive) {
                     OnDragAction?.Invoke(this, delta);
                 }
 
                 InputManager.IsMouseConsumed = true;
             } else {
                 _isDragging = false;
+                _lastDragTargetPos = Vector2.Zero;
                 OnDropAction?.Invoke();
+                InputManager.IsMouseConsumed = true; // Consume input on drop to prevent scene-level resets
             }
         }
     }
@@ -343,12 +351,8 @@ public class DesktopIcon : UIElement {
     }
 
     protected override void DrawSelf(SpriteBatch spriteBatch, ShapeBatch batch) {
-        // Hide icon from normal layer if it's being dragged (so it can be drawn in overlay)
-        if (DragDropManager.Instance.IsItemDragged(this) && !Shell.IsRenderingDrag) return;
-        
-        // Also hide if its path is being dragged in a list
-        if (!string.IsNullOrEmpty(VirtualPath) && DragDropManager.Instance.IsItemDragged(VirtualPath) && !Shell.IsRenderingDrag) return;
-
+        // Original icon stays visible at its source position.
+        // Phantoms are drawn separately by DragDropManager.
         var absPos = AbsolutePosition;
         
         // Selection highlight

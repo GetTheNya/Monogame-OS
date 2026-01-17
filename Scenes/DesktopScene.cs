@@ -177,7 +177,15 @@ public class DesktopScene : Core.Scenes.Scene {
             }
 
             icon.VirtualPath = item;
-            icon.OnDragAction = (i, delta) => { _iconPositions[i.VirtualPath] = i.Position; };
+            icon.VirtualPath = item;
+            icon.OnDragAction = (i, delta) =>  { 
+                // Accumulate delta for final position update
+                i.DragDelta += delta;
+                
+                // Show drop preview for this specific icon
+                Vector2 finalPos = _iconPositions[i.VirtualPath] + i.DragDelta;
+                Shell.Drag.SetDropPreview(i, finalPos);
+            };
             icon.OnSelectedAction = (selected) => {
                 foreach (var child in _desktopLayer.Children) {
                     if (child is DesktopIcon d && d != selected) d.IsSelected = false;
@@ -185,6 +193,28 @@ public class DesktopScene : Core.Scenes.Scene {
             };
             icon.OnDoubleClickAction = () => Shell.Execute(item, icon.Bounds);
             icon.OnDropAction = () => {
+                // If this is part of a selection, move ALL selected icons
+                if (icon.IsSelected) {
+                    foreach (var child in _desktopLayer.Children) {
+                        if (child is DesktopIcon d && d.IsSelected) {
+                            Shell.Drag.SetDropPreview(d, null);
+                            if (d.DragDelta.LengthSquared() > 1.0f) {
+                                d.Position += d.DragDelta;
+                                _iconPositions[d.VirtualPath] = d.Position;
+                            }
+                            d.DragDelta = Vector2.Zero;
+                        }
+                    }
+                } else {
+                    // Single icon drop (not selected or leader of non-selection)
+                    Shell.Drag.SetDropPreview(icon, null);
+                    if (icon.DragDelta.LengthSquared() > 1.0f) {
+                        icon.Position += icon.DragDelta;
+                        _iconPositions[icon.VirtualPath] = icon.Position;
+                    }
+                    icon.DragDelta = Vector2.Zero;
+                }
+                
                 if (_trashIconEl != null && _trashIconEl.Bounds.Intersects(icon.Bounds)) {
                     if (icon.IsSelected) {
                         var selectedData = _desktopLayer.Children.OfType<DesktopIcon>()
@@ -200,6 +230,8 @@ public class DesktopScene : Core.Scenes.Scene {
                     LoadDesktopIcons();
                     Shell.RefreshExplorers("$Recycle.Bin");
                 }
+
+                Shell.EndDrag();
             };
             icon.OnRightClickAction = () => {
                 _contextMenu.Show(InputManager.MousePosition.ToVector2(), new List<MenuItem> {
@@ -241,7 +273,14 @@ public class DesktopScene : Core.Scenes.Scene {
 
         _trashIconEl = new DesktopIcon(trashPos, "Recycle Bin", trashIcon);
         _trashIconEl.VirtualPath = trashPath;
-        _trashIconEl.OnDragAction = (i, delta) => { _iconPositions[i.VirtualPath] = i.Position; };
+        _trashIconEl.OnDragAction = (i, delta) => { 
+            // Accumulate delta for final position update
+            i.DragDelta += delta;
+            
+            // Show drop preview for trash icon
+            Vector2 finalPos = _iconPositions[i.VirtualPath] + i.DragDelta;
+            Shell.Drag.SetDropPreview(i, finalPos);
+        };
         _trashIconEl.OnSelectedAction = (selected) => {
             foreach (var child in _desktopLayer.Children) {
                 if (child is DesktopIcon d && d != selected) d.IsSelected = false;
@@ -249,6 +288,14 @@ public class DesktopScene : Core.Scenes.Scene {
         };
         _trashIconEl.OnDoubleClickAction = () => Shell.Execute(trashPath, _trashIconEl.Bounds);
         _trashIconEl.OnDropAction = () => {
+            // Apply accumulated position change
+            if (_trashIconEl.DragDelta.LengthSquared() > 1.0f) {
+                _trashIconEl.Position += _trashIconEl.DragDelta;
+                _iconPositions[_trashIconEl.VirtualPath] = _trashIconEl.Position;
+            }
+            _trashIconEl.DragDelta = Vector2.Zero;
+            Shell.Drag.SetDropPreview(_trashIconEl, null);
+            
             var dragged = Shell.DraggedItem;
             if (dragged != null && dragged != _trashIconEl) {
                 if (dragged is DesktopIcon di) {
@@ -468,6 +515,7 @@ public class DesktopScene : Core.Scenes.Scene {
         private Vector2 _selectionStart;
         private Rectangle _marqueeRect;
         private bool _wasMouseDown;
+        private bool _isHandlingGroupDrag;
         public Action RefreshAction { get; set; }
         public Action<string> SortAction { get; set; }
         public Action<DesktopIcon> IconMovedAction { get; set; }
@@ -494,18 +542,25 @@ public class DesktopScene : Core.Scenes.Scene {
         }
 
         private void HandleGroupDrag(DesktopIcon leader, Vector2 delta) {
-            if (DragDropManager.Instance.GetStoredPositions().Count == 0) {
-                foreach (var child in Children) {
-                    if (child is DesktopIcon icon && icon.IsSelected) {
-                        DragDropManager.Instance.StoreIconPosition(icon, icon.Position);
+            if (_isHandlingGroupDrag) return;
+            _isHandlingGroupDrag = true;
+            try {
+                if (DragDropManager.Instance.GetStoredPositions().Count == 0) {
+                    foreach (var child in Children) {
+                        if (child is DesktopIcon icon && icon.IsSelected) {
+                            DragDropManager.Instance.StoreIconPosition(icon, icon.Position);
+                        }
                     }
                 }
-            }
-            foreach (var child in Children) {
-                if (child is DesktopIcon icon && icon != leader && icon.IsSelected) {
-                    icon.Position += delta;
-                    IconMovedAction?.Invoke(icon);
+                // Don't actually move icons - just trigger their OnDragAction for drop preview updates
+                foreach (var child in Children) {
+                    if (child is DesktopIcon icon && icon != leader && icon.IsSelected) {
+                        // Trigger the drag action which will update drop preview
+                        icon.OnDragAction?.Invoke(icon, delta);
+                    }
                 }
+            } finally {
+                _isHandlingGroupDrag = false;
             }
         }
 
@@ -537,8 +592,9 @@ public class DesktopScene : Core.Scenes.Scene {
             }
 
             if (justReleased && Shell.DraggedItem != null && !alreadyConsumed) {
+                // Clicking/dropping on empty space - cancel drag but don't reset deltas yet
+                // The icons themselves (or their drop handlers) will reset deltas.
                 DragDropManager.Instance.CancelDrag();
-                foreach (var kvp in DragDropManager.Instance.GetStoredPositions()) IconMovedAction?.Invoke(kvp.Key);
             }
 
             if (!alreadyConsumed && isHovered && InputManager.IsMouseButtonJustPressed(MouseButton.Right)) {
@@ -610,16 +666,22 @@ public class DesktopScene : Core.Scenes.Scene {
             }
             string desktopPath = "C:\\Users\\Admin\\Desktop\\";
             bool changed = false;
-            Vector2 dropPos = InputManager.MousePosition.ToVector2();
-            if (item is DesktopIcon) { Shell.DraggedItem = null; return; }
+            Vector2 dropPos = InputManager.MousePosition.ToVector2() - DragDropManager.Instance.DragGrabOffset;
+            
+            // If dragging a DesktopIcon from inside this scene, handled by its own OnDropAction
+            if (item is DesktopIcon) { return; }
+            
             if (item is string itemPath) {
                 string newPath = MoveToDesktop(itemPath, desktopPath);
                 if (!string.IsNullOrEmpty(newPath)) _scene._iconPositions[newPath] = dropPos;
                 changed = true;
             } else if (item is List<string> list) {
-                foreach (var p in list) {
-                    string newPath = MoveToDesktop(p, desktopPath);
-                    if (!string.IsNullOrEmpty(newPath)) _scene._iconPositions[newPath] = dropPos;
+                // Apply a small offset for each subsequent item to prevent stacking
+                for (int i = 0; i < list.Count; i++) {
+                    string newPath = MoveToDesktop(list[i], desktopPath);
+                    if (!string.IsNullOrEmpty(newPath)) {
+                        _scene._iconPositions[newPath] = dropPos + new Vector2(i * 20, i * 20);
+                    }
                 }
                 changed = true;
             }

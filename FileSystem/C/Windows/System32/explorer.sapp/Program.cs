@@ -468,8 +468,15 @@ public class FileListPanel : ScrollPanel {
         if (_isDragging && InputManager.IsMouseButtonDown(MouseButton.Left) && !Shell.IsDragging) {
             if (Vector2.Distance(_dragStartPos, mouse) > 6) {
                 var paths = _selectedPaths.Count > 0 ? _selectedPaths.ToList() : new List<string> { _dragSourcePath };
-                if (paths.Count > 1) Shell.BeginDrag(paths, _dragStartPos);
-                else Shell.BeginDrag(paths[0], _dragStartPos);
+                
+                // Calculate grab offset for the item we clicked on
+                Vector2 itemPos = Vector2.Zero;
+                var clickedItem = _items.FirstOrDefault(i => i.Path == _dragSourcePath);
+                if (clickedItem != null) itemPos = clickedItem.Position;
+                Vector2 grabOffset = _dragStartPos - (AbsolutePosition + itemPos);
+
+                if (paths.Count > 1) Shell.BeginDrag(paths, _dragStartPos, grabOffset);
+                else Shell.BeginDrag(paths[0], _dragStartPos, grabOffset);
                 _isDragging = false;
             }
         }

@@ -37,7 +37,7 @@ public static class Shell {
     public static object DraggedItem {
         get => DragDropManager.Instance.DragData;
         set {
-            if (value != null) DragDropManager.Instance.BeginDrag(value, Vector2.Zero);
+            if (value != null) DragDropManager.Instance.BeginDrag(value, Vector2.Zero, Vector2.Zero);
             else DragDropManager.Instance.EndDrag();
         }
     }
@@ -45,8 +45,8 @@ public static class Shell {
     /// <summary>
     /// Begins a drag operation with source position for snap-back.
     /// </summary>
-    public static void BeginDrag(object data, Vector2 sourcePosition) 
-        => DragDropManager.Instance.BeginDrag(data, sourcePosition);
+    public static void BeginDrag(object data, Vector2 sourcePosition, Vector2 grabOffset) 
+        => DragDropManager.Instance.BeginDrag(data, sourcePosition, grabOffset);
 
     /// <summary>
     /// Ends the current drag operation (successful drop).
@@ -65,6 +65,31 @@ public static class Shell {
     /// </summary>
     public static bool IsItemBeingDragged(object item) 
         => DragDropManager.Instance.IsItemDragged(item);
+
+    /// <summary>
+    /// Drag visual customization API
+    /// </summary>
+    public static class Drag {
+        /// <summary>
+        /// Sets the opacity for drag visuals (0.1 to 1.0).
+        /// </summary>
+        public static void SetVisualOpacity(float opacity) 
+            => DragDropManager.Instance.SetDragOpacity(opacity);
+        
+        /// <summary>
+        /// Sets whether to show item count badge for multi-item drags.
+        /// </summary>
+        public static void SetShowItemCount(bool show) 
+            => DragDropManager.Instance.SetShowItemCount(show);
+        
+        /// <summary>
+        /// Sets the position where drop preview should be rendered.
+        /// Set to null to hide the preview.
+        /// </summary>
+        public static void SetDropPreview(object id, Vector2? position)
+            => DragDropManager.Instance.SetDropPreviewPosition(id, position);
+    }
+
 
 
     // Hot Reload Control
