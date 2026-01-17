@@ -104,8 +104,17 @@ public class DesktopScene : Core.Scenes.Scene {
         Shell.Audio.PlaySound("C:\\Windows\\Media\\startup.wav");
 
         // Demo notification
-        Shell.Notifications.Show("Welcome!", "The notification system is ready.", null, null, new List<NotificationAction> {
-            new NotificationAction { Label = "Got it", OnClick = () => DebugLogger.Log("User acknowledged.") }
+        string welcomeId = "";
+        welcomeId = Shell.Notifications.Show("Welcome!", "The notification system is ready.", null, null, new List<NotificationAction> {
+            new NotificationAction { Label = "Got it", OnClick = () => {
+                DebugLogger.Log("User acknowledged.");
+                if (!string.IsNullOrEmpty(welcomeId)) Shell.Notifications.Dismiss(welcomeId);
+            }}
+        });
+
+        Shell.Notifications.Show("System Update", "A very long message that previously would have been truncated but now wraps nicely across multiple lines in both the toast and the history panel.", actions: new List<NotificationAction> {
+            new NotificationAction { Label = "Details", OnClick = () => DebugLogger.Log("Update details.") },
+            new NotificationAction { Label = "OK", OnClick = () => { } }
         });
 
         // Load startup apps from Registry

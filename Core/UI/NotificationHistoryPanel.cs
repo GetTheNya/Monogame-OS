@@ -54,6 +54,7 @@ public class NotificationHistoryPanel : UIElement {
         // Subscribe to notification events
         NotificationManager.Instance.OnNotificationAdded += _ => { if (_isOpen && !_isClearing) RefreshContent(); };
         NotificationManager.Instance.OnHistoryCleared += () => { if (!_isClearing) RefreshContent(); };
+        NotificationManager.Instance.OnNotificationDismissed += DismissItemById;
 
         RefreshContent();
     }
@@ -154,14 +155,22 @@ public class NotificationHistoryPanel : UIElement {
 
             // Account for scrollbar width (8px + 2px margin on each side)
             float itemWidth = PanelWidth - Padding * 2;
-            var item = new NotificationHistoryItem(new Vector2(Padding, y), new Vector2(itemWidth, ItemHeight - 10), notif);
+            var item = new NotificationHistoryItem(new Vector2(Padding, y), itemWidth, notif);
             item.OnDismiss = () => OnItemDismissed(item);
             _scrollPanel.AddChild(item);
             _items.Add(item);
-            y += ItemHeight;
+            y += item.Size.Y + 10f; // Add gap between items
         }
 
         _scrollPanel.UpdateContentHeight(y + Padding);
+    }
+
+    private void DismissItemById(string id) {
+        if (_isClearing) return;
+        var item = _items.Find(i => i.NotificationId == id);
+        if (item != null) {
+            item.AnimateOut(() => OnItemDismissed(item));
+        }
     }
 
     private void OnItemDismissed(NotificationHistoryItem dismissedItem) {
@@ -172,7 +181,7 @@ public class NotificationHistoryPanel : UIElement {
         _items.RemoveAt(index);
         _scrollPanel.RemoveChild(dismissedItem);
 
-        float offset = -ItemHeight;
+        float offset = -(dismissedItem.Size.Y + 10f);
         for (int i = index; i < _items.Count; i++) {
             var item = _items[i];
             float currentY = item.Position.Y;
@@ -208,6 +217,7 @@ public class NotificationHistoryPanel : UIElement {
 public class NotificationHistoryItem : UIElement {
     private Notification _notification;
     private Button _dismissBtn;
+    private List<Button> _actionButtons = new();
     public Action OnDismiss;
 
     private bool _isDragging = false;
@@ -218,14 +228,52 @@ public class NotificationHistoryItem : UIElement {
     private float _delayTimer = -1f;
     private Action _delayedCallback;
 
+    private string _wrappedText;
+    private string _wrappedTitle;
+
     public string NotificationId => _notification.Id;
 
-    public NotificationHistoryItem(Vector2 pos, Vector2 size, Notification notif) {
+    public NotificationHistoryItem(Vector2 pos, float width, Notification notif) {
         Position = pos;
-        Size = size;
         _notification = notif;
 
-        _dismissBtn = new Button(new Vector2(size.X - 25, 5), new Vector2(20, 20), "×") {
+        float textX = 55f;
+        float textAvailableWidth = width - textX - 30f; // 30 for dismiss button
+        
+        var titleFont = GameContent.FontSystem.GetFont(18); // Increased
+        var bodyFont = GameContent.FontSystem.GetFont(15);  // Increased
+        
+        _wrappedTitle = TextHelper.WrapText(titleFont, _notification.Title, textAvailableWidth);
+        _wrappedText = TextHelper.WrapText(bodyFont, _notification.Text, textAvailableWidth);
+
+        float titleHeight = string.IsNullOrEmpty(_wrappedTitle) ? 0 : titleFont.MeasureString(_wrappedTitle).Y;
+        float bodyHeight = string.IsNullOrEmpty(_wrappedText) ? 0 : bodyFont.MeasureString(_wrappedText).Y;
+        
+        float currentY = 8f + titleHeight + (titleHeight > 0 && bodyHeight > 0 ? 4 : 0) + bodyHeight + 6f;
+
+        // Action buttons
+        if (_notification.Actions != null && _notification.Actions.Count > 0) {
+            float btnX = textX;
+            foreach (var action in _notification.Actions) {
+                var btn = new Button(new Vector2(btnX, currentY), new Vector2(85, 26), action.Label) {
+                    BackgroundColor = new Color(60, 60, 60),
+                    FontSize = 13
+                };
+                var capturedAction = action;
+                btn.OnClickAction = () => {
+                    capturedAction.OnClick?.Invoke();
+                };
+                AddChild(btn);
+                _actionButtons.Add(btn);
+                btnX += 90;
+            }
+            currentY += 32f;
+        }
+        
+        float contentHeight = currentY + 22f; // Area for timestamp
+        Size = new Vector2(width, Math.Max(75f, contentHeight));
+
+        _dismissBtn = new Button(new Vector2(Size.X - 25, 5), new Vector2(20, 20), "×") {
             BackgroundColor = Color.Transparent,
             HoverColor = new Color(200, 50, 50)
         };
@@ -274,8 +322,17 @@ public class NotificationHistoryItem : UIElement {
             20, 20
         );
 
+        // Check if mouse is over any action button
+        bool overActionButton = false;
+        foreach (var btn in _actionButtons) {
+            if (new Rectangle((int)btn.AbsolutePosition.X, (int)btn.AbsolutePosition.Y, (int)btn.Size.X, (int)btn.Size.Y).Contains(InputManager.MousePosition)) {
+                overActionButton = true;
+                break;
+            }
+        }
+
         if (isHovering && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
-            if (!dismissBounds.Contains(InputManager.MousePosition)) {
+            if (!dismissBounds.Contains(InputManager.MousePosition) && !overActionButton) {
                 _isDragging = true;
                 _dragStartX = InputManager.MousePosition.X;
                 InputManager.IsMouseConsumed = true;
@@ -298,7 +355,7 @@ public class NotificationHistoryItem : UIElement {
         }
 
         if (!_isDragging && InputManager.IsMouseButtonJustReleased(MouseButton.Left) && isHovering && Math.Abs(_swipeOffset) < 5) {
-            if (!dismissBounds.Contains(InputManager.MousePosition)) {
+            if (!dismissBounds.Contains(InputManager.MousePosition) && !overActionButton) {
                 _notification.OnClick?.Invoke();
             }
         }
@@ -325,17 +382,35 @@ public class NotificationHistoryItem : UIElement {
         }
 
         if (GameContent.FontSystem != null) {
-            var titleFont = GameContent.FontSystem.GetFont(16);
-            var bodyFont = GameContent.FontSystem.GetFont(13);
-            var timeFont = GameContent.FontSystem.GetFont(11);
+            var titleFont = GameContent.FontSystem.GetFont(18);
+            var bodyFont = GameContent.FontSystem.GetFont(15);
+            var timeFont = GameContent.FontSystem.GetFont(12);
 
-            titleFont.DrawText(batch, _notification.Title ?? "", drawPos + new Vector2(textX, 8), Color.White * alpha);
-            string shortText = _notification.Text?.Length > 40 ? _notification.Text.Substring(0, 37) + "..." : _notification.Text ?? "";
-            bodyFont.DrawText(batch, shortText, drawPos + new Vector2(textX, 28), Color.LightGray * alpha);
-            timeFont.DrawText(batch, _notification.Timestamp.ToString("HH:mm"), drawPos + new Vector2(textX, 48), Color.Gray * alpha);
+            Vector2 titleSize = Vector2.Zero;
+            if (!string.IsNullOrEmpty(_wrappedTitle)) {
+                titleFont.DrawText(batch, _wrappedTitle, drawPos + new Vector2(textX, 8), Color.White * alpha);
+                titleSize = titleFont.MeasureString(_wrappedTitle);
+            }
+
+            if (!string.IsNullOrEmpty(_wrappedText)) {
+                float bodyY = 8f + (titleSize.Y > 0 ? titleSize.Y + 4f : 0);
+                bodyFont.DrawText(batch, _wrappedText, drawPos + new Vector2(textX, bodyY), Color.LightGray * alpha);
+            }
+
+            float timeY = Size.Y - 20f;
+            timeFont.DrawText(batch, _notification.Timestamp.ToString("HH:mm"), drawPos + new Vector2(textX, timeY), Color.Gray * alpha);
         }
 
         _dismissBtn.Position = new Vector2(Size.X - 25 + _swipeOffset, 5);
         _dismissBtn.Opacity = alpha;
+
+        // Ensure action buttons follow swipe
+        float btnBaseX = 55f;
+        int i = 0;
+        foreach (var btn in _actionButtons) {
+            btn.Position = new Vector2(btnBaseX + i * 90 + _swipeOffset, btn.Position.Y);
+            btn.Opacity = alpha;
+            i++;
+        }
     }
 }

@@ -13,6 +13,7 @@ public class Button : UIControl {
     public Action OnClickAction { get; set; }
     public Color TextColor { get; set; } = Color.White;
     public TextAlign TextAlign { get; set; } = TextAlign.Center;
+    public int FontSize { get; set; } = 20;
 
     public Button(Vector2 position, Vector2 size, string text = "") : base(position, size) {
         Text = text;
@@ -56,7 +57,7 @@ public class Button : UIControl {
 
         // Text (Centering logic with truncation)
         if (!string.IsNullOrEmpty(Text) && GameContent.FontSystem != null) {
-            var font = GameContent.FontSystem.GetFont((int)(20 * Scale));
+            var font = GameContent.FontSystem.GetFont((int)(FontSize * Scale));
             if (font != null) {
                 float contentStartX = drawPos.X + padding + iconSize + (iconSize > 0 ? padding : 0);
                 float remainingWidth = size.X - (contentStartX - drawPos.X) - padding;

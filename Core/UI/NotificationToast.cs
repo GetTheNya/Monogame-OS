@@ -24,6 +24,8 @@ public class NotificationToast : UIElement {
     private float _animatedX = 0f;
     private float _animatedY = 0f;
     private float _targetY = 0f;
+    private string _wrappedTitle;
+    private string _wrappedText;
     private bool _isClosing = false;
     private List<Button> _actionButtons = new();
     private Button _closeButton;
@@ -45,11 +47,22 @@ public class NotificationToast : UIElement {
         _targetY = yOffset;
         _animatedY = yOffset;
 
+        // Wrap text and calculate size
+        float textAvailableWidth = ToastWidth - (ToastPadding * 2 + IconSize + 10f) - 30f; // 30 for close button
+        var titleFont = GameContent.FontSystem.GetFont(18);
+        var bodyFont = GameContent.FontSystem.GetFont(14);
+        
+        _wrappedTitle = TextHelper.WrapText(titleFont, _notification.Title, textAvailableWidth);
+        _wrappedText = TextHelper.WrapText(bodyFont, _notification.Text, textAvailableWidth);
+
         // Calculate height based on content
-        float contentHeight = 80f;
+        float titleHeight = string.IsNullOrEmpty(_wrappedTitle) ? 0 : titleFont.MeasureString(_wrappedTitle).Y;
+        float bodyHeight = string.IsNullOrEmpty(_wrappedText) ? 0 : bodyFont.MeasureString(_wrappedText).Y;
+        
+        float contentHeight = ToastPadding * 2 + Math.Max(IconSize, titleHeight + (titleHeight > 0 && bodyHeight > 0 ? 4 : 0) + bodyHeight);
         if (_notification.Actions.Count > 0) contentHeight += 40f;
 
-        Size = new Vector2(ToastWidth, contentHeight);
+        Size = new Vector2(ToastWidth, Math.Max(80f, contentHeight));
         
         var viewport = G.GraphicsDevice.Viewport;
         _animatedX = ToastWidth + 20f; // Start off-screen
@@ -65,7 +78,7 @@ public class NotificationToast : UIElement {
 
         // Create action buttons
         float btnX = IconSize + ToastPadding * 2;
-        float btnY = 55f;
+        float btnY = Size.Y - 28f - ToastPadding;
         foreach (var action in _notification.Actions) {
             var btn = new Button(new Vector2(btnX, btnY), new Vector2(80, 28), action.Label) {
                 BackgroundColor = new Color(60, 60, 60)
@@ -210,8 +223,16 @@ public class NotificationToast : UIElement {
             var titleFont = GameContent.FontSystem.GetFont(18);
             var bodyFont = GameContent.FontSystem.GetFont(14);
 
-            titleFont.DrawText(batch, _notification.Title ?? "", absPos + new Vector2(textX, ToastPadding), Color.White * swipeAlpha);
-            bodyFont.DrawText(batch, _notification.Text ?? "", absPos + new Vector2(textX, ToastPadding + 24f), Color.LightGray * swipeAlpha);
+            Vector2 titleSize = Vector2.Zero;
+            if (!string.IsNullOrEmpty(_wrappedTitle)) {
+                titleFont.DrawText(batch, _wrappedTitle, absPos + new Vector2(textX, ToastPadding), Color.White * swipeAlpha);
+                titleSize = titleFont.MeasureString(_wrappedTitle);
+            }
+            
+            if (!string.IsNullOrEmpty(_wrappedText)) {
+                float bodyY = ToastPadding + (titleSize.Y > 0 ? titleSize.Y + 4f : 0);
+                bodyFont.DrawText(batch, _wrappedText, absPos + new Vector2(textX, bodyY), Color.LightGray * swipeAlpha);
+            }
         }
 
         base.Draw(sb, batch);
