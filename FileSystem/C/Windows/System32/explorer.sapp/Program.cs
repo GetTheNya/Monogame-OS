@@ -161,8 +161,15 @@ public class FileExplorerWindow : Window {
         if (_isComputerMode) {
             items = VirtualFileSystem.Instance.GetDrives();
         } else {
+            bool inRecycleBin = _currentPath.ToUpper().Contains("$RECYCLE.BIN");
             var files = VirtualFileSystem.Instance.GetFiles(_currentPath).Where(f => !f.EndsWith("$trash_info.json", StringComparison.OrdinalIgnoreCase));
-            var dirs = VirtualFileSystem.Instance.GetDirectories(_currentPath).Where(d => !d.Contains("$Recycle.Bin"));
+            var dirs = VirtualFileSystem.Instance.GetDirectories(_currentPath);
+            
+            // If not already in the recycle bin, hide the recycle bin system folder itself
+            if (!inRecycleBin) {
+                dirs = dirs.Where(d => !d.ToUpper().Contains("$RECYCLE.BIN")).ToArray();
+            }
+
             items = dirs.Concat(files);
         }
         _fileList.SetItems(items.ToList(), _isComputerMode);
@@ -409,6 +416,12 @@ public class FileListPanel : ScrollPanel {
         // Double-click - check BEFORE consuming input
         bool isDoubleClick = inBounds && hoveredItem != null && InputManager.IsDoubleClick(MouseButton.Left, ignoreConsumed: true);
         if (isDoubleClick) {
+            // Prevent opening files or folders in the Recycle Bin
+            if (_window.CurrentPath.ToUpper().Contains("$RECYCLE.BIN")) {
+                InputManager.IsMouseConsumed = true;
+                return;
+            }
+
             if (hoveredItem.IsDir) {
                 // Check if it's a .sapp app - execute it instead of navigating
                 if (hoveredItem.Path.ToLower().EndsWith(".sapp")) {
@@ -517,9 +530,21 @@ public class FileListPanel : ScrollPanel {
     private void ShowContextMenu(FileListItem item) {
         var menuItems = new List<MenuItem>();
         bool isSapp = item.IsDir && item.Path.ToLower().EndsWith(".sapp");
-        bool isRecycleBin = item.Path.ToUpper().Contains("$RECYCLE.BIN");
+        bool isRecycleBinRoot = item.Path.ToUpper().TrimEnd('\\') == "C:\\$RECYCLE.BIN";
+        bool inRecycleBin = _window.CurrentPath.ToUpper().Contains("$RECYCLE.BIN");
 
-        if (isSapp) {
+        if (inRecycleBin) {
+            // Items inside recycle bin
+            menuItems.Add(new MenuItem { 
+                Text = _selectedPaths.Count > 1 ? $"Restore ({_selectedPaths.Count} items)" : "Restore", 
+                Action = RestoreSelectedItems
+            });
+            menuItems.Add(new MenuItem { 
+                Text = _selectedPaths.Count > 1 ? $"Delete Permanently ({_selectedPaths.Count} items)" : "Delete Permanently", 
+                Action = DeletePermanentlySelectedItems
+            });
+            menuItems.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path) });
+        } else if (isSapp) {
             // .sapp app context menu
             menuItems.Add(new MenuItem { Text = "Run", Action = () => Shell.Execute(item.Path, item.Bounds) });
             menuItems.Add(new MenuItem { Text = "Open as Folder", Action = () => _window.NavigateTo(item.Path) });
@@ -528,7 +553,7 @@ public class FileListPanel : ScrollPanel {
             }
             menuItems.Add(new MenuItem { Text = "Delete", Action = () => DeleteItems() });
             menuItems.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path) });
-        } else if (isRecycleBin) {
+        } else if (isRecycleBinRoot) {
             // Recycle Bin context menu
             menuItems.Add(new MenuItem { Text = "Open", Action = () => _window.NavigateTo(item.Path) });
             menuItems.Add(new MenuItem { 
@@ -555,6 +580,42 @@ public class FileListPanel : ScrollPanel {
         }
 
         Shell.GlobalContextMenu?.Show(InputManager.MousePosition.ToVector2(), menuItems);
+    }
+
+    private void RestoreSelectedItems() {
+        var itemsToRestore = _selectedPaths.ToList();
+        if (itemsToRestore.Count == 0) return;
+
+        foreach (var path in itemsToRestore) {
+            VirtualFileSystem.Instance.Restore(path);
+        }
+        
+        _selectedPaths.Clear();
+        _window.RefreshList();
+        Shell.RefreshDesktop?.Invoke();
+        Shell.RefreshExplorers();
+    }
+
+    private void DeletePermanentlySelectedItems() {
+        var itemsToDelete = _selectedPaths.ToList();
+        if (itemsToDelete.Count == 0) return;
+
+        string message = itemsToDelete.Count == 1 
+            ? $"Are you sure you want to permanently delete '{System.IO.Path.GetFileName(itemsToDelete[0].TrimEnd('\\'))}'?"
+            : $"Are you sure you want to permanently delete these {itemsToDelete.Count} items?";
+
+        var mb = new MessageBox("Delete Permanently", message, MessageBoxButtons.YesNo, (confirmed) => {
+            if (confirmed) {
+                foreach (var path in itemsToDelete) {
+                    VirtualFileSystem.Instance.Delete(path);
+                }
+                _selectedPaths.Clear();
+                _window.RefreshList();
+                Shell.RefreshDesktop?.Invoke();
+                Shell.RefreshExplorers();
+            }
+        });
+        Shell.UI.OpenWindow(mb);
     }
 
     private void DeleteItems() {
