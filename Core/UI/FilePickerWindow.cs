@@ -79,8 +79,8 @@ public class FilePickerWindow : Window {
         _fileListPanel.Size = new Vector2(ClientSize.X, ClientSize.Y - TopHeight - BottomHeight);
         _bottomPanel.Position = new Vector2(0, ClientSize.Y - BottomHeight);
         _bottomPanel.Size = new Vector2(ClientSize.X, BottomHeight);
-        _actionButton.Position = new Vector2(ClientSize.X - 160, 10);
-        _cancelButton.Position = new Vector2(ClientSize.X - 80, 10);
+        _cancelButton.Position = new Vector2(ClientSize.X - 160, 10);
+        _actionButton.Position = new Vector2(ClientSize.X - 80, 10);
     }
 
     private void SetupUI() {
@@ -154,7 +154,10 @@ public class FilePickerWindow : Window {
             var dirs = VirtualFileSystem.Instance.GetDirectories(_currentPath);
             foreach (var dir in dirs) {
                 string dirName = Path.GetFileName(dir);
-                if (string.IsNullOrEmpty(dirName)) continue; // Root volume case mostly
+                if (string.IsNullOrEmpty(dirName)) continue;
+                
+                // Hide system folders
+                if (dirName.StartsWith("$", StringComparison.OrdinalIgnoreCase)) continue;
 
                 var btn = new Button(new Vector2(5, y), new Vector2(itemWidth, itemHeight), dirName) {
                     BackgroundColor = Color.Transparent,
@@ -179,6 +182,10 @@ public class FilePickerWindow : Window {
             var files = VirtualFileSystem.Instance.GetFiles(_currentPath);
             foreach (var file in files) {
                 string fileName = Path.GetFileName(file);
+                if (string.IsNullOrEmpty(fileName)) continue;
+
+                // Hide system/metadata files
+                if (fileName.StartsWith("$", StringComparison.OrdinalIgnoreCase)) continue;
                 
                 // Filter by extension if specified
                 if (_fileExtensions != null && _fileExtensions.Length > 0) {
