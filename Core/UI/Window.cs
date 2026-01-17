@@ -244,7 +244,7 @@ public class Window : UIElement {
 
     public void Minimize() {
         Vector2 fallback = new Vector2(Position.X + Size.X / 2f, G.GraphicsDevice.Viewport.Height);
-        Minimize(Taskbar.Instance?.GetButtonCenter(this) ?? fallback);
+        Minimize(Taskbar.Instance?.GetButtonCenter(OwnerProcess) ?? fallback);
     }
 
     public void Minimize(Vector2 targetPos) {
@@ -291,7 +291,7 @@ public class Window : UIElement {
 
     public void Restore() {
         Vector2 fallback = new Vector2(Position.X + Size.X / 2f, G.GraphicsDevice.Viewport.Height);
-        Restore(Taskbar.Instance?.GetButtonCenter(this) ?? fallback);
+        Restore(Taskbar.Instance?.GetButtonCenter(OwnerProcess) ?? fallback);
     }
 
     public void Restore(Vector2 sourcePos) {
@@ -448,6 +448,11 @@ public class Window : UIElement {
         if (isHoveringStrict && ConsumesInput)
             InputManager.IsMouseConsumed = true;
 
+        if (isJustPressed) {
+            ActiveWindow = this;
+            Parent?.BringToFront(this);
+        }
+
         if (inputConsumedByChild) {
             base.UpdateInput(); // Keep base logic alive for state management
             return;
@@ -466,9 +471,6 @@ public class Window : UIElement {
         }
 
         if (isJustPressed) {
-            ActiveWindow = this;
-            Parent?.BringToFront(this);
-
             var mousePos = InputManager.MousePosition;
             var titleBarRect = new Rectangle((int)AbsolutePosition.X, (int)AbsolutePosition.Y, (int)Size.X, TitleBarHeight);
 

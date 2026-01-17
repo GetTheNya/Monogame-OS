@@ -24,10 +24,11 @@ public class Taskbar : Panel {
     private SystemTray _systemTray;
     public SystemTray SystemTray => _systemTray;
 
-    // Track windows independently of their Z-order
-    private List<Window> _trackedWindows = new();
-    private Dictionary<Window, float> _cachedButtonWidths = new();
+    // Track processes independently
+    private List<OS.Process> _trackedProcesses = new();
+    private Dictionary<OS.Process, float> _cachedButtonWidths = new();
     private float _lastMaxAllowed = 0f;
+    private TaskbarWindowPicker _windowPicker;
 
     public Taskbar(Vector2 position, Vector2 size, UIElement windowLayer, UIElement startMenu) : base(position, size) {
         Instance = this;
@@ -60,6 +61,11 @@ public class Taskbar : Panel {
         // System Tray
         _systemTray = new SystemTray(new Vector2(size.X - 120f, 0), new Vector2(120f, size.Y));
         AddChild(_systemTray);
+
+        // Window Picker
+        _windowPicker = new TaskbarWindowPicker();
+        // Window picker is added to the scene's top layer by the Shell usually, 
+        // but here we'll let it be managed by the Taskbar or Shell.UI
     }
 
     public override void Update(GameTime gameTime) {
@@ -89,8 +95,8 @@ public class Taskbar : Panel {
                 // Calculate center offset the same way as in UpdateWindowButtons
                 float totalWidth = 0;
                 foreach (var child in _windowListPanel.Children) {
-                    if (child is Button btn && btn.Tag is Window win) {
-                        totalWidth += CalculateButtonWidth(win.Title, maxAllowed) + Padding;
+                    if (child is Button btn && btn.Tag is OS.Process proc) {
+                        totalWidth += CalculateButtonWidth(proc, maxAllowed) + Padding;
                     } else if (child is Button btnOther) {
                         totalWidth += btnOther.Size.X + Padding;
                     }
@@ -98,11 +104,11 @@ public class Taskbar : Panel {
                 float centerOffset = Math.Max(Padding, (_windowListPanel.Size.X - totalWidth) / 2f);
                 
                 float cumulativeX = centerOffset;
-                for (int i = 0; i < _trackedWindows.Count; i++) {
-                    var win = _trackedWindows[i];
-                    if (!_cachedButtonWidths.TryGetValue(win, out float btnWidth) || _lastMaxAllowed != maxAllowed) {
-                        btnWidth = CalculateButtonWidth(win.Title, maxAllowed);
-                        _cachedButtonWidths[win] = btnWidth;
+                for (int i = 0; i < _trackedProcesses.Count; i++) {
+                    var proc = _trackedProcesses[i];
+                    if (!_cachedButtonWidths.TryGetValue(proc, out float btnWidth) || _lastMaxAllowed != maxAllowed) {
+                        btnWidth = CalculateButtonWidth(proc, maxAllowed);
+                        _cachedButtonWidths[proc] = btnWidth;
                     }
                     float mid = cumulativeX + (btnWidth / 2f);
 
@@ -126,12 +132,12 @@ public class Taskbar : Panel {
 
                 // Validity checks to prevent crash
                 if (targetIndex != _dragSourceIndex &&
-                    _dragSourceIndex >= 0 && _dragSourceIndex < _trackedWindows.Count &&
-                    targetIndex >= 0 && targetIndex < _trackedWindows.Count) {
-                    // Swap Data in _trackedWindows (logical order)
-                    var winOffset = _trackedWindows[_dragSourceIndex];
-                    _trackedWindows.RemoveAt(_dragSourceIndex);
-                    _trackedWindows.Insert(targetIndex, winOffset);
+                    _dragSourceIndex >= 0 && _dragSourceIndex < _trackedProcesses.Count &&
+                    targetIndex >= 0 && targetIndex < _trackedProcesses.Count) {
+                    // Swap Data in _trackedProcesses (logical order)
+                    var procOffset = _trackedProcesses[_dragSourceIndex];
+                    _trackedProcesses.RemoveAt(_dragSourceIndex);
+                    _trackedProcesses.Insert(targetIndex, procOffset);
 
                     // Swap Buttons in Children (keep in sync)
                     var btnOffset = _windowListPanel.Children[_dragSourceIndex];
@@ -177,6 +183,7 @@ public class Taskbar : Panel {
             }
         }
 
+        _windowPicker.Update(gameTime);
         base.Update(gameTime); // Update Children (Buttons)
     }
 
@@ -188,9 +195,9 @@ public class Taskbar : Panel {
 
 
     private float GetMaxAllowedWidth() {
-        if (_trackedWindows.Count == 0) return 250f;
+        if (_trackedProcesses.Count == 0) return 250f;
         float availableWidth = _windowListPanel.Size.X - Padding;
-        return Math.Min(250f, (availableWidth / _trackedWindows.Count) - Padding);
+        return Math.Min(250f, (availableWidth / _trackedProcesses.Count) - Padding);
     }
 
     private void UpdateWindowButtons(float deltaTime) {
@@ -204,15 +211,17 @@ public class Taskbar : Panel {
         _systemTray.Position = new Vector2(Size.X - trayWidth, 0);
         _systemTray.Size = new Vector2(trayWidth, Size.Y);
 
-        var currentWindows = _windowLayer.Children;
+        var currentWindows = _windowLayer.Children.OfType<Window>().ToList();
+        var taskbarWindows = currentWindows.Where(w => w.ShowInTaskbar).ToList();
+        var processesWithTaskbarWindows = taskbarWindows.Select(w => w.OwnerProcess).Where(p => p != null).Distinct().ToList();
 
-        // 1. Handle New Windows (Incremental Add) - only those with ShowInTaskbar = true
-        foreach (var child in currentWindows) {
-            if (child is Window win && win.ShowInTaskbar && !_trackedWindows.Contains(win)) {
-                _trackedWindows.Add(win);
+        // 1. Handle New Processes (Incremental Add)
+        foreach (var proc in processesWithTaskbarWindows) {
+            if (!_trackedProcesses.Contains(proc)) {
+                _trackedProcesses.Add(proc);
                 
                 float maxAllowed = GetMaxAllowedWidth();
-                float width = CalculateButtonWidth(win.Title, maxAllowed);
+                float width = CalculateButtonWidth(proc, maxAllowed);
                 
                 // Spawn position: Start at the end of the current list to slide in
                 float lastX = Padding;
@@ -221,25 +230,26 @@ public class Taskbar : Panel {
                     lastX = last.Position.X + last.Size.X + Padding;
                 }
 
-                var btn = CreateTaskbarButton(win, new Vector2(lastX + 200f, Padding), width);
+                var btn = CreateTaskbarButton(proc, new Vector2(lastX + 200f, Padding), width);
                 btn.Opacity = 0f;
                 Tweener.To(btn, o => btn.Opacity = o, 0f, 1f, 0.4f, Easing.Linear);
                 _windowListPanel.AddChild(btn);
             }
         }
 
-        // 2. Handle Closed Windows or windows that disabled ShowInTaskbar (Incremental Remove with Animation)
-        for (int i = _trackedWindows.Count - 1; i >= 0; i--) {
-            var trackedWin = _trackedWindows[i];
-            bool shouldRemove = !currentWindows.Contains(trackedWin) || !trackedWin.ShowInTaskbar;
-            if (shouldRemove) {
-                _trackedWindows.RemoveAt(i);
-                _cachedButtonWidths.Remove(trackedWin);
+        // 2. Handle Processes with no taskbar windows left (Incremental Remove)
+        for (int i = _trackedProcesses.Count - 1; i >= 0; i--) {
+            var trackedProc = _trackedProcesses[i];
+            bool hasAnyTaskbarWindows = taskbarWindows.Any(w => w.OwnerProcess == trackedProc);
+            
+            if (!hasAnyTaskbarWindows) {
+                _trackedProcesses.RemoveAt(i);
+                _cachedButtonWidths.Remove(trackedProc);
                 
-                // Find the specific button for this window
-                var btn = _windowListPanel.Children.FirstOrDefault(c => c.Tag == trackedWin) as Button;
+                // Find the specific button for this process
+                var btn = _windowListPanel.Children.FirstOrDefault(c => c.Tag == trackedProc) as Button;
                 if (btn != null) {
-                    btn.Tag = null; // Detach from window
+                    btn.Tag = null; // Detach from process
                     btn.ConsumesInput = false; // Prevent interaction during death
                     
                     // Animate Death
@@ -258,7 +268,7 @@ public class Taskbar : Panel {
         float totalWidth = 0;
         foreach (var child in buttons) {
             if (child is Button btn) {
-                if (btn.Tag is Window win) totalWidth += CalculateButtonWidth(win.Title, maxAllowedCur) + Padding;
+                if (btn.Tag is OS.Process proc) totalWidth += CalculateButtonWidth(proc, maxAllowedCur) + Padding;
                 else totalWidth += btn.Size.X + Padding;
             }
         }
@@ -267,21 +277,29 @@ public class Taskbar : Panel {
 
         foreach (var child in buttons) {
             if (child is Button btn) {
-                // If button is still attached to a window, update its properties
-                if (btn.Tag is Window win) {
-                    if (!_cachedButtonWidths.TryGetValue(win, out float width) || _lastMaxAllowed != maxAllowedCur) {
-                        width = CalculateButtonWidth(win.Title, maxAllowedCur);
-                        _cachedButtonWidths[win] = width;
+                // If button is still attached to a process, update its properties
+                if (btn.Tag is OS.Process proc) {
+                    if (!_cachedButtonWidths.TryGetValue(proc, out float width) || _lastMaxAllowed != maxAllowedCur) {
+                        width = CalculateButtonWidth(proc, maxAllowedCur);
+                        _cachedButtonWidths[proc] = width;
                     }
-                    bool isActive = (win == Window.ActiveWindow);
+                    
+                    var procWindows = taskbarWindows.Where(w => w.OwnerProcess == proc).ToList();
+                    bool isActive = procWindows.Any(w => w == Window.ActiveWindow);
+                    bool isAnyVisible = procWindows.Any(w => w.IsVisible && w.Opacity > 0.5f);
 
-                    btn.Text = win.Title;
-                    btn.Icon = win.Icon;
+                    // Use MainWindow title and icon if available
+                    string baseTitle = proc.MainWindow?.Title ?? proc.AppId;
+                    string title = baseTitle;
+                    if (procWindows.Count > 1) title += $" ({procWindows.Count})";
+                    
+                    btn.Text = title;
+                    btn.Icon = proc.MainWindow?.Icon ?? procWindows.FirstOrDefault()?.Icon;
                     btn.Size = new Vector2(width, Size.Y - (Padding * 2));
 
                     // Visuals
                     if (isActive) btn.BackgroundColor = new Color(80, 80, 80);
-                    else if (!win.IsVisible) btn.BackgroundColor = new Color(40, 40, 40, 150);
+                    else if (!isAnyVisible) btn.BackgroundColor = new Color(40, 40, 40, 150);
                     else btn.BackgroundColor = new Color(50, 50, 50);
                 }
                 _lastMaxAllowed = maxAllowedCur;
@@ -294,8 +312,8 @@ public class Taskbar : Panel {
 
                     // Compact Gap Shift (for reordering feel)
                     if (_draggingButton != null) {
-                        // We need the index in _trackedWindows to compare with _dragSourceIndex
-                        int trackIdx = _trackedWindows.IndexOf(btn.Tag as Window);
+                        // We need the index in _trackedProcesses to compare with _dragSourceIndex
+                        int trackIdx = _trackedProcesses.IndexOf(btn.Tag as OS.Process);
                         if (trackIdx != -1 && trackIdx > _dragSourceIndex) {
                              baseX += (20f);
                         }
@@ -314,24 +332,39 @@ public class Taskbar : Panel {
         }
     }
 
-    private Button CreateTaskbarButton(Window win, Vector2 pos, float width) {
-        var btn = new Button(pos, new Vector2(width, Size.Y - (Padding * 2)), win.Title) {
+    private Button CreateTaskbarButton(OS.Process proc, Vector2 pos, float width) {
+        var btn = new Button(pos, new Vector2(width, Size.Y - (Padding * 2)), proc.AppId) {
             BackgroundColor = new Color(50, 50, 50),
             HoverColor = new Color(70, 70, 70),
-            Icon = win.Icon,
-            Tag = win // Store window reference
+            Tag = proc // Store process reference
         };
 
         btn.OnClickAction = () => {
-            Vector2 center = btn.AbsolutePosition + (btn.Size / 2f);
-            if (!win.IsVisible || win.Opacity < 0.5f) {
-                win.Restore(center);
-            } else {
-                if (Window.ActiveWindow == win) {
-                    win.Minimize(center);
+            // Get all taskbar windows for this process
+            var currentWindows = _windowLayer.Children.OfType<Window>().ToList();
+            var procWindows = currentWindows.Where(w => w.ShowInTaskbar && w.OwnerProcess == proc).ToList();
+            
+            if (procWindows.Count == 0) return;
+
+            if (procWindows.Count == 1) {
+                var win = procWindows[0];
+                Vector2 center = btn.AbsolutePosition + (btn.Size / 2f);
+                if (!win.IsVisible || win.Opacity < 0.5f) {
+                    win.Restore(center);
                 } else {
-                    Window.ActiveWindow = win;
-                    win.Parent?.BringToFront(win);
+                    if (Window.ActiveWindow == win) {
+                        win.Minimize(center);
+                    } else {
+                        Window.ActiveWindow = win;
+                        win.Parent?.BringToFront(win);
+                    }
+                }
+            } else {
+                // Multiple windows - show picker
+                if (_windowPicker.IsVisible) {
+                    _windowPicker.Hide();
+                } else {
+                    _windowPicker.Show(proc, btn.AbsolutePosition + new Vector2(btn.Size.X / 2f, 0));
                 }
             }
         };
@@ -339,17 +372,18 @@ public class Taskbar : Panel {
         return btn;
     }
 
-    public Vector2 GetButtonCenter(Window window) {
-        int index = _trackedWindows.IndexOf(window);
+    public Vector2 GetButtonCenter(OS.Process process) {
+        int index = _trackedProcesses.IndexOf(process);
         if (index == -1 || index >= _windowListPanel.Children.Count) return Vector2.Zero;
 
         var btn = _windowListPanel.Children[index];
         return btn.AbsolutePosition + (btn.Size / 2f);
     }
 
-    private float CalculateButtonWidth(string title, float maxAllowed = 250f) {
+    private float CalculateButtonWidth(OS.Process proc, float maxAllowed = 250f) {
         float minWidth = 30f;
         float safeMax = Math.Max(minWidth, maxAllowed);
+        string title = proc.MainWindow?.Title ?? proc.AppId;
 
         if (GameContent.FontSystem == null) return Math.Min(WindowButtonWidth, safeMax);
         var font = GameContent.FontSystem.GetFont(20);
@@ -381,11 +415,11 @@ public class Taskbar : Panel {
         float maxAllowed = GetMaxAllowedWidth();
 
         float xOffset = Padding;
-        for (int i = 0; i < _trackedWindows.Count; i++) {
-            var win = _trackedWindows[i];
-            float width = CalculateButtonWidth(win.Title, maxAllowed);
+        for (int i = 0; i < _trackedProcesses.Count; i++) {
+            var proc = _trackedProcesses[i];
+            float width = CalculateButtonWidth(proc, maxAllowed);
 
-            var btn = CreateTaskbarButton(win, new Vector2(xOffset, Padding), width);
+            var btn = CreateTaskbarButton(proc, new Vector2(xOffset, Padding), width);
             _windowListPanel.AddChild(btn);
             xOffset += width + Padding;
         }
@@ -412,6 +446,9 @@ public class Taskbar : Panel {
         if (_draggingButton != null) {
             _draggingButton.Draw(spriteBatch, batch);
         }
+
+        // Window Picker
+        _windowPicker.Draw(spriteBatch, batch);
     }
 
     protected override void DrawSelf(SpriteBatch spriteBatch, ShapeBatch batch) {
