@@ -48,11 +48,16 @@ public class AppLoader {
                 return false;
             }
 
+            string upperAppId = manifest.AppId.ToUpper();
+
             // Check if already compiled
-            if (_compiledApps.ContainsKey(manifest.AppId)) {
+            if (_compiledApps.ContainsKey(upperAppId)) {
                 DebugLogger.Log($"App {manifest.AppId} already loaded");
                 return true;
             }
+
+            // Store path early so hot reload can find the app even if compilation fails
+            _appPaths[upperAppId] = appFolderPath;
 
             // Gather all .cs source files
             var sourceFiles = new Dictionary<string, string>();
@@ -64,8 +69,12 @@ public class AppLoader {
 
             if (sourceFiles.Count == 0) {
                 // No source files - app might be hardcoded, skip silently
+                _appPaths.Remove(upperAppId);
                 return false;
             }
+
+            // Start hot reload watching BEFORE compilation - so failed apps can be fixed
+            AppHotReloadManager.Instance.StartWatching(upperAppId, appFolderPath);
 
             // Compile
             Assembly assembly = AppCompiler.Instance.Compile(sourceFiles, manifest.AppId, out var diagnostics);
@@ -75,19 +84,16 @@ public class AppLoader {
                 foreach (var diag in diagnostics) {
                     DebugLogger.Log($"  {diag}");
                 }
+                // Don't return false - hot reload is still watching
                 return false;
             }
 
-            _compiledApps[manifest.AppId] = assembly;
-            _appPaths[manifest.AppId] = appFolderPath;
+            _compiledApps[upperAppId] = assembly;
 
             // Register app factory with Shell
-            Shell.UI.RegisterApp(manifest.AppId, (args) => {
+            Shell.UI.RegisterApp(upperAppId, (args) => {
                 return CreateWindowFromAssembly(assembly, manifest, hostPath, args);
             });
-
-            // Start hot reload watching
-            AppHotReloadManager.Instance.StartWatching(manifest.AppId, appFolderPath);
 
             DebugLogger.Log($"Successfully loaded app: {manifest.Name} ({manifest.AppId})");
             return true;
