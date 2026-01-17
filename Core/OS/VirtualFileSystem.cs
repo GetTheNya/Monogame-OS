@@ -160,9 +160,33 @@ public class VirtualFileSystem {
     }
 
     public void Delete(string virtualPath) {
+        if (IsSystemProtectedPath(virtualPath)) {
+            DebugLogger.Log($"Access Denied: Cannot delete system path '{virtualPath}'");
+            return;
+        }
+
         string hostPath = ToHostPath(virtualPath);
         if (File.Exists(hostPath)) File.Delete(hostPath);
         else if (Directory.Exists(hostPath)) Directory.Delete(hostPath, true);
+    }
+
+    private bool IsSystemProtectedPath(string virtualPath) {
+        if (string.IsNullOrEmpty(virtualPath)) return false;
+        string norm = virtualPath.Replace('/', '\\').TrimEnd('\\').ToUpper();
+        
+        // Root drives
+        if (norm.Length <= 2 && norm.EndsWith(":")) return true;
+        if (norm.Length == 3 && norm.EndsWith(":\\")) return true;
+
+        string[] protectedPaths = { 
+            "C:", "C:\\", 
+            "C:\\WINDOWS", 
+            "C:\\USERS", 
+            "C:\\USERS\\ADMIN", 
+            "C:\\$RECYCLE.BIN" 
+        };
+        
+        return protectedPaths.Any(p => norm == p);
     }
 
     public void Move(string sourceVirtualPath, string destVirtualPath) {
@@ -177,10 +201,8 @@ public class VirtualFileSystem {
         
         if (s == d) return;
 
-        // Prevent moving the $Recycle.Bin folder itself (but allow moving items inside it)
-        string normalizedSource = sourceVirtualPath.Replace('/', '\\').TrimEnd('\\').ToUpper();
-        if (normalizedSource == "C:\\$RECYCLE.BIN" && !destVirtualPath.ToUpper().Contains("$RECYCLE.BIN")) {
-             DebugLogger.Log("Access Denied: Cannot move system directory.");
+        if (IsSystemProtectedPath(sourceVirtualPath)) {
+             DebugLogger.Log($"Access Denied: Cannot move or rename system directory '{sourceVirtualPath}'");
              return;
         }
 
@@ -243,8 +265,13 @@ public class VirtualFileSystem {
         string normalizedPath = virtualPath.Replace('/', '\\').TrimEnd('\\');
         if (normalizedPath.Length <= 2 && normalizedPath.Contains(':')) return; // Don't recycle drives
         
-        // Don't recycle the Recycle Bin itself or its parent
-        if (normalizedPath.ToUpper().Contains("$RECYCLE.BIN")) return;
+        // Don't recycle system folders
+        if (IsSystemProtectedPath(virtualPath)) return;
+
+        if (normalizedPath.ToUpper().Contains("$RECYCLE.BIN")) {
+            // Already in recycle bin or IS the bin
+            return;
+        }
 
         string fileName = Path.GetFileName(normalizedPath);
         string recycleBin = "C:\\$Recycle.Bin\\";

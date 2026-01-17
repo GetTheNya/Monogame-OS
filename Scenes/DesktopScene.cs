@@ -29,6 +29,12 @@ public class DesktopScene : Core.Scenes.Scene {
 
     private Dictionary<string, Vector2> _iconPositions = new Dictionary<string, Vector2>();
     private string _sortType = "None";
+    
+    // Grid alignment settings
+    private const int DesktopPadding = 15;
+    private const int GridCellWidth = 100;
+    private const int GridCellHeight = 110;
+    private bool _alignToGrid = true;
 
     private RenderTarget2D _mainTarget;
     private Texture2D _wallpaperTexture;
@@ -44,6 +50,9 @@ public class DesktopScene : Core.Scenes.Scene {
     public override void LoadContent(ContentManager content) {
         Shell.RefreshDesktop = LoadDesktopIcons;
         _uiManager = new UIManager();
+        
+        // Load grid alignment setting from Registry
+        _alignToGrid = Registry.GetValue("Desktop\\AlignToGrid", true);
 
         var viewport = G.GraphicsDevice.Viewport;
         var screenWidth = viewport.Width;
@@ -144,44 +153,59 @@ public class DesktopScene : Core.Scenes.Scene {
 
         // Combine files and all folders for desktop display
         var itemsList = files.Concat(dirs).Where(i => !i.Contains("$Recycle.Bin"));
-        if (_sortType == "Name") itemsList = itemsList.OrderBy(System.IO.Path.GetFileName);
-        else if (_sortType == "Type") itemsList = itemsList.OrderBy(System.IO.Path.GetExtension);
-        else if (_sortType == "Size") itemsList = itemsList.OrderBy(f => { try { return new System.IO.FileInfo(VirtualFileSystem.Instance.ToHostPath(f)).Length; } catch { return 0; } });
+        
+        // Add Recycle Bin to the list so it can be sorted
+        string trashPath = "C:\\$Recycle.Bin\\";
+        itemsList = itemsList.Concat(new[] { trashPath });
+
+        if (_sortType == "Name") itemsList = itemsList.OrderBy(i => i == trashPath ? "Recycle Bin" : System.IO.Path.GetFileName(i));
+        else if (_sortType == "Type") itemsList = itemsList.OrderBy(i => i == trashPath ? "!" : System.IO.Path.GetExtension(i)); // Trash first in type sort
+        else if (_sortType == "Size") itemsList = itemsList.OrderBy(f => { 
+            if (f == trashPath) return 0;
+            try { return new System.IO.FileInfo(VirtualFileSystem.Instance.ToHostPath(f)).Length; } catch { return 0; } 
+        });
 
         var items = itemsList.ToArray();
 
-        float x = 20;
-        float y = 20;
+        float x = DesktopPadding;
+        float y = DesktopPadding;
         float gap = 20;
 
         foreach (var item in items) {
             string fileName = System.IO.Path.GetFileName(item);
-            if (fileName.ToLower().EndsWith(".slnk") || fileName.ToLower().EndsWith(".sapp")) {
+            if (item == trashPath) fileName = "Recycle Bin";
+            else if (fileName.ToLower().EndsWith(".slnk") || fileName.ToLower().EndsWith(".sapp")) {
                 fileName = System.IO.Path.GetFileNameWithoutExtension(item);
             }
-            Texture2D iconTex = Shell.GetIcon(item);
+            
+            Texture2D iconTex = (item == trashPath) ? 
+                (VirtualFileSystem.Instance.IsRecycleBinEmpty() ? GameContent.TrashEmptyIcon : GameContent.TrashFullIcon) : 
+                Shell.GetIcon(item);
 
             var icon = new DesktopIcon(Vector2.Zero, fileName, iconTex);
 
             if (_iconPositions.ContainsKey(item)) {
                 icon.Position = _iconPositions[item];
             } else {
-                icon.Position = new Vector2(x, y);
-                _iconPositions[item] = icon.Position;
+                Vector2? savedPos = LoadIconPosition(item);
+                if (savedPos.HasValue) {
+                    icon.Position = savedPos.Value;
+                    _iconPositions[item] = icon.Position;
+                } else {
+                    icon.Position = new Vector2(x, y);
+                    _iconPositions[item] = icon.Position;
+                }
             }
 
             y += icon.Size.Y + gap;
-            if (y + icon.Size.Y > G.GraphicsDevice.Viewport.Height - 150) {
-                y = 20;
+            if (y + icon.Size.Y > G.GraphicsDevice.Viewport.Height - DesktopPadding) { 
+                y = DesktopPadding;
                 x += icon.Size.X + gap;
             }
 
             icon.VirtualPath = item;
             icon.OnDragAction = (i, delta) =>  { 
-                // Accumulate delta for final position update
                 i.DragDelta += delta;
-                
-                // Show drop preview for this specific icon
                 Vector2 finalPos = _iconPositions[i.VirtualPath] + i.DragDelta;
                 Shell.Drag.SetDropPreview(i, finalPos);
             };
@@ -190,68 +214,139 @@ public class DesktopScene : Core.Scenes.Scene {
                     if (child is DesktopIcon d && d != selected) d.IsSelected = false;
                 }
             };
-            icon.OnDoubleClickAction = () => Shell.Execute(item, icon.Bounds);
-            icon.OnDropAction = () => {
-                // If this is part of a selection, move ALL selected icons
-                if (icon.IsSelected) {
-                    foreach (var child in _desktopLayer.Children) {
-                        if (child is DesktopIcon d && d.IsSelected) {
-                            Shell.Drag.SetDropPreview(d, null);
-                            if (d.DragDelta.LengthSquared() > 1.0f) {
-                                d.Position += d.DragDelta;
-                                _iconPositions[d.VirtualPath] = d.Position;
-                            }
-                            d.DragDelta = Vector2.Zero;
-                        }
-                    }
-                } else {
-                    // Single icon drop (not selected or leader of non-selection)
-                    Shell.Drag.SetDropPreview(icon, null);
+
+            if (item == trashPath) {
+                _trashIconEl = icon;
+                icon.OnDoubleClickAction = () => Shell.Execute(trashPath, icon.Bounds);
+                icon.OnDropAction = () => {
                     if (icon.DragDelta.LengthSquared() > 1.0f) {
-                        icon.Position += icon.DragDelta;
-                        _iconPositions[icon.VirtualPath] = icon.Position;
+                        Vector2 targetPos = icon.Position + icon.DragDelta;
+                        Vector2 newPos = targetPos;
+                        if (_alignToGrid) {
+                            Vector2 snapped = SnapToGrid(targetPos);
+                            var occupied = GetOccupiedCells(icon);
+                            var nearest = FindNearestAvailableCell((int)((snapped.X - DesktopPadding) / GridCellWidth), (int)((snapped.Y - DesktopPadding) / GridCellHeight), occupied);
+                            newPos = new Vector2(nearest.x * GridCellWidth + DesktopPadding, nearest.y * GridCellHeight + DesktopPadding);
+                        }
+                        icon.Position = newPos;
+                        _iconPositions[trashPath] = newPos;
+                        SaveIconPosition(trashPath, newPos);
                     }
                     icon.DragDelta = Vector2.Zero;
-                }
-                
-                if (_trashIconEl != null && _trashIconEl.Bounds.Intersects(icon.Bounds)) {
-                    if (icon.IsSelected) {
-                        var selectedData = _desktopLayer.Children.OfType<DesktopIcon>()
-                            .Where(i => i.IsSelected && !string.IsNullOrEmpty(i.VirtualPath))
-                            .Select(i => i.VirtualPath)
-                            .ToList();
+                    Shell.Drag.SetDropPreview(icon, null);
 
-                        foreach (var path in selectedData) VirtualFileSystem.Instance.Recycle(path);
-                    } else {
-                        VirtualFileSystem.Instance.Recycle(icon.VirtualPath);
+                    var dragged = Shell.DraggedItem;
+                    if (dragged != null && dragged != icon) {
+                        if (dragged is DesktopIcon di) VirtualFileSystem.Instance.Recycle(di.VirtualPath);
+                        else if (dragged is string s) VirtualFileSystem.Instance.Recycle(s);
+                        else if (dragged is List<string> list) foreach (var p in list) VirtualFileSystem.Instance.Recycle(p);
+                        LoadDesktopIcons();
+                        Shell.RefreshExplorers();
+                        Shell.DraggedItem = null;
                     }
-
-                    LoadDesktopIcons();
-                    Shell.RefreshExplorers("$Recycle.Bin");
-                }
-
-                Shell.EndDrag();
-            };
-            icon.OnRightClickAction = () => {
-                _contextMenu.Show(InputManager.MousePosition.ToVector2(), new List<MenuItem> {
-                    new MenuItem { Text = "Open", Action = () => Shell.Execute(item, icon.Bounds) },
-                    new MenuItem { Text = "Run as Administrator", Action = () => Shell.Execute(item, icon.Bounds) },
-                    new MenuItem { Text = "Rename", Action = () => icon.StartRename() },
-                    new MenuItem { Text = "Properties", Action = () => DebugLogger.Log($"Properties for {fileName}") },
-                    new MenuItem {
-                        Text = "Delete", Action = () => {
-                            var mb = new MessageBox("Delete", $"Are you sure you want to move '{fileName}' to the Recycle Bin?", MessageBoxButtons.YesNo, (confirmed) => {
-                                if (confirmed) {
-                                    VirtualFileSystem.Instance.Recycle(item);
-                                    LoadDesktopIcons();
-                                    Shell.RefreshExplorers("$Recycle.Bin");
-                                }
-                            });
-                            Shell.UI.OpenWindow(mb);
+                    Shell.EndDrag();
+                };
+                icon.OnRightClickAction = () => {
+                    _contextMenu.Show(InputManager.MousePosition.ToVector2(), new List<MenuItem> {
+                        new MenuItem { Text = "Open", Action = () => Shell.Execute(trashPath, icon.Bounds) },
+                        new MenuItem { Text = "Empty Recycle Bin", Action = () => Shell.PromptEmptyRecycleBin() },
+                        new MenuItem {
+                            Text = "Restore All", Action = () => {
+                                var mb = new MessageBox("Restore All", "Are you sure you want to restore all items from the Recycle Bin?", MessageBoxButtons.YesNo, (confirmed) => {
+                                    if (confirmed) {
+                                        VirtualFileSystem.Instance.RestoreAll();
+                                        LoadDesktopIcons();
+                                        Shell.RefreshExplorers("$Recycle.Bin");
+                                    }
+                                });
+                                Shell.UI.OpenWindow(mb);
+                            }
+                        },
+                        new MenuItem { Text = "Properties", Action = () => DebugLogger.Log("Trash Properties") }
+                    });
+                };
+                _desktopLayer.TrashIcon = icon;
+            } else {
+                icon.OnDoubleClickAction = () => Shell.Execute(item, icon.Bounds);
+                icon.OnDropAction = () => {
+                    Vector2 targetPos = icon.Position + icon.DragDelta;
+                    
+                    // Priority 1: Check if dropped on Trash
+                    bool droppedOnTrash = _trashIconEl != null && _trashIconEl.Bounds.Contains(InputManager.MousePosition);
+                    
+                    if (droppedOnTrash) {
+                        if (icon.IsSelected) {
+                            var selectedPaths = _desktopLayer.Children.OfType<DesktopIcon>().Where(i => i.IsSelected && !string.IsNullOrEmpty(i.VirtualPath)).Select(i => i.VirtualPath).ToList();
+                            foreach (var path in selectedPaths) VirtualFileSystem.Instance.Recycle(path);
+                        } else {
+                            VirtualFileSystem.Instance.Recycle(icon.VirtualPath);
                         }
+                        LoadDesktopIcons();
+                        Shell.RefreshExplorers("$Recycle.Bin");
+                        Shell.EndDrag();
+                        return;
                     }
-                });
-            };
+
+                    // Priority 2: Move icon(s)
+                    if (icon.IsSelected) {
+                        foreach (var child in _desktopLayer.Children) {
+                            if (child is DesktopIcon d && d.IsSelected) {
+                                Shell.Drag.SetDropPreview(d, null);
+                                if (d.DragDelta.LengthSquared() > 1.0f) {
+                                    Vector2 dTargetPos = d.Position + d.DragDelta;
+                                    Vector2 newPos = dTargetPos;
+                                    if (_alignToGrid) {
+                                        Vector2 snapped = SnapToGrid(dTargetPos);
+                                        var occupied = GetOccupiedCells(d);
+                                        var nearest = FindNearestAvailableCell((int)((snapped.X - DesktopPadding) / GridCellWidth), (int)((snapped.Y - DesktopPadding) / GridCellHeight), occupied);
+                                        newPos = new Vector2(nearest.x * GridCellWidth + DesktopPadding, nearest.y * GridCellHeight + DesktopPadding);
+                                    }
+                                    d.Position = newPos;
+                                    _iconPositions[d.VirtualPath] = d.Position;
+                                    SaveIconPosition(d.VirtualPath, d.Position);
+                                }
+                                d.DragDelta = Vector2.Zero;
+                            }
+                        }
+                    } else {
+                        Shell.Drag.SetDropPreview(icon, null);
+                        if (icon.DragDelta.LengthSquared() > 1.0f) {
+                            Vector2 newPos = targetPos;
+                            if (_alignToGrid) {
+                                Vector2 snapped = SnapToGrid(targetPos);
+                                var occupied = GetOccupiedCells(icon);
+                                var nearest = FindNearestAvailableCell((int)((snapped.X - DesktopPadding) / GridCellWidth), (int)((snapped.Y - DesktopPadding) / GridCellHeight), occupied);
+                                newPos = new Vector2(nearest.x * GridCellWidth + DesktopPadding, nearest.y * GridCellHeight + DesktopPadding);
+                            }
+                            icon.Position = newPos;
+                            _iconPositions[icon.VirtualPath] = icon.Position;
+                            SaveIconPosition(icon.VirtualPath, icon.Position);
+                        }
+                        icon.DragDelta = Vector2.Zero;
+                    }
+                    Shell.EndDrag();
+                };
+                icon.OnRightClickAction = () => {
+                    _contextMenu.Show(InputManager.MousePosition.ToVector2(), new List<MenuItem> {
+                        new MenuItem { Text = "Open", Action = () => Shell.Execute(item, icon.Bounds) },
+                        new MenuItem { Text = "Run as Administrator", Action = () => Shell.Execute(item, icon.Bounds) },
+                        new MenuItem { Text = "Rename", Action = () => icon.StartRename() },
+                        new MenuItem { Text = "Properties", Action = () => DebugLogger.Log($"Properties for {fileName}") },
+                        new MenuItem {
+                            Text = "Delete", Action = () => {
+                                var mb = new MessageBox("Delete", $"Are you sure you want to move '{fileName}' to the Recycle Bin?", MessageBoxButtons.YesNo, (confirmed) => {
+                                    if (confirmed) {
+                                        VirtualFileSystem.Instance.Recycle(item);
+                                        LoadDesktopIcons();
+                                        Shell.RefreshExplorers("$Recycle.Bin");
+                                    }
+                                });
+                                Shell.UI.OpenWindow(mb);
+                            }
+                        }
+                    });
+                };
+            }
             icon.OnRenamed = () => {
                 LoadDesktopIcons();
                 Shell.RefreshExplorers();
@@ -259,85 +354,7 @@ public class DesktopScene : Core.Scenes.Scene {
             _desktopLayer.AddChild(icon);
         }
 
-        // Trash Can
-        string trashPath = "C:\\$Recycle.Bin\\";
-        Vector2 trashPos = new Vector2(x, y);
-        if (_iconPositions.ContainsKey(trashPath)) {
-            trashPos = _iconPositions[trashPath];
-        } else {
-            _iconPositions[trashPath] = trashPos;
-        }
-
-        var trashIcon = VirtualFileSystem.Instance.IsRecycleBinEmpty() ? GameContent.TrashEmptyIcon : GameContent.TrashFullIcon;
-
-        _trashIconEl = new DesktopIcon(trashPos, "Recycle Bin", trashIcon);
-        _trashIconEl.VirtualPath = trashPath;
-        _trashIconEl.OnDragAction = (i, delta) => { 
-            // Accumulate delta for final position update
-            i.DragDelta += delta;
-            
-            // Show drop preview for trash icon
-            Vector2 finalPos = _iconPositions[i.VirtualPath] + i.DragDelta;
-            Shell.Drag.SetDropPreview(i, finalPos);
-        };
-        _trashIconEl.OnSelectedAction = (selected) => {
-            foreach (var child in _desktopLayer.Children) {
-                if (child is DesktopIcon d && d != selected) d.IsSelected = false;
-            }
-        };
-        _trashIconEl.OnDoubleClickAction = () => Shell.Execute(trashPath, _trashIconEl.Bounds);
-        _trashIconEl.OnDropAction = () => {
-            // Apply accumulated position change
-            if (_trashIconEl.DragDelta.LengthSquared() > 1.0f) {
-                _trashIconEl.Position += _trashIconEl.DragDelta;
-                _iconPositions[_trashIconEl.VirtualPath] = _trashIconEl.Position;
-            }
-            _trashIconEl.DragDelta = Vector2.Zero;
-            Shell.Drag.SetDropPreview(_trashIconEl, null);
-            
-            var dragged = Shell.DraggedItem;
-            if (dragged != null && dragged != _trashIconEl) {
-                if (dragged is DesktopIcon di) {
-                    VirtualFileSystem.Instance.Recycle(di.VirtualPath);
-                } else if (dragged is string s) {
-                    VirtualFileSystem.Instance.Recycle(s);
-                } else if (dragged is List<string> list) {
-                    foreach (var path in list) VirtualFileSystem.Instance.Recycle(path);
-                }
-
-                LoadDesktopIcons();
-                Shell.RefreshExplorers();
-                Shell.DraggedItem = null;
-            }
-        };
-        _trashIconEl.OnRightClickAction = () => {
-            _contextMenu.Show(InputManager.MousePosition.ToVector2(), new List<MenuItem> {
-                new MenuItem { Text = "Open", Action = () => Shell.Execute(trashPath, _trashIconEl.Bounds) },
-                new MenuItem {
-                    Text = "Empty Recycle Bin", Action = () => Shell.PromptEmptyRecycleBin()
-                },
-                new MenuItem {
-                    Text = "Restore All", Action = () => {
-                        var mb = new MessageBox("Restore All", "Are you sure you want to restore all items from the Recycle Bin?", MessageBoxButtons.YesNo, (confirmed) => {
-                            if (confirmed) {
-                                VirtualFileSystem.Instance.RestoreAll();
-                                DebugLogger.Log("All items restored from Recycle Bin.");
-                                LoadDesktopIcons();
-                                Shell.RefreshExplorers("$Recycle.Bin");
-                            }
-                        });
-                        Shell.UI.OpenWindow(mb);
-                    }
-                },
-                new MenuItem { Text = "Properties", Action = () => DebugLogger.Log("Trash Properties") }
-            });
-        };
-        _desktopLayer.AddChild(_trashIconEl);
-        _desktopLayer.TrashIcon = _trashIconEl;
         _desktopLayer.SortAction = SortIcons;
-        _desktopLayer.IconMovedAction = (i) => {
-            if (!string.IsNullOrEmpty(i.VirtualPath)) _iconPositions[i.VirtualPath] = i.Position;
-        };
     }
 
     private void ShowToast(Notification notification) {
@@ -430,9 +447,141 @@ public class DesktopScene : Core.Scenes.Scene {
 
     private void SortIcons(string type) {
         _sortType = type;
-        _iconPositions.Clear();
+        
+        // Clear all tracked and persisted positions for the icons we're about to sort
+        // This forces LoadDesktopIcons to use its default layout logic in the sorted order
+        string desktopPath = "C:\\Users\\Admin\\Desktop\\";
+        var files = Core.OS.VirtualFileSystem.Instance.GetFiles(desktopPath);
+        var dirs = Core.OS.VirtualFileSystem.Instance.GetDirectories(desktopPath);
+        string trashPath = "C:\\$Recycle.Bin\\";
+        var allItems = files.Concat(dirs).Where(i => !i.Contains("$Recycle.Bin")).Concat(new[] { trashPath }).ToList();
+        
+        foreach (var item in allItems) {
+            _iconPositions.Remove(item);
+            // Optionally delete from Registry too to make it "permanent"
+            string encodedPath = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(item));
+            string key = $"Desktop\\IconPositions\\{encodedPath}";
+            Registry.DeleteKey($"{key}\\X");
+            Registry.DeleteKey($"{key}\\Y");
+        }
+
         LoadDesktopIcons();
+        
+        // If grid is on, ensure they are perfectly aligned
+        if (_alignToGrid) {
+            ArrangeIconsToGrid();
+        } else {
+            // Even if grid is off, save the current positions from the sort
+            foreach (var child in _desktopLayer.Children.OfType<DesktopIcon>()) {
+                if (!string.IsNullOrEmpty(child.VirtualPath)) {
+                    SaveIconPosition(child.VirtualPath, child.Position);
+                }
+            }
+        }
+
         Shell.RefreshExplorers(); // Refresh explorers too for consistent view
+    }
+    
+    private Vector2 SnapToGrid(Vector2 position) {
+        int gridX = DesktopPadding + (int)Math.Round((position.X - DesktopPadding) / GridCellWidth) * GridCellWidth;
+        int gridY = DesktopPadding + (int)Math.Round((position.Y - DesktopPadding) / GridCellHeight) * GridCellHeight;
+        return new Vector2(gridX, gridY);
+    }
+    
+    private void ArrangeIconsToGrid() {
+        var icons = _desktopLayer.Children.OfType<DesktopIcon>().Where(i => !string.IsNullOrEmpty(i.VirtualPath)).ToList();
+        
+        // Sort icons by current position (top-left to bottom-right)
+        icons = icons.OrderBy(i => i.Position.Y).ThenBy(i => i.Position.X).ToList();
+        
+        // Track occupied grid cells
+        HashSet<(int, int)> occupiedCells = new HashSet<(int, int)>();
+        
+        foreach (var icon in icons) {
+            // Find nearest available grid cell
+            Vector2 snapped = SnapToGrid(icon.Position);
+            int startX = (int)((snapped.X - DesktopPadding) / GridCellWidth);
+            int startY = (int)((snapped.Y - DesktopPadding) / GridCellHeight);
+            
+            (int x, int y) = FindNearestAvailableCell(startX, startY, occupiedCells);
+            
+            // Move icon to grid position
+            Vector2 newPos = new Vector2(x * GridCellWidth + DesktopPadding, y * GridCellHeight + DesktopPadding);
+            icon.Position = newPos;
+            _iconPositions[icon.VirtualPath] = newPos;
+            SaveIconPosition(icon.VirtualPath, newPos);
+            
+            // Mark cell as occupied
+            occupiedCells.Add((x, y));
+        }
+    }
+
+    private HashSet<(int, int)> GetOccupiedCells(DesktopIcon excluding = null) {
+        HashSet<(int, int)> occupied = new HashSet<(int, int)>();
+        foreach (var child in _desktopLayer.Children) {
+            if (child is DesktopIcon di && !string.IsNullOrEmpty(di.VirtualPath)) {
+                // If it's the one we're moving, or part of the selection, don't count it as "occupying" its current spot
+                // because we're about to move it.
+                if (di == excluding || (excluding != null && excluding.IsSelected && di.IsSelected)) continue;
+                
+                Vector2 snapped = SnapToGrid(di.Position);
+                int gridX = (int)((snapped.X - DesktopPadding) / GridCellWidth);
+                int gridY = (int)((snapped.Y - DesktopPadding) / GridCellHeight);
+                occupied.Add((gridX, gridY));
+            }
+        }
+        return occupied;
+    }
+    
+    private (int x, int y) FindNearestAvailableCell(int startX, int startY, HashSet<(int, int)> occupiedCells) {
+        // Check starting position first
+        if (!occupiedCells.Contains((startX, startY))) {
+            return (startX, startY);
+        }
+        
+        // Expand in spiral pattern to find nearest available cell
+        for (int radius = 1; radius < 50; radius++) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                for (int dy = -radius; dy <= radius; dy++) {
+                    if (Math.Abs(dx) == radius || Math.Abs(dy) == radius) {
+                        int testX = startX + dx;
+                        int testY = startY + dy;
+                        
+                        if (testX >= 0 && testY >= 0 && !occupiedCells.Contains((testX, testY))) {
+                            return (testX, testY);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Fallback (should never reach here)
+        return (startX, startY);
+    }
+    
+    private void SaveIconPosition(string virtualPath, Vector2 position) {
+        try {
+            // Use Base64 encoding to avoid Registry key issues with special characters
+            string encodedPath = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(virtualPath));
+            string key = $"Desktop\\IconPositions\\{encodedPath}";
+            Registry.SetValue($"{key}\\X", position.X);
+            Registry.SetValue($"{key}\\Y", position.Y);
+        } catch { }
+    }
+    
+    private Vector2? LoadIconPosition(string virtualPath) {
+        try {
+            string encodedPath = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(virtualPath));
+            string key = $"Desktop\\IconPositions\\{encodedPath}";
+            
+            if (Registry.KeyExists($"{key}\\X") && Registry.KeyExists($"{key}\\Y")) {
+                float x = Registry.GetValue<float>($"{key}\\X", 0f);
+                float y = Registry.GetValue<float>($"{key}\\Y", 0f);
+                return new Vector2(x, y);
+            }
+        } catch { }
+        
+        return null;
     }
 
     private void LoadWallpaper() {
@@ -598,7 +747,8 @@ public class DesktopScene : Core.Scenes.Scene {
 
             if (!alreadyConsumed && isHovered && InputManager.IsMouseButtonJustPressed(MouseButton.Right)) {
                 if (ContextMenu != null) {
-                    ContextMenu.Show(InputManager.MousePosition.ToVector2(), new List<MenuItem> {
+                    Vector2 clickPos = InputManager.MousePosition.ToVector2();
+                    ContextMenu.Show(clickPos, new List<MenuItem> {
                         new MenuItem { Text = "Refresh", Action = RefreshAction },
                         new MenuItem {
                             Text = "Sort by",
@@ -609,25 +759,68 @@ public class DesktopScene : Core.Scenes.Scene {
                             }
                         },
                         new MenuItem {
-                            Text = "New Folder", Action = () => {
-                                try {
-                                    string desktopPath = "C:\\Users\\Admin\\Desktop\\";
-                                    string path = System.IO.Path.Combine(desktopPath, "New Folder");
-                                    int i = 1;
-                                    while (VirtualFileSystem.Instance.Exists(path)) path = System.IO.Path.Combine(desktopPath, $"New Folder ({i++})");
-                                    VirtualFileSystem.Instance.CreateDirectory(path);
-                                    RefreshAction?.Invoke();
-                                } catch { }
+                            Text = "New",
+                            SubItems = new List<MenuItem> {
+                                new MenuItem {
+                                    Text = "Folder", Action = () => {
+                                        try {
+                                            string desktopPath = "C:\\Users\\Admin\\Desktop\\";
+                                            string path = System.IO.Path.Combine(desktopPath, "New Folder");
+                                            int i = 1;
+                                            while (VirtualFileSystem.Instance.Exists(path)) path = System.IO.Path.Combine(desktopPath, $"New Folder ({i++})");
+                                            
+                                            // Find best position
+                                            Vector2 pos = clickPos;
+                                            if (_scene._alignToGrid) {
+                                                Vector2 snapped = _scene.SnapToGrid(clickPos);
+                                                var occupied = _scene.GetOccupiedCells();
+                                                var nearest = _scene.FindNearestAvailableCell((int)((snapped.X - DesktopPadding) / GridCellWidth), (int)((snapped.Y - DesktopPadding) / GridCellHeight), occupied);
+                                                pos = new Vector2(nearest.x * GridCellWidth + DesktopPadding, nearest.y * GridCellHeight + DesktopPadding);
+                                            }
+                                            
+                                            VirtualFileSystem.Instance.CreateDirectory(path);
+                                            _scene._iconPositions[path] = pos;
+                                            _scene.SaveIconPosition(path, pos);
+                                            RefreshAction?.Invoke();
+                                        } catch { }
+                                    }
+                                },
+                                new MenuItem {
+                                    Text = "Text Document", Action = () => {
+                                        try {
+                                            string desktopPath = "C:\\Users\\Admin\\Desktop\\";
+                                            string path = System.IO.Path.Combine(desktopPath, "New Text Document.txt");
+                                            int i = 1;
+                                            while (VirtualFileSystem.Instance.Exists(path)) path = System.IO.Path.Combine(desktopPath, $"New Text Document ({i++}).txt");
+                                            
+                                            // Find best position
+                                            Vector2 pos = clickPos;
+                                            if (_scene._alignToGrid) {
+                                                Vector2 snapped = _scene.SnapToGrid(clickPos);
+                                                var occupied = _scene.GetOccupiedCells();
+                                                var nearest = _scene.FindNearestAvailableCell((int)((snapped.X - DesktopPadding) / GridCellWidth), (int)((snapped.Y - DesktopPadding) / GridCellHeight), occupied);
+                                                pos = new Vector2(nearest.x * GridCellWidth + DesktopPadding, nearest.y * GridCellHeight + DesktopPadding);
+                                            }
+                                            
+                                            VirtualFileSystem.Instance.WriteAllText(path, "");
+                                            _scene._iconPositions[path] = pos;
+                                            _scene.SaveIconPosition(path, pos);
+                                            RefreshAction?.Invoke();
+                                        } catch { }
+                                    }
+                                }
                             }
                         },
                         new MenuItem {
-                            Text = "New Text File", Action = () => {
-                                string desktopPath = "C:\\Users\\Admin\\Desktop\\";
-                                string path = System.IO.Path.Combine(desktopPath, "New Text Document.txt");
-                                int i = 1;
-                                while (VirtualFileSystem.Instance.Exists(path)) path = System.IO.Path.Combine(desktopPath, $"New Text Document ({i++}).txt");
-                                VirtualFileSystem.Instance.WriteAllText(path, "");
-                                RefreshAction?.Invoke();
+                            Text = _scene._alignToGrid ? "✓ Align Icons to Grid" : "Align Icons to Grid",
+                            Action = () => {
+                                _scene._alignToGrid = !_scene._alignToGrid;
+                                Registry.SetValue("Desktop\\AlignToGrid", _scene._alignToGrid);
+                                
+                                // If turning on, arrange icons to grid
+                                if (_scene._alignToGrid) {
+                                    _scene.ArrangeIconsToGrid();
+                                }
                             }
                         }
                     });
@@ -672,15 +865,34 @@ public class DesktopScene : Core.Scenes.Scene {
             
             if (item is string itemPath) {
                 string newPath = MoveToDesktop(itemPath, desktopPath);
-                if (!string.IsNullOrEmpty(newPath)) _scene._iconPositions[newPath] = dropPos;
+                if (!string.IsNullOrEmpty(newPath)) {
+                    Vector2 finalPos = dropPos;
+                    if (_scene._alignToGrid) {
+                        Vector2 snapped = _scene.SnapToGrid(dropPos);
+                        var occupied = _scene.GetOccupiedCells();
+                        var nearest = _scene.FindNearestAvailableCell((int)((snapped.X - DesktopPadding) / GridCellWidth), (int)((snapped.Y - DesktopPadding) / GridCellHeight), occupied);
+                        finalPos = new Vector2(nearest.x * GridCellWidth + DesktopPadding, nearest.y * GridCellHeight + DesktopPadding);
+                    }
+                    _scene._iconPositions[newPath] = finalPos;
+                    _scene.SaveIconPosition(newPath, finalPos);
+                }
                 changed = true;
             } else if (item is List<string> list) {
-                // Apply a small offset for each subsequent item to prevent stacking
-                for (int i = 0; i < list.Count; i++) {
-                    string newPath = MoveToDesktop(list[i], desktopPath);
+                var occupiedCells = _scene._alignToGrid ? _scene.GetOccupiedCells() : null;
+                foreach (string path in list) {
+                    string newPath = MoveToDesktop(path, desktopPath);
                     if (!string.IsNullOrEmpty(newPath)) {
-                        float offsetAmount = DesktopIcon.DefaultSize.X / 2.0f; // 40px for 80px icons
-                        _scene._iconPositions[newPath] = dropPos + new Vector2(i * offsetAmount, i * offsetAmount);
+                        Vector2 finalPos = dropPos;
+                        if (_scene._alignToGrid) {
+                            Vector2 snapped = _scene.SnapToGrid(dropPos);
+                            var nearest = _scene.FindNearestAvailableCell((int)((snapped.X - DesktopPadding) / GridCellWidth), (int)((snapped.Y - DesktopPadding) / GridCellHeight), occupiedCells);
+                            finalPos = new Vector2(nearest.x * GridCellWidth + DesktopPadding, nearest.y * GridCellHeight + DesktopPadding);
+                            occupiedCells.Add((nearest.x, nearest.y));
+                        }
+                        _scene._iconPositions[newPath] = finalPos;
+                        _scene.SaveIconPosition(newPath, finalPos);
+                        
+                        if (!_scene._alignToGrid) dropPos += new Vector2(20, 20);
                     }
                 }
                 changed = true;
