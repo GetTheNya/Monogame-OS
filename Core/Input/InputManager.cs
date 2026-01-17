@@ -36,8 +36,10 @@ public static class InputManager {
     public static int ScrollDelta => _currentMouse.ScrollWheelValue - _previousMouse.ScrollWheelValue;
 
     private static double _lastLeftClickTime;
+    private static double _lastRightClickTime;
     private const double DoubleClickThreshold = 0.3; // 300ms
     private static bool _isDoubleClickFrame; // Only true for one frame
+    private static bool _isRightDoubleClickFrame;
 
     private static Dictionary<Keys, float> _keyRepeatTimers = new();
     private static float _initialRepeatDelay = 0.5f;
@@ -57,6 +59,7 @@ public static class InputManager {
         IsKeyboardConsumed = false;
         IsScrollConsumed = false;
         _isDoubleClickFrame = false;
+        _isRightDoubleClickFrame = false;
 
         float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
         
@@ -90,6 +93,20 @@ public static class InputManager {
                  _lastLeftClickTime = now;
             }
         }
+        
+        // Detect Right Click
+        if (GetButtonState(_currentMouse, MouseButton.Right) == ButtonState.Pressed &&
+            GetButtonState(_previousMouse, MouseButton.Right) == ButtonState.Released) {
+                
+            double now = gameTime.TotalGameTime.TotalSeconds;
+            if (now - _lastRightClickTime < DoubleClickThreshold) {
+                _isRightDoubleClickFrame = true;
+                _lastRightClickTime = 0;
+            } else {
+                 _isRightDoubleClickFrame = false; 
+                 _lastRightClickTime = now;
+            }
+        }
     }
 
     public static bool IsKeyRepeated(Keys key) {
@@ -107,8 +124,11 @@ public static class InputManager {
 
     public static bool IsDoubleClick(MouseButton button, bool ignoreConsumed = false) {
         if (!ignoreConsumed && IsMouseConsumed) return false;
-        if (button == MouseButton.Left) return _isDoubleClickFrame;
-        return false; // Only implementing Left for now
+        return button switch {
+            MouseButton.Left => _isDoubleClickFrame,
+            MouseButton.Right => _isRightDoubleClickFrame,
+            _ => false
+        };
     }
 
     // --- Mouse ---
