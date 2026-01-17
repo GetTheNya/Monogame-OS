@@ -136,7 +136,7 @@ public class ProcessManager {
     /// </summary>
     public void LoadStartupApps() {
         try {
-            var startupApps = Registry.GetAllValues<bool>("Startup");
+            var startupApps = Registry.GetAllValues<bool>(Shell.Registry.Startup);
             foreach (var kvp in startupApps) {
                 if (kvp.Value) {
                     DebugLogger.Log($"Starting startup app: {kvp.Key}");

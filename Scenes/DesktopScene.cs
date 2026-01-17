@@ -52,7 +52,7 @@ public class DesktopScene : Core.Scenes.Scene {
         _uiManager = new UIManager();
         
         // Load grid alignment setting from Registry
-        _alignToGrid = Registry.GetValue("Desktop\\AlignToGrid", true);
+        _alignToGrid = Registry.GetValue($"{Shell.Registry.Desktop}\\AlignToGrid", true);
 
         var viewport = G.GraphicsDevice.Viewport;
         var screenWidth = viewport.Width;
@@ -472,7 +472,7 @@ public class DesktopScene : Core.Scenes.Scene {
             _iconPositions.Remove(item);
             // Optionally delete from Registry too to make it "permanent"
             string encodedPath = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(item));
-            string key = $"Desktop\\IconPositions\\{encodedPath}";
+            string key = $"{Shell.Registry.Desktop}\\IconPositions\\{encodedPath}";
             Registry.DeleteKey($"{key}\\X");
             Registry.DeleteKey($"{key}\\Y");
         }
@@ -575,7 +575,7 @@ public class DesktopScene : Core.Scenes.Scene {
         try {
             // Use Base64 encoding to avoid Registry key issues with special characters
             string encodedPath = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(virtualPath));
-            string key = $"Desktop\\IconPositions\\{encodedPath}";
+            string key = $"{Shell.Registry.Desktop}\\IconPositions\\{encodedPath}";
             Registry.SetValue($"{key}\\X", position.X);
             Registry.SetValue($"{key}\\Y", position.Y);
         } catch { }
@@ -584,7 +584,7 @@ public class DesktopScene : Core.Scenes.Scene {
     private Vector2? LoadIconPosition(string virtualPath) {
         try {
             string encodedPath = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(virtualPath));
-            string key = $"Desktop\\IconPositions\\{encodedPath}";
+            string key = $"{Shell.Registry.Desktop}\\IconPositions\\{encodedPath}";
             
             if (Registry.KeyExists($"{key}\\X") && Registry.KeyExists($"{key}\\Y")) {
                 float x = Registry.GetValue<float>($"{key}\\X", 0f);
@@ -794,7 +794,7 @@ public class DesktopScene : Core.Scenes.Scene {
                             Text = _scene._alignToGrid ? "✓ Align Icons to Grid" : "Align Icons to Grid",
                             Action = () => {
                                 _scene._alignToGrid = !_scene._alignToGrid;
-                                Registry.SetValue("Desktop\\AlignToGrid", _scene._alignToGrid);
+                                Registry.SetValue($"{Shell.Registry.Desktop}\\AlignToGrid", _scene._alignToGrid);
                                 
                                 // If turning on, arrange icons to grid
                                 if (_scene._alignToGrid) {

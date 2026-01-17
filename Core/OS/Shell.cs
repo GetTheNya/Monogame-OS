@@ -89,6 +89,43 @@ public static class Shell {
             }
         }
     }
+    
+    /// <summary>
+    /// Registry path constants for common system locations.
+    /// </summary>
+    public static class Registry {
+        public const string HKLM = "HKLM";
+        public const string HKCU = "HKCU";
+        
+        /// <summary>Path for file type associations: HKLM\Software\FileAssociations</summary>
+        public const string FileAssociations = "HKLM\\Software\\FileAssociations";
+        
+        /// <summary>Path for startup apps: HKLM\Software\Startup</summary>
+        public const string Startup = "HKLM\\Software\\Startup";
+        
+        /// <summary>Path for desktop settings: HKCU\Desktop</summary>
+        public const string Desktop = "HKCU\\Desktop";
+        
+        /// <summary>Path for per-app settings: HKCU\Software\{AppId}</summary>
+        public static string AppSettings(string appId) => $"HKCU\\Software\\{appId}";
+
+        internal static void Initialize() { }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static T GetSetting<T>(string key, T defaultValue = default, string appIdOverride = null) {
+            string appId = appIdOverride ?? AppLoader.Instance.GetAppIdFromAssembly(Assembly.GetCallingAssembly());
+            if (appId == null) return defaultValue;
+            return OS.Registry.GetValue($"HKCU\\Software\\{appId}\\{key}", defaultValue);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void SetSetting<T>(string key, T value, string appIdOverride = null) {
+            string appId = appIdOverride ?? AppLoader.Instance.GetAppIdFromAssembly(Assembly.GetCallingAssembly());
+            if (appId == null) return;
+            OS.Registry.SetValue($"HKCU\\Software\\{appId}\\{key}", value);
+        }
+    }
+    
     public static Action<UIElement> OnAddOverlayElement;
     public static bool IsRenderingDrag = false;
 
@@ -302,14 +339,14 @@ public static class Shell {
             if (string.IsNullOrEmpty(extension) || string.IsNullOrEmpty(appId)) return;
             extension = extension.ToLower();
             if (!extension.StartsWith(".")) extension = "." + extension;
-            TheGame.Core.OS.Registry.SetValue($"FileAssociations\\{extension}", appId);
+            TheGame.Core.OS.Registry.SetValue($"{Shell.Registry.FileAssociations}\\{extension}", appId);
         }
 
         public static string GetFileTypeHandler(string extension) {
             if (string.IsNullOrEmpty(extension)) return null;
             extension = extension.ToLower();
             if (!extension.StartsWith(".")) extension = "." + extension;
-            return TheGame.Core.OS.Registry.GetValue<string>($"FileAssociations\\{extension}", null);
+            return TheGame.Core.OS.Registry.GetValue<string>($"{Shell.Registry.FileAssociations}\\{extension}", null);
         }
     }
 
@@ -535,24 +572,6 @@ public static class Shell {
 
             if (json == null) return new T();
             try { return JsonSerializer.Deserialize<T>(json) ?? new T(); } catch { return new T(); }
-        }
-    }
-
-    public static class Registry {
-        internal static void Initialize() { }
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static T GetSetting<T>(string key, T defaultValue = default, string appIdOverride = null) {
-            string appId = appIdOverride ?? AppLoader.Instance.GetAppIdFromAssembly(Assembly.GetCallingAssembly());
-            if (appId == null) return defaultValue;
-            return OS.Registry.GetValue($"HKCU\\Software\\{appId}\\{key}", defaultValue);
-        }
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void SetSetting<T>(string key, T value, string appIdOverride = null) {
-            string appId = appIdOverride ?? AppLoader.Instance.GetAppIdFromAssembly(Assembly.GetCallingAssembly());
-            if (appId == null) return;
-            OS.Registry.SetValue($"HKCU\\Software\\{appId}\\{key}", value);
         }
     }
 

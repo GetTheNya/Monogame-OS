@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -10,6 +11,9 @@ public static class Registry {
     private const string REGISTRY_PATH = "C:\\Windows\\System32\\config\\registry.json";
     private static JsonObject _cachedRoot;
     private static bool _isDirty;
+    
+    // Valid hive roots
+    private static readonly string[] ValidHives = { "HKLM", "HKCU" };
     
     // Debounce timer - only save after delay to avoid disk thrashing
     private static float _saveTimer = 0f;
@@ -107,6 +111,27 @@ public static class Registry {
         return current;
     }
     
+    /// <summary>
+    /// Validates that a path starts with a valid hive. Logs warning if not.
+    /// </summary>
+    private static bool ValidateHive(string path) {
+        if (string.IsNullOrEmpty(path)) return false;
+        
+        string normalizedPath = path.Replace('/', '\\');
+        string firstPart = normalizedPath.Split('\\', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        
+        if (firstPart == null) return false;
+        
+        foreach (var hive in ValidHives) {
+            if (firstPart.Equals(hive, StringComparison.OrdinalIgnoreCase)) {
+                return true;
+            }
+        }
+        
+        DebugLogger.Log($"[Registry] WARNING: Path '{path}' doesn't start with a valid hive (HKLM/HKCU). This write will be blocked.");
+        return false;
+    }
+    
     // Splits "path\key" into "path" and "key"
     private static void SplitPathAndKey(string fullPath, out string parentPath, out string keyName) {
         fullPath = fullPath.Replace('/', '\\');
@@ -123,6 +148,8 @@ public static class Registry {
     }
 
     public static void SetValue<T>(string fullPath, T value) {
+        if (!ValidateHive(fullPath)) return; // Block root-level writes
+        
         EnsureLoaded();
         SplitPathAndKey(fullPath, out string parentPath, out string keyName);
         
@@ -184,6 +211,8 @@ public static class Registry {
     }
     
     public static void DeleteKey(string fullPath) {
+        if (!ValidateHive(fullPath)) return; // Block root-level deletes
+        
         EnsureLoaded();
         SplitPathAndKey(fullPath, out string parentPath, out string keyName);
         
