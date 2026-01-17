@@ -115,8 +115,11 @@ public class ProcessManager {
                 } else {
                     process.UpdateAccumulator += gameTime.ElapsedGameTime.TotalSeconds;
                     if (process.UpdateAccumulator >= process.UpdateInterval) {
+                        // Create a virtual GameTime that accounts for all time passed since last update
+                        // This fixed the bug where throttled processes received only a single frame's time
+                        var virtualGameTime = new GameTime(gameTime.TotalGameTime, TimeSpan.FromSeconds(process.UpdateAccumulator));
                         process.UpdateAccumulator = 0;
-                        process.OnUpdate(gameTime);
+                        process.OnUpdate(virtualGameTime);
                     }
                 }
             }
