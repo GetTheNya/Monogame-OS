@@ -5,7 +5,10 @@ using TheGame.Graphics;
 using TheGame.Core.Animation;
 using Microsoft.Xna.Framework.Graphics;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using TheGame.Core.UI.Controls;
+using TheGame.Core.OS;
 
 namespace TheGame.Core.UI;
 
@@ -50,6 +53,11 @@ public class Window : UIElement {
     private Vector2 _renderSnapSize;
     private float _snapPreviewOpacity;
     private bool _obscuredByAnotherWindow;
+    
+    // Title bar blink animation
+    private bool _isBlinking;
+    private double _blinkTimer;
+    private const double BlinkDuration = 0.6; // Total blink duration in seconds
 
     public string Title { get; set; } = "Window";
     public Texture2D Icon { get; set; }
@@ -58,6 +66,18 @@ public class Window : UIElement {
     public bool ShowTitleBar { get; set; } = true;
     public Color BackgroundColor { get; set; } = new Color(30, 30, 30, 240); // Dark semi-transparent
     public Color BorderColor { get; set; } = Color.White;
+
+    // Process ownership
+    public Process OwnerProcess { get; internal set; }
+    
+    // Modal support
+    public Window ParentWindow { get; set; }
+    public List<Window> ChildWindows { get; } = new();
+    public bool IsModal { get; set; }
+    public bool IsBlocked => ChildWindows.Any(c => c.IsModal && c.IsVisible);
+    
+    // Taskbar control
+    public bool ShowInTaskbar { get; set; } = true;
 
     // Animation Properties
 
@@ -74,6 +94,14 @@ public class Window : UIElement {
         Tweener.To(this, p => Position = p, Position, targetPos, 0.4f, Easing.EaseOutQuad);
         Tweener.To(this, s => Size = s, Size, targetSize, 0.4f, Easing.EaseOutQuad);
         Tweener.To(this, o => Opacity = o, 0f, 1f, 0.2f, Easing.Linear);
+    }
+    
+    /// <summary>
+    /// Triggers a title bar blink animation (used when clicking a blocked window).
+    /// </summary>
+    public void BlinkTitleBar() {
+        _isBlinking = true;
+        _blinkTimer = 0;
     }
 
     private ShapeBatch _contentBatch;
@@ -122,6 +150,36 @@ public class Window : UIElement {
 
     public override void Update(GameTime gameTime) {
         _obscuredByAnotherWindow = InputManager.IsMouseConsumed;
+        
+        // Block ALL updates (including child controls) if a modal dialog is active
+        if (IsBlocked) {
+            // Check if user clicked on THIS blocked window (not on the modal itself)
+            // Use normal hover check (respects consumed) so it doesn't trigger when modal is on top
+            bool isHoveringThisWindow = InputManager.IsMouseHovering(Bounds) && !_obscuredByAnotherWindow;
+            bool isJustPressed = isHoveringThisWindow && InputManager.IsMouseButtonJustPressed(MouseButton.Left);
+            
+            if (isJustPressed) {
+                // Find the modal child and bring it to focus with a blink
+                var modalChild = ChildWindows.FirstOrDefault(c => c.IsModal && c.IsVisible);
+                if (modalChild != null) {
+                    ActiveWindow = modalChild;
+                    modalChild.Parent?.BringToFront(modalChild);
+                    // Trigger title bar blink animation
+                    modalChild.BlinkTitleBar();
+                }
+                InputManager.IsMouseConsumed = true;
+            }
+            return; // Don't update children or window input
+        }
+        
+        // Update title bar blink animation
+        if (_isBlinking) {
+            _blinkTimer += gameTime.ElapsedGameTime.TotalSeconds;
+            if (_blinkTimer >= BlinkDuration) {
+                _isBlinking = false;
+                _blinkTimer = 0;
+            }
+        }
         
         // CRITICAL: Check for resize/drag BEFORE children update
         // This prevents clicking on resize edges from triggering controls underneath
@@ -265,13 +323,28 @@ public class Window : UIElement {
     }
 
     public void Close() {
+        // Close child modal windows first
+        foreach (var child in ChildWindows.ToList()) {
+            child.Close();
+        }
+        ChildWindows.Clear();
+        
+        // Remove from parent's child list if this is a modal
+        if (ParentWindow != null) {
+            ParentWindow.ChildWindows.Remove(this);
+            ParentWindow = null;
+        }
+        
         if (ActiveWindow == this) {
             FindAndFocusNextWindow();
         }
 
         Tweener.CancelAll(this);
         // Fade out then remove
-        Tweener.To(this, v => Opacity = v, Opacity, 0f, 0.15f, Easing.Linear).OnComplete = () => { Parent?.RemoveChild(this); };
+        Tweener.To(this, v => Opacity = v, Opacity, 0f, 0.15f, Easing.Linear).OnComplete = () => {
+            Parent?.RemoveChild(this);
+            OwnerProcess?.OnWindowClosed(this);
+        };
     }
 
     public void ToggleMaximize(Rectangle workArea) {
@@ -314,6 +387,12 @@ public class Window : UIElement {
         }
 
         if (!IsVisible) return;
+        
+        // Block input if a child modal dialog is active
+        if (IsBlocked) {
+            // Still allow the window to be seen, but don't process any input
+            return;
+        }
         
         // If another window or overlay already took the mouse, we don't react at all
         // (unless we are already in the middle of a drag/resize operation)
@@ -619,7 +698,19 @@ public class Window : UIElement {
         var border = BorderColor * AbsoluteOpacity;
 
         // Title Bar
-        Color titleBarColor = ((ActiveWindow == this) ? new Color(60, 60, 60) : new Color(40, 40, 40)) * 0.8f;
+        Color baseTitleBarColor = ((ActiveWindow == this) ? new Color(60, 60, 60) : new Color(40, 40, 40));
+        
+        // Add blink effect if blinking
+        if (_isBlinking) {
+            // Oscillate between 0 and 1 over the blink duration
+            float blinkPhase = (float)(_blinkTimer / BlinkDuration);
+            // Use sine wave for smooth oscillation (3 full cycles)
+            float intensity = (float)Math.Abs(Math.Sin(blinkPhase * Math.PI * 6));
+            // Brighten the title bar
+            baseTitleBarColor = Color.Lerp(baseTitleBarColor, new Color(120, 120, 140), intensity * 0.6f);
+        }
+        
+        Color titleBarColor = baseTitleBarColor * 0.8f;
         batch.DrawBlurredRectangle(
             absPos,
             new Vector2(Size.X, TitleBarHeight),

@@ -206,9 +206,9 @@ public class Taskbar : Panel {
 
         var currentWindows = _windowLayer.Children;
 
-        // 1. Handle New Windows (Incremental Add)
+        // 1. Handle New Windows (Incremental Add) - only those with ShowInTaskbar = true
         foreach (var child in currentWindows) {
-            if (child is Window win && !_trackedWindows.Contains(win)) {
+            if (child is Window win && win.ShowInTaskbar && !_trackedWindows.Contains(win)) {
                 _trackedWindows.Add(win);
                 
                 float maxAllowed = GetMaxAllowedWidth();
@@ -228,10 +228,11 @@ public class Taskbar : Panel {
             }
         }
 
-        // 2. Handle Closed Windows (Incremental Remove with Animation)
+        // 2. Handle Closed Windows or windows that disabled ShowInTaskbar (Incremental Remove with Animation)
         for (int i = _trackedWindows.Count - 1; i >= 0; i--) {
             var trackedWin = _trackedWindows[i];
-            if (!currentWindows.Contains(trackedWin)) {
+            bool shouldRemove = !currentWindows.Contains(trackedWin) || !trackedWin.ShowInTaskbar;
+            if (shouldRemove) {
                 _trackedWindows.RemoveAt(i);
                 _cachedButtonWidths.Remove(trackedWin);
                 

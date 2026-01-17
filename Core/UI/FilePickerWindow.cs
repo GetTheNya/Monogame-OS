@@ -50,6 +50,10 @@ public class FilePickerWindow : Window {
             _currentPath = "C:\\";
         }
 
+        // Modal behavior
+        IsModal = true;           // Block input to parent
+        ShowInTaskbar = false;    // Don't show in taskbar
+
         // Center on screen
         var viewport = G.GraphicsDevice.Viewport;
         Vector2 targetPos = new Vector2(viewport.Width / 2 - Size.X / 2, viewport.Height / 2 - Size.Y / 2);

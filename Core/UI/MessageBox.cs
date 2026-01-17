@@ -35,6 +35,8 @@ public class MessageBox : Window {
         Position = new Vector2((viewport.Width - Size.X) / 2, (viewport.Height - Size.Y) / 2);
         
         CanResize = false;
+        IsModal = true;           // Block input to parent
+        ShowInTaskbar = false;    // Don't show modal dialogs in taskbar
         SetupUI();
 
         // Opening animation: Scale and Fade

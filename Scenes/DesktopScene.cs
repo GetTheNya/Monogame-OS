@@ -108,6 +108,9 @@ public class DesktopScene : Core.Scenes.Scene {
             new NotificationAction { Label = "Got it", OnClick = () => DebugLogger.Log("User acknowledged.") }
         });
 
+        // Load startup apps from Registry
+        ProcessManager.Instance.LoadStartupApps();
+
         string pcIconPath = VirtualFileSystem.Instance.ToHostPath("C:\\Windows\\SystemResources\\Icons\\PC.png");
         var pcIcon = System.IO.File.Exists(pcIconPath) ? Core.ImageLoader.Load(G.GraphicsDevice, pcIconPath) : GameContent.FileIcon;
 

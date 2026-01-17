@@ -1,13 +1,12 @@
 {
-  "appId": "SETTINGS",
-  "name": "Settings",
+  "appId": "PROCESSTEST",
+  "name": "Process Test",
   "icon": "icon.png",
   "version": "1.0.0",
   "author": "Unknown",
-  "description": "System settings",
-  "singleInstance": true,
+  "description": "Process Test",
   "entryPoint": "Program.cs",
-  "entryClass": "SettingsApp.SettingsWindow",
+  "entryClass": "ProcessTestApp.Program",
   "entryMethod": "CreateWindow",
   "permissions": [],
   "dependencies": []

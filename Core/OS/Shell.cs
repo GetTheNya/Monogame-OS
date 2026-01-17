@@ -25,6 +25,9 @@ public static class Shell {
     public static void DrawDrag(SpriteBatch sb, ShapeBatch sbatch) => DragDropManager.Instance.DrawDragVisual(sb, sbatch);
 
     public static void Update(GameTime gameTime) {
+        // Update all running processes
+        ProcessManager.Instance.Update(gameTime);
+        
         // Global watchdog: If mouse is released but drag is still active, it means the drop wasn't handled.
         // We use !IsMouseButtonDown instead of IsJustReleased to catch it even if consumed.
         if (DragDropManager.Instance.IsActive && !InputManager.IsMouseButtonDown(MouseButton.Left)) {
@@ -98,6 +101,66 @@ public static class Shell {
             => DragDropManager.Instance.SetDropPreviewPosition(id, position);
     }
 
+    /// <summary>
+    /// Process API for apps to interact with their own process.
+    /// </summary>
+    public static class Process {
+        /// <summary>
+        /// Gets the calling app's process (detected from the active window).
+        /// </summary>
+        public static OS.Process Current => Window.ActiveWindow?.OwnerProcess;
+        
+        /// <summary>
+        /// Gets the ProcessManager for advanced process control.
+        /// </summary>
+        public static ProcessManager Manager => ProcessManager.Instance;
+        
+        /// <summary>
+        /// Creates a new window of the specified type owned by the current process.
+        /// </summary>
+        public static T CreateWindow<T>() where T : Window, new() {
+            var process = Current;
+            if (process == null) {
+                DebugLogger.Log("Shell.Process.CreateWindow: No active process");
+                return null;
+            }
+            return process.CreateWindow<T>();
+        }
+        
+        /// <summary>
+        /// Shows a modal dialog that blocks input to the current window.
+        /// </summary>
+        public static void ShowModal(Window dialog) {
+            var process = Current;
+            if (process == null) {
+                UI.OpenWindow(dialog);
+                return;
+            }
+            // Use MainWindow as parent, not ActiveWindow, to avoid confusing behavior
+            // when secondary windows are active
+            process.ShowModal(dialog, process.MainWindow);
+        }
+        
+        /// <summary>
+        /// Closes all windows and enters background mode.
+        /// The process continues receiving OnUpdate calls.
+        /// </summary>
+        public static void GoToBackground() {
+            Current?.GoToBackground();
+        }
+        
+        /// <summary>
+        /// Terminates the current process.
+        /// </summary>
+        public static void Exit() {
+            Current?.Terminate();
+        }
+        
+        /// <summary>
+        /// Gets all running processes.
+        /// </summary>
+        public static IEnumerable<OS.Process> GetAll() => ProcessManager.Instance.GetAllProcesses();
+    }
 
 
     // Hot Reload Control
@@ -258,6 +321,38 @@ public static class Shell {
             if (string.IsNullOrEmpty(appId)) return null;
             string upperAppId = appId.ToUpper();
             DebugLogger.Log($"CreateAppWindow: Looking for {appId} (uppercase: {upperAppId})");
+            
+            // Check for single instance mode - if app is already running, focus it instead
+            var existingProcess = ProcessManager.Instance.GetProcessesByApp(upperAppId)
+                .FirstOrDefault(p => p.State != ProcessState.Terminated);
+            if (existingProcess != null) {
+                // Check manifest for singleInstance flag
+                string appPath = AppLoader.Instance.GetAppDirectory(upperAppId);
+                if (!string.IsNullOrEmpty(appPath)) {
+                    string manifestPath = System.IO.Path.Combine(
+                        VirtualFileSystem.Instance.ToHostPath(appPath),
+                        "manifest.json"
+                    );
+                    if (System.IO.File.Exists(manifestPath)) {
+                        try {
+                            string json = System.IO.File.ReadAllText(manifestPath);
+                            var manifest = AppManifest.FromJson(json);
+                            if (manifest?.SingleInstance == true) {
+                                DebugLogger.Log($"  SingleInstance: Focusing existing window for {upperAppId}");
+                                if (existingProcess.MainWindow != null) {
+                                    existingProcess.MainWindow.Parent?.BringToFront(existingProcess.MainWindow);
+                                    if (!existingProcess.MainWindow.IsVisible) {
+                                        existingProcess.MainWindow.Restore();
+                                    }
+                                    Window.ActiveWindow = existingProcess.MainWindow;
+                                }
+                                return null; // Don't create new window
+                            }
+                        } catch { }
+                    }
+                }
+            }
+            
             DebugLogger.Log($"  Registry has {_appRegistry.Count} apps: {string.Join(", ", _appRegistry.Keys)}");
             if (_appRegistry.TryGetValue(upperAppId, out var factory)) {
                 DebugLogger.Log($"  Found factory for {upperAppId}");
@@ -278,6 +373,19 @@ public static class Shell {
 
         public static void OpenWindow(Window win, Rectangle? startBounds = null) {
             if (WindowLayer != null) {
+                // For modal windows, automatically set up parent-child relationship
+                // ONLY if not already set (e.g. by Process.ShowModal)
+                if (win.IsModal && Window.ActiveWindow != null && win.ParentWindow == null) {
+                    win.ParentWindow = Window.ActiveWindow;
+                    Window.ActiveWindow.ChildWindows.Add(win);
+                    
+                    // Copy process ownership if not already set
+                    if (win.OwnerProcess == null && Window.ActiveWindow.OwnerProcess != null) {
+                        win.OwnerProcess = Window.ActiveWindow.OwnerProcess;
+                        Window.ActiveWindow.OwnerProcess.Windows.Add(win);
+                    }
+                }
+                
                 ApplyWindowLayout(win);
                 if (startBounds.HasValue) win.AnimateOpen(startBounds.Value);
 

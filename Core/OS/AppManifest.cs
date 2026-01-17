@@ -40,6 +40,9 @@ public class AppManifest {
     [JsonPropertyName("dependencies")]
     public string[] Dependencies { get; set; } = Array.Empty<string>();
 
+    [JsonPropertyName("singleInstance")]
+    public bool SingleInstance { get; set; } = false;
+
     public static AppManifest FromJson(string json) {
         return System.Text.Json.JsonSerializer.Deserialize<AppManifest>(json);
     }

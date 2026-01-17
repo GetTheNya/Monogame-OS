@@ -193,4 +193,28 @@ public static class Registry {
             MarkDirty();
         }
     }
+
+    /// <summary>
+    /// Gets all key-value pairs at a specific path.
+    /// </summary>
+    public static Dictionary<string, T> GetAllValues<T>(string path) {
+        EnsureLoaded();
+        var result = new Dictionary<string, T>();
+        
+        JsonObject container = NavigateToKey(path, false);
+        if (container == null) return result;
+        
+        foreach (var kvp in container) {
+            try {
+                if (kvp.Value != null) {
+                    T value = kvp.Value.Deserialize<T>();
+                    result[kvp.Key] = value;
+                }
+            } catch {
+                // Skip values that can't be deserialized
+            }
+        }
+        
+        return result;
+    }
 }

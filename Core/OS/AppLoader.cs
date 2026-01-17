@@ -16,7 +16,6 @@ public class AppLoader {
 
     private Dictionary<string, Assembly> _compiledApps = new Dictionary<string, Assembly>();
     private Dictionary<string, string> _appPaths = new Dictionary<string, string>();
-    private Dictionary<string, List<Window>> _runningInstances = new Dictionary<string, List<Window>>();
 
     private AppLoader() { }
 
@@ -136,11 +135,18 @@ public class AppLoader {
                 }
             }
             
+            // Handle Window-returning apps (legacy)
             if (result is Window window) {
                 window.AppId = manifest.AppId; // Set the AppId from manifest
                 
-                // Track running instance
-                TrackWindowInstance(manifest.AppId, window);
+                // Create a Process to own this window
+                var windowProcess = new Process {
+                    AppId = manifest.AppId.ToUpper()
+                };
+                windowProcess.Windows.Add(window);
+                windowProcess.MainWindow = window;
+                window.OwnerProcess = windowProcess;
+                ProcessManager.Instance.RegisterProcess(windowProcess);
                 
                 // Try to load custom icon
                 string iconName = manifest.Icon ?? "icon.png";
@@ -153,11 +159,23 @@ public class AppLoader {
                     }
                 }
 
-                DebugLogger.Log($"AppLoader: Successfully created window for {manifest.AppId}");
+                DebugLogger.Log($"AppLoader: Successfully created window for {manifest.AppId} (Process: {windowProcess.ProcessId})");
                 return window;
             }
             
-            DebugLogger.Log($"AppLoader: Entry method did not return a Window (returned {result?.GetType().Name ?? "null"})");
+            // Handle Process-returning apps (true background processes)
+            if (result is Process process) {
+                process.AppId = manifest.AppId.ToUpper();
+                ProcessManager.Instance.RegisterProcess(process);
+                
+                // Start the process (calls OnStart)
+                process.OnStart(args);
+                
+                DebugLogger.Log($"AppLoader: Successfully started background process for {manifest.AppId} (Process: {process.ProcessId})");
+                return null; // Background processes don't return a window
+            }
+            
+            DebugLogger.Log($"AppLoader: Entry method did not return a Window or Process (returned {result?.GetType().Name ?? "null"})");
             return null;
 
         } catch (Exception ex) {
@@ -295,51 +313,24 @@ public class AppLoader {
     }
 
     /// <summary>
-    /// Track a window instance for an app.
-    /// </summary>
-    private void TrackWindowInstance(string appId, Window window) {
-        if (string.IsNullOrEmpty(appId) || window == null) return;
-        
-        string upperAppId = appId.ToUpper();
-        if (!_runningInstances.ContainsKey(upperAppId)) {
-            _runningInstances[upperAppId] = new List<Window>();
-        }
-        
-        _runningInstances[upperAppId].Add(window);
-    }
-
-
-    /// <summary>
-    /// Close all running instances of an app.
+    /// Close all running instances of an app (uses ProcessManager).
     /// </summary>
     private void CloseAllInstances(string appId) {
         if (string.IsNullOrEmpty(appId)) return;
         
-        string upperAppId = appId.ToUpper();
-        if (_runningInstances.TryGetValue(upperAppId, out var instances)) {
-            // Create a copy to avoid modification during iteration
-            var instancesCopy = new List<Window>(instances);
-            foreach (var window in instancesCopy) {
-                try {
-                    window.Close();
-                } catch (Exception ex) {
-                    DebugLogger.Log($"Error closing window during reload: {ex.Message}");
-                }
-            }
-            instances.Clear();
+        var processes = ProcessManager.Instance.GetProcessesByApp(appId);
+        foreach (var process in processes) {
+            process.Terminate();
         }
     }
 
     /// <summary>
-    /// Get all running instances of an app.
+    /// Get all running windows of an app (uses ProcessManager).
     /// </summary>
     public List<Window> GetRunningInstances(string appId) {
         if (string.IsNullOrEmpty(appId)) return new List<Window>();
         
-        string upperAppId = appId.ToUpper();
-        if (_runningInstances.TryGetValue(upperAppId, out var instances)) {
-            return new List<Window>(instances);
-        }
-        return new List<Window>();
+        var processes = ProcessManager.Instance.GetProcessesByApp(appId);
+        return processes.SelectMany(p => p.Windows).ToList();
     }
 }
