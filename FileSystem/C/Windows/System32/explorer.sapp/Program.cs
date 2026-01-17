@@ -469,11 +469,9 @@ public class FileListPanel : ScrollPanel {
             if (Vector2.Distance(_dragStartPos, mouse) > 6) {
                 var paths = _selectedPaths.Count > 0 ? _selectedPaths.ToList() : new List<string> { _dragSourcePath };
                 
-                // Calculate grab offset for the item we clicked on
-                Vector2 itemPos = Vector2.Zero;
-                var clickedItem = _items.FirstOrDefault(i => i.Path == _dragSourcePath);
-                if (clickedItem != null) itemPos = clickedItem.Position;
-                Vector2 grabOffset = _dragStartPos - (AbsolutePosition + itemPos);
+                // Use a fixed centered offset (24, 24) for the 48px ghost icon
+                // This prevents the huge offset when clicking the right side of long list items
+                Vector2 grabOffset = new Vector2(24, 24);
 
                 if (paths.Count > 1) Shell.BeginDrag(paths, _dragStartPos, grabOffset);
                 else Shell.BeginDrag(paths[0], _dragStartPos, grabOffset);

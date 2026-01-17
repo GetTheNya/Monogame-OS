@@ -48,9 +48,11 @@ public class DesktopIcon : UIElement {
     private bool _isRenaming = false;
     public Action OnRenamed;
 
+    public static readonly Vector2 DefaultSize = new Vector2(80, 90);
+
     public DesktopIcon(Vector2 position, string label, Texture2D icon = null) {
         Position = position;
-        Size = new Vector2(80, 90); // Default size for an icon
+        Size = DefaultSize;
         Label = label;
         Icon = icon;
     }
@@ -141,6 +143,12 @@ public class DesktopIcon : UIElement {
                         
                         if (selectedPaths.Count > 1) {
                              DragDropManager.Instance.BeginDrag(selectedPaths, Position, _dragOffset);
+                             // Pre-populate previews to prevent the "item count badge" flicker
+                             foreach (var child in Parent.Children) {
+                                 if (child is DesktopIcon di && di.IsSelected) {
+                                     Shell.Drag.SetDropPreview(di, di.Position);
+                                 }
+                             }
                         } else {
                              DragDropManager.Instance.BeginDrag(this, Position, _dragOffset);
                         }

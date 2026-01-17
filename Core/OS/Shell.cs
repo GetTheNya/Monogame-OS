@@ -24,6 +24,14 @@ public static class Shell {
     public static void AddOverlayElement(UIElement element) => OnAddOverlayElement?.Invoke(element);
     public static void DrawDrag(SpriteBatch sb, ShapeBatch sbatch) => DragDropManager.Instance.DrawDragVisual(sb, sbatch);
 
+    public static void Update(GameTime gameTime) {
+        // Global watchdog: If mouse is released but drag is still active, it means the drop wasn't handled.
+        // We use !IsMouseButtonDown instead of IsJustReleased to catch it even if consumed.
+        if (DragDropManager.Instance.IsActive && !InputManager.IsMouseButtonDown(MouseButton.Left)) {
+            DragDropManager.Instance.CancelDrag();
+        }
+    }
+
     // Drag and Drop API
     /// <summary>
     /// Checks if a drag operation is currently active.

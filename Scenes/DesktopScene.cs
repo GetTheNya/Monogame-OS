@@ -177,7 +177,6 @@ public class DesktopScene : Core.Scenes.Scene {
             }
 
             icon.VirtualPath = item;
-            icon.VirtualPath = item;
             icon.OnDragAction = (i, delta) =>  { 
                 // Accumulate delta for final position update
                 i.DragDelta += delta;
@@ -680,7 +679,8 @@ public class DesktopScene : Core.Scenes.Scene {
                 for (int i = 0; i < list.Count; i++) {
                     string newPath = MoveToDesktop(list[i], desktopPath);
                     if (!string.IsNullOrEmpty(newPath)) {
-                        _scene._iconPositions[newPath] = dropPos + new Vector2(i * 20, i * 20);
+                        float offsetAmount = DesktopIcon.DefaultSize.X / 2.0f; // 40px for 80px icons
+                        _scene._iconPositions[newPath] = dropPos + new Vector2(i * offsetAmount, i * offsetAmount);
                     }
                 }
                 changed = true;

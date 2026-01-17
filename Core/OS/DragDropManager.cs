@@ -22,8 +22,8 @@ public class DragDropManager {
     private bool _isActive;
     private Vector2 _dragGrabOffset;
     
-    // Cached icon and label to avoid per-frame lookups
-    private Texture2D _cachedDragIcon;
+    // Cached icons and label to avoid per-frame lookups
+    private List<Texture2D> _cachedDragIcons = new();
     private string _cachedDragLabel;
     
     // Visual customization
@@ -59,18 +59,21 @@ public class DragDropManager {
         _dragOriginalPositions.Clear();
         _dropPreviews.Clear();
         
-        // Cache icon and label at drag start - NOT in DrawDragVisual()
-        _cachedDragIcon = null;
+        // Cache icons and label at drag start - NOT in DrawDragVisual()
+        _cachedDragIcons.Clear();
         _cachedDragLabel = null;
         
         if (data is string path) {
-            _cachedDragIcon = Shell.GetIcon(path);
+            _cachedDragIcons.Add(Shell.GetIcon(path));
             _cachedDragLabel = System.IO.Path.GetFileName(path);
         } else if (data is List<string> list && list.Count > 0) {
-            _cachedDragIcon = Shell.GetIcon(list[0]);
+            // Cache up to 3 icons for the visual stack
+            for (int i = 0; i < Math.Min(3, list.Count); i++) {
+                _cachedDragIcons.Add(Shell.GetIcon(list[i]));
+            }
             _cachedDragLabel = ""; // Don't show "X items" label since we have the badge
         } else if (data is DesktopIcon dIcon) {
-            _cachedDragIcon = dIcon.Icon;
+            _cachedDragIcons.Add(dIcon.Icon);
             _cachedDragLabel = dIcon.Label;
         }
     }
@@ -112,6 +115,7 @@ public class DragDropManager {
         _dragData = null;
         _isActive = false;
         _dragOriginalPositions.Clear();
+        _dropPreviews.Clear();
     }
 
     /// <summary>
@@ -156,21 +160,21 @@ public class DragDropManager {
     /// Should be called during the main draw loop.
     /// </summary>
     public void DrawDragVisual(SpriteBatch sb, ShapeBatch sbatch) {
-        if (!_isActive || _dragData == null || _cachedDragIcon == null) return;
+        if (!_isActive || _dragData == null || _cachedDragIcons.Count == 0 || _cachedDragIcons[0] == null) return;
 
         Shell.IsRenderingDrag = true;
         try {
             // Draw drop previews at target positions
             foreach (var kvp in _dropPreviews) {
                 // Determine icon based on data type (path or DesktopIcon)
-                Texture2D previewIcon = _cachedDragIcon;
+                Texture2D previewIcon = _cachedDragIcons[0];
                 string label = _cachedDragLabel;
                 
                 if (kvp.Key is string path) {
-                    previewIcon = Shell.GetIcon(path) ?? _cachedDragIcon;
+                    previewIcon = Shell.GetIcon(path) ?? _cachedDragIcons[0];
                     label = System.IO.Path.GetFileName(path.TrimEnd('\\'));
                 } else if (kvp.Key is DesktopIcon di) {
-                    previewIcon = di.Icon ?? _cachedDragIcon;
+                    previewIcon = di.Icon ?? _cachedDragIcons[0];
                     label = di.Label;
                 }
 
@@ -181,7 +185,8 @@ public class DragDropManager {
                 bool isLeader = IsLeader(kvp.Key);
 
                 // Draw the ghost with label matching DesktopIcon style
-                DrawDragIcon(sb, sbatch, kvp.Value, previewScale, isLeader ? _dragOpacity : _dragOpacity * 0.4f, false, showLabel: true, iconOverride: previewIcon, labelOverride: label);
+                // Use uniform opacity for all icons in the group
+                DrawDragIcon(sb, sbatch, kvp.Value, _dragOpacity, false, showLabel: true, iconOverride: previewIcon, labelOverride: label);
             }
 
             // Only draw the cursor ghost if no leader was drawn as a preview
@@ -198,9 +203,13 @@ public class DragDropManager {
                 // Calculate current mouse position for drawing
                 Vector2 drawPos = InputManager.MousePosition.ToVector2() - _dragGrabOffset;
                 float iconSize = 48f;
-                float scale = iconSize / (float)_cachedDragIcon.Width;
+                float scale = iconSize / (float)_cachedDragIcons[0].Width;
                 bool isMultiItem = _dragData is List<string>;
-                DrawDragIcon(sb, sbatch, drawPos, scale, _dragOpacity, isMultiItem, showLabel: true);
+                
+                // Only show badge (item count) if we AREN'T currently showing drop previews (ghosts)
+                // This prevents the flickering "count circle" distraction on the desktop
+                bool showBadge = _dropPreviews.Count == 0;
+                DrawDragIcon(sb, sbatch, drawPos, _dragOpacity, isMultiItem, showLabel: showBadge);
             }
 
         } finally {
@@ -208,21 +217,28 @@ public class DragDropManager {
         }
     }
 
-    private void DrawDragIcon(SpriteBatch sb, ShapeBatch sbatch, Vector2 position, float scale, float opacity, bool isMultiItem, bool showLabel, Texture2D iconOverride = null, string labelOverride = null) {
+    private void DrawDragIcon(SpriteBatch sb, ShapeBatch sbatch, Vector2 position, float opacity, bool isMultiItem, bool showLabel, Texture2D iconOverride = null, string labelOverride = null) {
         float iconSize = 48f;
-        Texture2D icon = iconOverride ?? _cachedDragIcon;
+        Texture2D icon = iconOverride ?? (_cachedDragIcons.Count > 0 ? _cachedDragIcons[0] : null);
         if (icon == null) return;
+        
+        float mainScale = iconSize / Math.Max(icon.Width, icon.Height);
         
         // Exact 16-pixel offset to match DesktopIcon alignment ( (80-48)/2 = 16 )
         Vector2 iconDrawPos = position + new Vector2(16, 5);
 
         if (isMultiItem && _dragData is List<string> list) {
-            // Draw stack for multiple items with offset
+            // Draw stack for multiple items with offset - using 10px for better visibility
             int stackCount = Math.Min(3, list.Count);
             for (int i = stackCount - 1; i >= 0; i--) {
-                Vector2 offset = new Vector2(i * 6, i * 6);
-                float stackOpacity = opacity * (1.0f - (i * 0.15f));
-                sb.Draw(icon, iconDrawPos + offset, null, Color.White * stackOpacity, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
+                Vector2 offset = new Vector2(i * 10, i * 10);
+                // Subtle dimming for background icons in stack (0.07 per layer)
+                float stackOpacity = opacity * (1.0f - (i * 0.07f));
+                
+                // Use varied icons if available, otherwise fallback to the first one
+                Texture2D stackIcon = (i < _cachedDragIcons.Count) ? _cachedDragIcons[i] : _cachedDragIcons[0];
+                float stackScale = iconSize / Math.Max(stackIcon.Width, stackIcon.Height);
+                sb.Draw(stackIcon, iconDrawPos + offset, null, Color.White * stackOpacity, 0f, Vector2.Zero, stackScale, SpriteEffects.None, 0f);
             }
 
             // Draw count badge only if showLabel is true (for cursor, not for drop preview)
@@ -230,7 +246,8 @@ public class DragDropManager {
                 string countText = list.Count.ToString();
                 var font = GameContent.FontSystem.GetFont(14);
                 if (font != null) {
-                    Vector2 badgePos = position + new Vector2(iconSize - 16, -8);
+                    // Shift badge more to the right (iconSize - 8 instead of -16)
+                    Vector2 badgePos = position + new Vector2(iconSize - 8, -8);
                     Vector2 textSize = font.MeasureString(countText);
                     float badgeSize = Math.Max(20, textSize.X + 8);
 
@@ -244,7 +261,7 @@ public class DragDropManager {
             }
         } else {
             // Single item
-            sb.Draw(icon, iconDrawPos, null, Color.White * opacity, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
+            sb.Draw(icon, iconDrawPos, null, Color.White * opacity, 0f, Vector2.Zero, mainScale, SpriteEffects.None, 0f);
         }
 
         string labelText = labelOverride ?? _cachedDragLabel;
@@ -303,12 +320,14 @@ public class DragDropManager {
         if (_dragData is DesktopIcon di && item is DesktopIcon diKey && di == diKey) return true;
 
         if (_dragData is List<string> list && list.Count > 0) {
-            string leaderPath = list[0];
-            if (item is string s && s == leaderPath) return true;
-            if (item is DesktopIcon di2 && di2.VirtualPath == leaderPath) return true;
+            string leaderPath = list[0]?.ToUpper().TrimEnd('\\');
+            if (string.IsNullOrEmpty(leaderPath)) return false;
+
+            if (item is string s && s.ToUpper().TrimEnd('\\') == leaderPath) return true;
+            if (item is DesktopIcon di2 && di2.VirtualPath?.ToUpper().TrimEnd('\\') == leaderPath) return true;
         }
         
-        if (_dragData is string path && item is DesktopIcon di3 && di3.VirtualPath == path) return true;
+        if (_dragData is string path && item is DesktopIcon di3 && di3.VirtualPath?.ToUpper().TrimEnd('\\') == path.ToUpper().TrimEnd('\\')) return true;
         
         return false;
     }
