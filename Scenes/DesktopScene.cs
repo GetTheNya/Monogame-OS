@@ -762,52 +762,12 @@ public class DesktopScene : Core.Scenes.Scene {
                             Text = "New",
                             SubItems = new List<MenuItem> {
                                 new MenuItem {
-                                    Text = "Folder", Action = () => {
-                                        try {
-                                            string desktopPath = "C:\\Users\\Admin\\Desktop\\";
-                                            string path = System.IO.Path.Combine(desktopPath, "New Folder");
-                                            int i = 1;
-                                            while (VirtualFileSystem.Instance.Exists(path)) path = System.IO.Path.Combine(desktopPath, $"New Folder ({i++})");
-                                            
-                                            // Find best position
-                                            Vector2 pos = clickPos;
-                                            if (_scene._alignToGrid) {
-                                                Vector2 snapped = _scene.SnapToGrid(clickPos);
-                                                var occupied = _scene.GetOccupiedCells();
-                                                var nearest = _scene.FindNearestAvailableCell((int)((snapped.X - DesktopPadding) / GridCellWidth), (int)((snapped.Y - DesktopPadding) / GridCellHeight), occupied);
-                                                pos = new Vector2(nearest.x * GridCellWidth + DesktopPadding, nearest.y * GridCellHeight + DesktopPadding);
-                                            }
-                                            
-                                            VirtualFileSystem.Instance.CreateDirectory(path);
-                                            _scene._iconPositions[path] = pos;
-                                            _scene.SaveIconPosition(path, pos);
-                                            RefreshAction?.Invoke();
-                                        } catch { }
-                                    }
+                                    Text = "Folder", 
+                                    Action = () => CreateNewDesktopItem("New Folder", "", clickPos, true)
                                 },
                                 new MenuItem {
-                                    Text = "Text Document", Action = () => {
-                                        try {
-                                            string desktopPath = "C:\\Users\\Admin\\Desktop\\";
-                                            string path = System.IO.Path.Combine(desktopPath, "New Text Document.txt");
-                                            int i = 1;
-                                            while (VirtualFileSystem.Instance.Exists(path)) path = System.IO.Path.Combine(desktopPath, $"New Text Document ({i++}).txt");
-                                            
-                                            // Find best position
-                                            Vector2 pos = clickPos;
-                                            if (_scene._alignToGrid) {
-                                                Vector2 snapped = _scene.SnapToGrid(clickPos);
-                                                var occupied = _scene.GetOccupiedCells();
-                                                var nearest = _scene.FindNearestAvailableCell((int)((snapped.X - DesktopPadding) / GridCellWidth), (int)((snapped.Y - DesktopPadding) / GridCellHeight), occupied);
-                                                pos = new Vector2(nearest.x * GridCellWidth + DesktopPadding, nearest.y * GridCellHeight + DesktopPadding);
-                                            }
-                                            
-                                            VirtualFileSystem.Instance.WriteAllText(path, "");
-                                            _scene._iconPositions[path] = pos;
-                                            _scene.SaveIconPosition(path, pos);
-                                            RefreshAction?.Invoke();
-                                        } catch { }
-                                    }
+                                    Text = "Text Document", 
+                                    Action = () => CreateNewDesktopItem("New Text Document", ".txt", clickPos, false)
                                 }
                             }
                         },
@@ -845,6 +805,37 @@ public class DesktopScene : Core.Scenes.Scene {
                 }
             }
             base.UpdateInput();
+        }
+
+        private void CreateNewDesktopItem(string defaultName, string extension, Vector2 clickPos, bool isDirectory) {
+            try {
+                string desktopPath = "C:\\Users\\Admin\\Desktop\\";
+                string fileName = defaultName + extension;
+                string path = System.IO.Path.Combine(desktopPath, fileName);
+                
+                int i = 1;
+                while (VirtualFileSystem.Instance.Exists(path)) {
+                    path = System.IO.Path.Combine(desktopPath, $"{defaultName} ({i++}){extension}");
+                }
+
+                // Find best position
+                Vector2 pos = clickPos;
+                if (_scene._alignToGrid) {
+                    Vector2 snapped = _scene.SnapToGrid(clickPos);
+                    var occupied = _scene.GetOccupiedCells();
+                    var nearest = _scene.FindNearestAvailableCell((int)((snapped.X - DesktopPadding) / GridCellWidth), (int)((snapped.Y - DesktopPadding) / GridCellHeight), occupied);
+                    pos = new Vector2(nearest.x * GridCellWidth + DesktopPadding, nearest.y * GridCellHeight + DesktopPadding);
+                }
+
+                if (isDirectory) VirtualFileSystem.Instance.CreateDirectory(path);
+                else VirtualFileSystem.Instance.WriteAllText(path, "");
+
+                _scene._iconPositions[path] = pos;
+                _scene.SaveIconPosition(path, pos);
+                RefreshAction?.Invoke();
+            } catch (Exception ex) {
+                DebugLogger.Log($"Error creating new desktop item: {ex.Message}");
+            }
         }
 
         private void HandleDesktopDrop(object item) {
