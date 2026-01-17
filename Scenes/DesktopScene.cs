@@ -687,6 +687,13 @@ public class DesktopScene : Core.Scenes.Scene {
             BackgroundColor = Color.Transparent;
             BorderThickness = 0;
             ConsumesInput = false;
+
+            // Connect to Shell API
+            Shell.Desktop.GetNextFreePosition = FindFreeDesktopSpot;
+            Shell.Desktop.SetIconPosition = (path, position) => {
+                _scene._iconPositions[path] = position;
+                _scene.SaveIconPosition(path, position);
+            };
         }
 
         public override void AddChild(UIElement child) {
@@ -831,13 +838,7 @@ public class DesktopScene : Core.Scenes.Scene {
                 }
 
                 // Find best position
-                Vector2 pos = clickPos;
-                if (_scene._alignToGrid) {
-                    Vector2 snapped = _scene.SnapToGrid(clickPos);
-                    var occupied = _scene.GetOccupiedCells();
-                    var nearest = _scene.FindNearestAvailableCell((int)((snapped.X - DesktopPadding) / GridCellWidth), (int)((snapped.Y - DesktopPadding) / GridCellHeight), occupied);
-                    pos = new Vector2(nearest.x * GridCellWidth + DesktopPadding, nearest.y * GridCellHeight + DesktopPadding);
-                }
+                Vector2 pos = FindFreeDesktopSpot(clickPos);
 
                 if (isDirectory) VirtualFileSystem.Instance.CreateDirectory(path);
                 else VirtualFileSystem.Instance.WriteAllText(path, "");
@@ -848,6 +849,27 @@ public class DesktopScene : Core.Scenes.Scene {
             } catch (Exception ex) {
                 DebugLogger.Log($"Error creating new desktop item: {ex.Message}");
             }
+        }
+
+        private Vector2 FindFreeDesktopSpot(Vector2? hintPos, HashSet<(int x, int y)> localOccupied = null) {
+            Vector2 startPos = hintPos ?? new Vector2(DesktopPadding, DesktopPadding);
+            if (_scene._alignToGrid) {
+                Vector2 snapped = _scene.SnapToGrid(startPos);
+                var occupied = _scene.GetOccupiedCells();
+                
+                // Merge with local occupied set if provided (for batch placement)
+                if (localOccupied != null) {
+                    foreach (var cell in localOccupied) occupied.Add(cell);
+                }
+
+                var nearest = _scene.FindNearestAvailableCell((int)((snapped.X - DesktopPadding) / GridCellWidth), (int)((snapped.Y - DesktopPadding) / GridCellHeight), occupied);
+                
+                // CRITICAL: Claim the cell locally so the next item in the batch doesn't take it
+                localOccupied?.Add((nearest.x, nearest.y));
+
+                return new Vector2(nearest.x * GridCellWidth + DesktopPadding, nearest.y * GridCellHeight + DesktopPadding);
+            }
+            return startPos;
         }
 
         private void HandleDesktopDrop(object item) {
