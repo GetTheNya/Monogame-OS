@@ -15,6 +15,7 @@ namespace TheGame.Scenes;
 
 public class DesktopScene : Core.Scenes.Scene {
     private const int TaskbarHeight = 40;
+    // TODO: Make start menu decide its own size
     private const int StartMenuWidth = 250;
     private const int StartMenuHeight = 350;
 

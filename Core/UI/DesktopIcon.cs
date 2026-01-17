@@ -254,6 +254,93 @@ public class DesktopIcon : UIElement {
         _isRenaming = false;
         _renameInput = null;
     }
+    
+    private void DrawWrappedLabel(ShapeBatch batch, FontStashSharp.DynamicSpriteFont font, string text, Vector2 absPos, float iconSize) {
+        const int maxLines = 2;
+        const float maxWidth = 80f; // Icon width
+        const float lineHeight = 16f;
+        
+        // Split text into words
+        string[] words = text.Split(' ');
+        var lines = new System.Collections.Generic.List<string>();
+        string currentLine = "";
+        
+        foreach (var word in words) {
+            string testLine = string.IsNullOrEmpty(currentLine) ? word : currentLine + " " + word;
+            Vector2 testSize = font.MeasureString(testLine);
+            
+            if (testSize.X > maxWidth && !string.IsNullOrEmpty(currentLine)) {
+                // Current line is full, start a new one
+                lines.Add(currentLine);
+                currentLine = word;
+                
+                if (lines.Count >= maxLines) {
+                    break;
+                }
+            } else {
+                currentLine = testLine;
+            }
+        }
+        
+        // Add the last line
+        if (!string.IsNullOrEmpty(currentLine) && lines.Count < maxLines) {
+            lines.Add(currentLine);
+        }
+        
+        // If we still have text left after maxLines, truncate the last line with ellipsis
+        if (lines.Count >= maxLines && currentLine != lines[lines.Count - 1]) {
+            string lastLine = lines[lines.Count - 1];
+            string remaining = text.Substring(text.IndexOf(lastLine) + lastLine.Length).Trim();
+            
+            if (!string.IsNullOrEmpty(remaining)) {
+                // Try to add ellipsis to the last line
+                while (lastLine.Length > 0) {
+                    string testWithEllipsis = lastLine + "...";
+                    Vector2 testSize = font.MeasureString(testWithEllipsis);
+                    
+                    if (testSize.X <= maxWidth) {
+                        lines[lines.Count - 1] = testWithEllipsis;
+                        break;
+                    }
+                    
+                    // Remove last character and try again
+                    lastLine = lastLine.Substring(0, lastLine.Length - 1).TrimEnd();
+                }
+            }
+        }
+        
+        // If a single line is too long even for one line, truncate it
+        for (int i = 0; i < lines.Count; i++) {
+            Vector2 lineSize = font.MeasureString(lines[i]);
+            if (lineSize.X > maxWidth) {
+                string line = lines[i];
+                while (line.Length > 0) {
+                    string testWithEllipsis = line + "...";
+                    Vector2 testSize = font.MeasureString(testWithEllipsis);
+                    
+                    if (testSize.X <= maxWidth) {
+                        lines[i] = testWithEllipsis;
+                        break;
+                    }
+                    
+                    line = line.Substring(0, line.Length - 1);
+                }
+            }
+        }
+        
+        // Draw each line centered
+        float totalHeight = lines.Count * lineHeight;
+        float startY = iconSize + 10;
+        
+        for (int i = 0; i < lines.Count; i++) {
+            Vector2 lineSize = font.MeasureString(lines[i]);
+            Vector2 labelPos = absPos + new Vector2((Size.X - lineSize.X) / 2, startY + i * lineHeight);
+            
+            // Shadow/Outline for readability on any background
+            font.DrawText(batch, lines[i], labelPos + new Vector2(1, 1), Color.Black);
+            font.DrawText(batch, lines[i], labelPos, LabelColor);
+        }
+    }
 
     protected override void DrawSelf(SpriteBatch spriteBatch, ShapeBatch batch) {
         // Hide icon from normal layer if it's being dragged (so it can be drawn in overlay)
@@ -289,16 +376,7 @@ public class DesktopIcon : UIElement {
         } else if (!string.IsNullOrEmpty(Label) && GameContent.FontSystem != null) {
             var font = GameContent.FontSystem.GetFont(14);
             if (font != null) {
-                if (_cachedLabelSize == Vector2.Zero) {
-                    _cachedLabelSize = font.MeasureString(Label);
-                }
-                
-                // Wrap text if too long? For now just center it and allow overlap
-                Vector2 labelPos = absPos + new Vector2((Size.X - _cachedLabelSize.X) / 2, iconSize + 10);
-                
-                // Shadow/Outline for readability on any background
-                font.DrawText(batch, Label, labelPos + new Vector2(1, 1), Color.Black);
-                font.DrawText(batch, Label, labelPos, LabelColor);
+                DrawWrappedLabel(batch, font, Label, absPos, iconSize);
             }
         }
     }
