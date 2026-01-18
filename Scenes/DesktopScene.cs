@@ -16,8 +16,8 @@ namespace TheGame.Scenes;
 public class DesktopScene : Core.Scenes.Scene {
     private const int TaskbarHeight = 40;
     // TODO: Make start menu decide its own size
-    private const int StartMenuWidth = 250;
-    private const int StartMenuHeight = 350;
+    private const int StartMenuWidth = 350;
+    private const int StartMenuHeight = 450;
 
     private UIManager _uiManager;
     private DesktopPanel _desktopLayer;
@@ -126,34 +126,8 @@ public class DesktopScene : Core.Scenes.Scene {
         // Load Dynamic Desktop Icons
         LoadDesktopIcons();
 
-        // Update Start Menu to use icons
-        _startMenu.Position = new Vector2(0, screenHeight - TaskbarHeight - StartMenuHeight);
-        _startMenu.ClearMenuItems();
-
-        string notepadPath = "C:\\Users\\Admin\\Desktop\\Notepad.slnk";
-        string settingsPath = "C:\\Users\\Admin\\Desktop\\Settings.slnk";
-        string explorerPath = "C:\\Users\\Admin\\Desktop\\My Computer.slnk";
-
-        _startMenu.AddMenuItem(0, "Notepad", Shell.GetIcon(notepadPath), () => {
-            Shell.Execute(notepadPath);
-            _startMenu.Toggle();
-        });
-        string calcIconPath = VirtualFileSystem.Instance.ToHostPath("C:\\Windows\\SystemResources\\Icons\\calculator.png");
-        Texture2D calcIcon = System.IO.File.Exists(calcIconPath) ? Core.ImageLoader.Load(G.GraphicsDevice, calcIconPath) : GameContent.FileIcon;
-
-        _startMenu.AddMenuItem(1, "Calculator", calcIcon, () => {
-            DebugLogger.Log("Opening Calculator...");
-            _startMenu.Toggle();
-        });
-        _startMenu.AddMenuItem(2, "Settings", Shell.GetIcon(settingsPath), () => {
-            Shell.Execute(settingsPath);
-            _startMenu.Toggle();
-        });
-        _startMenu.AddMenuItem(3, "File Explorer", Shell.GetIcon(explorerPath), () => {
-            Shell.Execute(explorerPath);
-            _startMenu.Toggle();
-        });
-        _startMenu.AddMenuItem(4, "Shut Down", GameContent.ExplorerIcon, () => { System.Environment.Exit(0); });
+        // Populate Start Menu
+        _startMenu.RefreshItems();
     }
 
     private void LoadDesktopIcons() {
@@ -400,17 +374,22 @@ public class DesktopScene : Core.Scenes.Scene {
     }
 
     public override void Update(GameTime gameTime) {
+        var viewport = G.GraphicsDevice.Viewport;
+        if (viewport.Width != _desktopLayer.Size.X || viewport.Height != _desktopLayer.Size.Y) {
+            // Screen Resized
+            _desktopLayer.Size = new Vector2(viewport.Width, viewport.Height);
+            _windowLayer.Size = new Vector2(viewport.Width, viewport.Height);
+            _taskbar.Position = new Vector2(0, viewport.Height - TaskbarHeight);
+            _taskbar.Size = new Vector2(viewport.Width, TaskbarHeight);
+            _startMenu.OnResize(viewport.Width, viewport.Height);
+            _notificationPanel.OnResize(viewport.Width, viewport.Height);
+        }
+
         // Process hot reload on main thread
         AppHotReloadManager.Instance.Update();
         
         _uiManager.Update(gameTime);
         Core.Animation.Tweener.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
-
-        var vp = G.GraphicsDevice.Viewport;
-        _windowLayer.Size = new Vector2(vp.Width, vp.Height);
-        _desktopLayer.Size = _windowLayer.Size; // Sync desktop layer size
-        _taskbar.Size = new Vector2(vp.Width, TaskbarHeight);
-        _taskbar.Position = new Vector2(0, vp.Height - TaskbarHeight);
 
         // Update toast positions
         UpdateToastPositions();

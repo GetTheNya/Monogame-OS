@@ -554,7 +554,8 @@ public class FileListPanel : ScrollPanel {
             menuItems.Add(new MenuItem { 
                 Text = "Send to", 
                 SubItems = new List<MenuItem> {
-                    new MenuItem { Text = "Desktop (create shortcut)", Action = SendToDesktopShortcut }
+                    new MenuItem { Text = "Desktop (create shortcut)", Action = SendToDesktopShortcut },
+                    new MenuItem { Text = "Start menu (create shortcut)", Action = SendToStartMenuShortcut }
                 }
             });
             menuItems.Add(new MenuItem { Text = "Delete", Action = () => DeleteItems() });
@@ -576,7 +577,8 @@ public class FileListPanel : ScrollPanel {
             menuItems.Add(new MenuItem { 
                 Text = "Send to", 
                 SubItems = new List<MenuItem> {
-                    new MenuItem { Text = "Desktop (create shortcut)", Action = SendToDesktopShortcut }
+                    new MenuItem { Text = "Desktop (create shortcut)", Action = SendToDesktopShortcut },
+                    new MenuItem { Text = "Start menu (create shortcut)", Action = SendToStartMenuShortcut }
                 }
             });
             menuItems.Add(new MenuItem { Text = "Delete", Action = () => DeleteItems() });
@@ -590,7 +592,8 @@ public class FileListPanel : ScrollPanel {
             menuItems.Add(new MenuItem { 
                 Text = "Send to", 
                 SubItems = new List<MenuItem> {
-                    new MenuItem { Text = "Desktop (create shortcut)", Action = SendToDesktopShortcut }
+                    new MenuItem { Text = "Desktop (create shortcut)", Action = SendToDesktopShortcut },
+                    new MenuItem { Text = "Start menu (create shortcut)", Action = SendToStartMenuShortcut }
                 }
             });
             menuItems.Add(new MenuItem { Text = "Delete", Action = () => DeleteItems() });
@@ -677,6 +680,14 @@ public class FileListPanel : ScrollPanel {
         if (items.Count == 0) return;
 
         Shell.Desktop.CreateShortcuts(items);
+        _selectedPaths.Clear();
+    }
+
+    private void SendToStartMenuShortcut() {
+        var items = _selectedPaths.ToList();
+        if (items.Count == 0) return;
+
+        Shell.StartMenu.CreateShortcut(items);
         _selectedPaths.Clear();
     }
 

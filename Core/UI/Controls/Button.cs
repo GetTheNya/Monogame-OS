@@ -14,6 +14,7 @@ public class Button : UIControl {
     public Color TextColor { get; set; } = Color.White;
     public TextAlign TextAlign { get; set; } = TextAlign.Center;
     public int FontSize { get; set; } = 20;
+    public Vector2 Padding { get; set; } = new Vector2(5, 5);
 
     public Button(Vector2 position, Vector2 size, string text = "") : base(position, size) {
         Text = text;
@@ -44,13 +45,14 @@ public class Button : UIControl {
         // Border
         batch.BorderRectangle(drawPos, size, BorderColor * AbsoluteOpacity, thickness: 1f, rounded: 3f);
 
-        float padding = 5f * Scale;
+        float pX = Padding.X * Scale;
+        float pY = Padding.Y * Scale;
         float iconSize = 0f;
 
         // Draw Icon if present
         if (Icon != null) {
-            iconSize = size.Y - (padding * 2);
-            var iconPos = new Vector2(drawPos.X + padding, drawPos.Y + padding);
+            iconSize = size.Y - (pY * 2);
+            var iconPos = new Vector2(drawPos.X + pX, drawPos.Y + pY);
             float scale = iconSize / Icon.Width;
             batch.DrawTexture(Icon, iconPos, Color.White * AbsoluteOpacity, scale);
         }
@@ -59,8 +61,8 @@ public class Button : UIControl {
         if (!string.IsNullOrEmpty(Text) && GameContent.FontSystem != null) {
             var font = GameContent.FontSystem.GetFont((int)(FontSize * Scale));
             if (font != null) {
-                float contentStartX = drawPos.X + padding + iconSize + (iconSize > 0 ? padding : 0);
-                float remainingWidth = size.X - (contentStartX - drawPos.X) - padding;
+                float contentStartX = drawPos.X + pX + iconSize + (iconSize > 0 ? pX : 0);
+                float remainingWidth = size.X - (contentStartX - drawPos.X) - pX;
 
                 if (remainingWidth > 5) {
                     string textToDraw = Text;

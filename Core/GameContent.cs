@@ -17,6 +17,8 @@ public static class GameContent {
     public static Texture2D DiskIcon;
     public static Texture2D DesktopIcon;
     public static Texture2D NotificationIcon;
+    public static Texture2D UserIcon;
+    public static Texture2D PowerIcon;
     public static Texture2D Pixel;
 
     public static void InitContent() {
@@ -38,6 +40,8 @@ public static class GameContent {
         DiskIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\disk.png"); // Assuming disk.png exists or falls back
         DesktopIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\desktop.png");
         NotificationIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\notification.png");
+        UserIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\user.png");
+        PowerIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\power.png");
     }
 
     private static Texture2D LoadIcon(string virtualPath) {

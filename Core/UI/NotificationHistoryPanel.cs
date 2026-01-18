@@ -59,6 +59,15 @@ public class NotificationHistoryPanel : UIElement {
         RefreshContent();
     }
 
+    public new void OnResize(int width, int height) {
+        Size = new Vector2(PanelWidth, height - 40);
+        if (!_isOpen) _slideOffset = PanelWidth;
+        Position = new Vector2(width - PanelWidth + _slideOffset, 0);
+        
+        _scrollPanel.Size = new Vector2(PanelWidth, Size.Y - HeaderHeight);
+        base.OnResize?.Invoke();
+    }
+
     public void Toggle() {
         if (_isAnimating) {
             ForceClose();
