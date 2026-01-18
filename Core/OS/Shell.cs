@@ -126,11 +126,126 @@ public static class Shell {
         }
     }
     
+    /// <summary>
+    /// System tray icon management.
+    /// </summary>
+    public static class SystemTray {
+        private static TheGame.Core.UI.SystemTray _systemTray;
+        
+        /// <summary>
+        /// Connects the Shell.SystemTray API to the actual SystemTray instance.
+        /// Called by Taskbar during initialization.
+        /// </summary>
+        internal static void Initialize(TheGame.Core.UI.SystemTray systemTray) {
+            _systemTray = systemTray;
+        }
+        
+        /// <summary>
+        /// Adds a tray icon owned by a window.
+        /// The icon will be automatically removed when the window closes (unless PersistAfterWindowClose is true).
+        /// </summary>
+        public static string AddIcon(TheGame.Core.UI.Window ownerWindow, TheGame.Core.UI.TrayIcon icon) {
+            if (icon == null || _systemTray == null) return null;
+            if (ownerWindow == null) {
+                DebugLogger.Log("[Shell.SystemTray] AddIcon called with null window");
+                return null;
+            }
+            
+            icon.OwnerWindow = ownerWindow;
+            icon.OwnerProcess = ownerWindow.OwnerProcess;
+            
+            // Hook window close event to remove icon (unless PersistAfterWindowClose)
+            ownerWindow.OnClosed += () => _systemTray?.RemoveIconsForWindow(ownerWindow);
+            
+            _systemTray.AddIcon(icon);
+            return icon.Id;
+        }
+        
+        /// <summary>
+        /// Adds a tray icon owned by a process (for background services without windows).
+        /// The icon will be automatically removed when the process terminates.
+        /// </summary>
+        public static string AddIcon(OS.Process ownerProcess, TheGame.Core.UI.TrayIcon icon) {
+            if (icon == null || _systemTray == null) return null;
+            if (ownerProcess == null) {
+                DebugLogger.Log("[Shell.SystemTray] AddIcon called with null process");
+                return null;
+            }
+            
+            icon.OwnerProcess = ownerProcess;
+            
+            _systemTray.AddIcon(icon);
+            return icon.Id;
+        }
+        
+        /// <summary>
+        /// Removes a tray icon by ID.
+        /// </summary>
+        public static bool RemoveIcon(string id) {
+            return _systemTray?.RemoveIcon(id) ?? false;
+        }
+        
+        /// <summary>
+        /// Removes all tray icons owned by the specified process.
+        /// Called automatically when a process terminates.
+        /// </summary>
+        internal static void RemoveIconsForProcess(OS.Process process) {
+            _systemTray?.RemoveIconsForProcess(process);
+        }
+        
+        /// <summary>
+        /// Gets a tray icon by ID for dynamic updates.
+        /// </summary>
+        public static TheGame.Core.UI.TrayIcon GetIcon(string id) {
+            return _systemTray?.GetIcon(id);
+        }
+        
+        /// <summary>
+        /// Updates the icon texture for a tray icon.
+        /// </summary>
+        public static void UpdateIcon(string id, Texture2D newIcon) {
+            _systemTray?.GetIcon(id)?.SetIcon(newIcon);
+        }
+        
+        /// <summary>
+        /// Updates the tooltip for a tray icon.
+        /// </summary>
+        public static void UpdateTooltip(string id, string newTooltip) {
+            _systemTray?.GetIcon(id)?.SetTooltip(newTooltip);
+        }
+    }
+    
     public static Action<UIElement> OnAddOverlayElement;
     public static bool IsRenderingDrag = false;
 
     public static void AddOverlayElement(UIElement element) => OnAddOverlayElement?.Invoke(element);
     public static void DrawDrag(SpriteBatch sb, ShapeBatch sbatch) => DragDropManager.Instance.DrawDragVisual(sb, sbatch);
+
+    /// <summary>
+    /// Image and texture management.
+    /// </summary>
+    public static class Images {
+        /// <summary>
+        /// Loads a texture from an app-relative path (inside the .sapp folder).
+        /// Automatically detects the calling application.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static Texture2D LoadAppImage(string fileName) {
+            string appId = AppLoader.Instance.GetAppIdFromAssembly(Assembly.GetCallingAssembly());
+            if (appId == null) return null;
+            string virtualPath = VirtualFileSystem.Instance.GetAppResourcePath(appId, fileName);
+            if (virtualPath == null) return null;
+            return ImageLoader.Load(G.GraphicsDevice, VirtualFileSystem.Instance.ToHostPath(virtualPath));
+        }
+
+        /// <summary>
+        /// Loads a texture from a virtual path (e.g. C:\Windows\SystemResources\Icons\PC.png).
+        /// </summary>
+        public static Texture2D Load(string virtualPath) {
+            if (string.IsNullOrEmpty(virtualPath)) return null;
+            return ImageLoader.Load(G.GraphicsDevice, VirtualFileSystem.Instance.ToHostPath(virtualPath));
+        }
+    }
 
     public static void Update(GameTime gameTime) {
         // Update all running processes

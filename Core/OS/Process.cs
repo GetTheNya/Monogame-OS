@@ -137,6 +137,9 @@ public class Process {
         
         OnTerminate();
         
+        // Remove tray icons owned by this process
+        Shell.SystemTray.RemoveIconsForProcess(this);
+        
         foreach (var window in Windows.ToList()) {
             window.Close();
         }

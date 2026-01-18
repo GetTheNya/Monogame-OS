@@ -61,6 +61,7 @@ public class Taskbar : Panel {
         // System Tray
         _systemTray = new SystemTray(new Vector2(size.X - 120f, 0), new Vector2(120f, size.Y));
         AddChild(_systemTray);
+        OS.Shell.SystemTray.Initialize(_systemTray);
 
         // Window Picker
         _windowPicker = new TaskbarWindowPicker();

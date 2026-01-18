@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using TheGame.Core.UI;
 using TheGame.Core.UI.Controls;
 using TheGame.Core.OS;
+using TheGame.Core;
 
 namespace TestJit;
 
@@ -20,6 +22,7 @@ public class JitApp : Window {
     private readonly string notifPath = "C:\\Windows\\Media\\notify.wav";
     private readonly AppSettings _settings;
     private readonly Label _counterLabel;
+    private readonly Texture2D _icon;
 
     public JitApp(Vector2 pos, Vector2 size, AppSettings settings) : base(pos, size) {
         Title = "JIT Test App";
@@ -42,5 +45,28 @@ public class JitApp : Window {
             }
         };
         AddChild(btn);
+
+        _icon = Shell.Images.LoadAppImage("tray_icon.png");
+
+        string trayIconId = "";
+
+        var trayIcon = new TrayIcon(_icon, "JIT Test App") {
+            OnClick = () => {
+                Shell.Notifications.Show("JIT Test App", "Clicked!", _icon, null);
+            }, 
+            OnDoubleClick = () => {
+                Shell.Notifications.Show("JIT Test App", "Double clicked!", _icon, null);
+            },
+            OnRightClick = () => {
+                Shell.Notifications.Show("JIT Test App", "Right clicked!", _icon, null);
+            },
+            OnRightDoubleClick = () => {
+                Shell.Notifications.Show("JIT Test App", "Right double clicked!", _icon, null);
+            },
+            OnMouseWheel = (int delta) => {
+                Shell.Notifications.Show("JIT Test App", "Mouse wheel!" + delta, _icon, null);
+            }
+        };
+        trayIconId = Shell.SystemTray.AddIcon(this, trayIcon);
     }
 }

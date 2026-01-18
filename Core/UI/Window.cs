@@ -58,6 +58,11 @@ public class Window : UIElement {
     private bool _isBlinking;
     private double _blinkTimer;
     private const double BlinkDuration = 0.6; // Total blink duration in seconds
+    
+    /// <summary>
+    /// Called when the window is closed (before removal from parent).
+    /// </summary>
+    public event Action OnClosed;
 
     public string Title { get; set; } = "Window";
     public Texture2D Icon { get; set; }
@@ -338,6 +343,9 @@ public class Window : UIElement {
         if (ActiveWindow == this) {
             FindAndFocusNextWindow();
         }
+
+        // Invoke close event (for tray icon cleanup, etc.)
+        OnClosed?.Invoke();
 
         Tweener.CancelAll(this);
         // Fade out then remove

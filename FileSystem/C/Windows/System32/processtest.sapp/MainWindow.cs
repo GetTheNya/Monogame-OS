@@ -108,6 +108,12 @@ public class MainWindow : Window {
             Registry.SetValue($"{Shell.Registry.Startup}\\PROCESSTEST", false);
             Shell.Notifications.Show("Startup", "PROCESSTEST removed from startup apps.");
         });
+        y += buttonHeight + gap;
+
+        AddButton("Crash app", y, () => {
+            var zero = 0;
+            var crash = 1 / zero;
+        });
     }
     
     private void AddButton(string text, float y, Action onClick) {

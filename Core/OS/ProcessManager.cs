@@ -70,6 +70,13 @@ public class ProcessManager {
     }
     
     /// <summary>
+    /// Gets the first running process for a given app ID.
+    /// </summary>
+    public Process GetProcessByAppId(string appId) {
+        return GetProcessesByApp(appId).FirstOrDefault();
+    }
+    
+    /// <summary>
     /// Gets all running processes.
     /// </summary>
     public IEnumerable<Process> GetAllProcesses() {
