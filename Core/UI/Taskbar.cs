@@ -46,7 +46,8 @@ public class Taskbar : Panel {
             OnClickAction = () => {
                 if (_startMenu is StartMenu sm) sm.Toggle();
                 else _startMenu.IsVisible = !_startMenu.IsVisible; // Fallback
-            }
+            },
+            Tooltip = "Open Start Menu"
         };
         AddChild(_startButton);
 

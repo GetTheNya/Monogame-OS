@@ -282,6 +282,7 @@ public class NotificationHistoryItem : UIElement {
                 AnimateOut(() => OnDismiss?.Invoke());
             }
         };
+        _dismissBtn.Tooltip = "Dismiss notification";
         AddChild(_dismissBtn);
     }
 

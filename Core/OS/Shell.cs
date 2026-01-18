@@ -540,6 +540,12 @@ public static class Shell {
             _appRegistry[appId.ToUpper()] = factory;
         }
 
+        public static void SetTooltip(UIElement element, string text, float delay = 0.5f) {
+            if (element == null) return;
+            element.Tooltip = text;
+            element.TooltipDelay = delay;
+        }
+
         public static Window CreateAppWindow(string appId, params string[] args) {
             if (string.IsNullOrEmpty(appId)) return null;
             string upperAppId = appId.ToUpper();

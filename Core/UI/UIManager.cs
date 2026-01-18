@@ -6,10 +6,12 @@ namespace TheGame.Core.UI;
 
 public class UIManager {
     private UIElement _root;
+    private TooltipManager _tooltipManager;
 
     public UIManager() {
         // A root container that covers the whole screen
         _root = new RootElement();
+        _tooltipManager = new TooltipManager();
     }
 
     public void AddElement(UIElement element) {
@@ -24,6 +26,7 @@ public class UIManager {
     public void Update(GameTime gameTime) {
         _root.Size = new Vector2(G.GraphicsDevice.Viewport.Width, G.GraphicsDevice.Viewport.Height);
         _root.Update(gameTime);
+        _tooltipManager.Update(gameTime, _root);
     }
 
     public void Draw(SpriteBatch spriteBatch, ShapeBatch shapeBatch) {
@@ -41,6 +44,9 @@ public class UIManager {
             shapeBatch.Begin();
             spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
         }
+
+        // Draw tooltips last (always on top)
+        _tooltipManager.Draw(spriteBatch, shapeBatch);
     }
 
     // Invisible root container

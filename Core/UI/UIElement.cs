@@ -43,6 +43,10 @@ public abstract class UIElement {
     public Action OnDoubleClickAction { get; set; }
     public object Tag { get; set; }
 
+    // Tooltip properties
+    public string Tooltip { get; set; }
+    public float TooltipDelay { get; set; } = 0.5f;
+
     protected UIElement() {
     }
 
