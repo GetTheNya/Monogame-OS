@@ -1,6 +1,9 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
+using TheGame.Core;
+using TheGame.Core.Input;
+using Microsoft.Xna.Framework.Input;
 
 public class WindowsKeyHook : IDisposable {
     private const int WH_KEYBOARD_LL = 13;
@@ -51,21 +54,29 @@ public class WindowsKeyHook : IDisposable {
             // Check if Ctrl is held (Highest bit of return value means 'down')
             bool ctrlDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
 
+            bool isKeyDown = wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN;
+            bool isKeyUp = wParam == (IntPtr)0x0101 || wParam == (IntPtr)0x0105; // WM_KEYUP, WM_SYSKEYUP
+
             // Block Windows Keys (Left: 0x5B, Right: 0x5C)
-            if (vkCode == 0x5B || vkCode == 0x5C)
+            if (vkCode == 0x5B || vkCode == 0x5C) {
+                var key = vkCode == 0x5B ? Keys.LeftWindows : Keys.RightWindows;
+                if (isKeyDown) {
+                    InputManager.SetKeyOverride(key, true);
+                }
+                if (isKeyUp) {
+                    InputManager.SetKeyOverride(key, false);
+                }
                 return (IntPtr)1;
+            }
 
             // Block Alt+Tab (Tab: 0x09)
-            if (vkCode == 0x09 && altDown)
-                return (IntPtr)1;
+            if (vkCode == 0x09 && altDown) return (IntPtr)1;
 
             // Block Alt+Esc (Esc: 0x1B)
-            if (vkCode == 0x1B && altDown)
-                return (IntPtr)1;
+            if (vkCode == 0x1B && altDown) return (IntPtr)1;
 
             // Block Ctrl+Esc
-            if (vkCode == 0x1B && ctrlDown)
-                return (IntPtr)1;
+            if (vkCode == 0x1B && ctrlDown) return (IntPtr)1;
         }
 
         return CallNextHookEx(_hookID, nCode, wParam, lParam);

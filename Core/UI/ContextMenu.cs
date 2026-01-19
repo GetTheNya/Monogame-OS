@@ -15,6 +15,7 @@ public class MenuItem {
     public string Text { get; set; } = "";
     public Action Action { get; set; }
     public Texture2D Icon { get; set; }
+    public string Shortcut { get; set; }
     public List<MenuItem> SubItems { get; set; }
     public bool HasSubItems => SubItems != null && SubItems.Count > 0;
 }

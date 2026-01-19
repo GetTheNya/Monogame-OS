@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Xna.Framework;
 using TheGame.Core.UI;
+using TheGame.Core.Input;
 
 namespace TheGame.Core.OS;
 
@@ -139,6 +140,15 @@ public class Process {
         
         // Remove tray icons owned by this process
         Shell.SystemTray.RemoveIconsForProcess(this);
+        
+        // Remove local hotkeys if this is the last instance of the app
+        if (!string.IsNullOrEmpty(AppId)) {
+            var otherInstances = ProcessManager.Instance.GetProcessesByApp(AppId)
+                .Where(p => p != this && p.State != ProcessState.Terminated);
+            if (!otherInstances.Any()) {
+                HotkeyManager.UnregisterLocal(AppId);
+            }
+        }
         
         foreach (var window in Windows.ToList()) {
             window.Close();

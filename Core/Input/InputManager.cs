@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 
@@ -11,6 +12,7 @@ public static class InputManager {
 
     private static KeyboardState _currentKeyboard;
     private static KeyboardState _previousKeyboard;
+    private static readonly HashSet<Keys> _overriddenKeys = new();
 
     // UI Consumption flags
     public static bool IsMouseConsumed { get; set; }
@@ -50,7 +52,7 @@ public static class InputManager {
         _currentMouse = Mouse.GetState();
 
         _previousKeyboard = _currentKeyboard;
-        _currentKeyboard = Keyboard.GetState();
+        _currentKeyboard = GetMergedKeyboardState();
         
         _typedChars.Clear();
         _typedChars.AddRange(_charBuffer);
@@ -58,6 +60,10 @@ public static class InputManager {
         IsMouseConsumed = false;
         IsKeyboardConsumed = false;
         IsScrollConsumed = false;
+
+        // Check Hotkeys
+        HotkeyManager.Update(gameTime, _currentKeyboard);
+
         _isDoubleClickFrame = false;
         _isRightDoubleClickFrame = false;
 
@@ -184,6 +190,26 @@ public static class InputManager {
     public static bool IsKeyJustPressed(Keys key) {
         if (IsKeyboardConsumed) return false;
         return _currentKeyboard.IsKeyDown(key) && _previousKeyboard.IsKeyUp(key);
+    }
+
+    /// <summary>
+    /// Manually sets a key state, bypassing the hardware state. 
+    /// Used by WindowsKeyHook to report keys that are blocked from the OS.
+    /// </summary>
+    public static void SetKeyOverride(Keys key, bool isDown) {
+        if (isDown) _overriddenKeys.Add(key);
+        else _overriddenKeys.Remove(key);
+    }
+
+    private static KeyboardState GetMergedKeyboardState() {
+        var state = Keyboard.GetState();
+        if (_overriddenKeys.Count == 0) return state;
+
+        var pressed = new HashSet<Keys>(state.GetPressedKeys());
+        foreach (var key in _overriddenKeys) {
+            pressed.Add(key);
+        }
+        return new KeyboardState(pressed.ToArray());
     }
 }
 

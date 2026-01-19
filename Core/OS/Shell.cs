@@ -10,6 +10,7 @@ using TheGame.Core.UI;
 using TheGame.Core.UI.Controls;
 using TheGame.Graphics;
 using TheGame.Core.Input;
+using Microsoft.Xna.Framework.Input;
 
 namespace TheGame.Core.OS;
 
@@ -146,14 +147,14 @@ public static class Shell {
         public static T GetSetting<T>(string key, T defaultValue = default, string appIdOverride = null) {
             string appId = appIdOverride ?? AppLoader.Instance.GetAppIdFromAssembly(Assembly.GetCallingAssembly());
             if (appId == null) return defaultValue;
-            return OS.Registry.GetValue($"HKCU\\Software\\{appId}\\{key}", defaultValue);
+            return TheGame.Core.OS.Registry.GetValue($"HKCU\\Software\\{appId}\\{key}", defaultValue);
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static void SetSetting<T>(string key, T value, string appIdOverride = null) {
             string appId = appIdOverride ?? AppLoader.Instance.GetAppIdFromAssembly(Assembly.GetCallingAssembly());
             if (appId == null) return;
-            OS.Registry.SetValue($"HKCU\\Software\\{appId}\\{key}", value);
+            TheGame.Core.OS.Registry.SetValue($"HKCU\\Software\\{appId}\\{key}", value);
         }
     }
     
@@ -196,7 +197,7 @@ public static class Shell {
         /// Adds a tray icon owned by a process (for background services without windows).
         /// The icon will be automatically removed when the process terminates.
         /// </summary>
-        public static string AddIcon(OS.Process ownerProcess, TheGame.Core.UI.TrayIcon icon) {
+        public static string AddIcon(TheGame.Core.OS.Process ownerProcess, TheGame.Core.UI.TrayIcon icon) {
             if (icon == null || _systemTray == null) return null;
             if (ownerProcess == null) {
                 DebugLogger.Log("[Shell.SystemTray] AddIcon called with null process");
@@ -220,7 +221,7 @@ public static class Shell {
         /// Removes all tray icons owned by the specified process.
         /// Called automatically when a process terminates.
         /// </summary>
-        internal static void RemoveIconsForProcess(OS.Process process) {
+        internal static void RemoveIconsForProcess(TheGame.Core.OS.Process process) {
             _systemTray?.RemoveIconsForProcess(process);
         }
         
@@ -362,7 +363,7 @@ public static class Shell {
         /// <summary>
         /// Gets the calling app's process (detected from the active window).
         /// </summary>
-        public static OS.Process Current => Window.ActiveWindow?.OwnerProcess;
+        public static TheGame.Core.OS.Process Current => Window.ActiveWindow?.OwnerProcess;
         
         /// <summary>
         /// Gets the ProcessManager for advanced process control.
@@ -439,7 +440,7 @@ public static class Shell {
     }
 
     public static void PromptEmptyRecycleBin() {
-        var mb = new MessageBox("Empty Recycle Bin", 
+        var mb = new TheGame.Core.UI.MessageBox("Empty Recycle Bin", 
             "Are you sure you want to permanently delete all items in the Recycle Bin?", 
             MessageBoxButtons.YesNo, (confirmed) => {
             if (confirmed) {
@@ -466,6 +467,27 @@ public static class Shell {
         GlobalContextMenu = contextMenu;
         Registry.Initialize();
         UI.InternalInitialize();
+    }
+
+    /// <summary>
+    /// System-wide and per-app hotkeys.
+    /// </summary>
+    public static class Hotkeys {
+        public static void RegisterGlobal(Keys key, HotkeyModifiers mods, Action callback) {
+            HotkeyManager.RegisterGlobal(new Hotkey(key, mods), callback);
+        }
+
+        public static void RegisterLocal(Keys key, HotkeyModifiers mods, Action callback) {
+            string appId = AppLoader.Instance.GetAppIdFromAssembly(Assembly.GetCallingAssembly());
+            if (appId == null) return;
+            HotkeyManager.RegisterLocal(appId, new Hotkey(key, mods), callback);
+        }
+
+        public static void RegisterLocal(string shortcut, Action callback) {
+            string appId = AppLoader.Instance.GetAppIdFromAssembly(Assembly.GetCallingAssembly());
+            if (appId == null) return;
+            HotkeyManager.RegisterLocal(appId, Hotkey.Parse(shortcut), callback);
+        }
     }
 
     public static class File {

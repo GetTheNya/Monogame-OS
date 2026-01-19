@@ -10,6 +10,7 @@ using TheGame.Graphics;
 using TheGame.Core.OS;
 using TheGame.Core.UI.Controls;
 using System.Linq;
+using Keys = Microsoft.Xna.Framework.Input.Keys;
 
 namespace TheGame.Scenes;
 
@@ -57,6 +58,8 @@ public class DesktopScene : Core.Scenes.Scene {
         var viewport = G.GraphicsDevice.Viewport;
         var screenWidth = viewport.Width;
         var screenHeight = viewport.Height;
+
+        RegisterGlobalHotkeys();
 
         // Load wallpaper from settings
         LoadWallpaper();
@@ -128,6 +131,22 @@ public class DesktopScene : Core.Scenes.Scene {
 
         // Populate Start Menu
         _startMenu.RefreshItems();
+    }
+
+    private void RegisterGlobalHotkeys() {
+        DebugLogger.Log("Registering hotkeys");
+        Shell.Hotkeys.RegisterGlobal(Keys.None, HotkeyModifiers.Win, () => {
+            DebugLogger.Log("Win button pressed - Opening Start Menu");
+            ToggleStartMenu();
+        });
+
+        Shell.Hotkeys.RegisterGlobal(Keys.V, HotkeyModifiers.Win, () => {
+            DebugLogger.Log("Win button v");
+        });
+    }
+
+    public void ToggleStartMenu() {
+        if (_startMenu != null) _startMenu.Toggle();
     }
 
     private void LoadDesktopIcons() {

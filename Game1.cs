@@ -88,9 +88,6 @@ public class Game1 : Game {
         InputManager.Update(gameTime);
         CustomCursor.Instance.BeginFrame();
 
-        if (InputManager.IsKeyDown(Keys.Escape))
-            Exit();
-
         _sceneManager.Update(gameTime);
         _fps.Update(gameTime);
 

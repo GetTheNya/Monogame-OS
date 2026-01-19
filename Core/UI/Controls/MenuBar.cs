@@ -20,7 +20,7 @@ public class Menu {
     }
 
     public Menu AddItem(string text, Action action, string shortcut = null) {
-        Items.Add(new MenuItem { Text = text, Action = action });
+        Items.Add(new MenuItem { Text = text, Action = action, Shortcut = shortcut });
         return this;
     }
 
@@ -59,6 +59,20 @@ public class MenuBar : UIControl {
         configure(menu);
         _menus.Add(menu);
         return this;
+    }
+
+    /// <summary>
+    /// Registers all menu shortcuts as local hotkeys for the specified application.
+    /// </summary>
+    public void RegisterHotkeys(string appId) {
+        foreach (var menu in _menus) {
+            foreach (var item in menu.Items) {
+                if (!string.IsNullOrEmpty(item.Shortcut)) {
+                    var action = item.Action;
+                    HotkeyManager.RegisterLocal(appId, Hotkey.Parse(item.Shortcut), () => action?.Invoke());
+                }
+            }
+        }
     }
 
     public override void Update(GameTime gameTime) {
@@ -168,6 +182,15 @@ public class MenuBar : UIControl {
                     action?.Invoke();
                     CloseDropdown();
                 };
+
+                // Add shortcut label if present
+                if (!string.IsNullOrEmpty(item.Shortcut)) {
+                    var shortcutLabel = new Label(new Vector2(dropdownWidth - 80, 5), item.Shortcut) {
+                        TextColor = MenuTextColor * 0.6f,
+                        FontSize = 14
+                    };
+                    btn.AddChild(shortcutLabel);
+                }
 
                 _dropdownPanel.AddChild(btn);
                 y += itemHeight;
