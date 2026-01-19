@@ -42,7 +42,10 @@ public static class InputManager {
 
     private static double _lastLeftClickTime;
     private static double _lastRightClickTime;
+    private static Point _lastLeftClickPos;
+    private static Point _lastRightClickPos;
     private const double DoubleClickThreshold = 0.3; // 300ms
+    private const float DoubleClickDistanceThreshold = 5f; // 5px
     private static bool _isDoubleClickFrame; // Only true for one frame
     private static bool _isRightDoubleClickFrame;
 
@@ -94,12 +97,16 @@ public static class InputManager {
             GetButtonState(_previousMouse, MouseButton.Left) == ButtonState.Released) {
                 
             double now = gameTime.TotalGameTime.TotalSeconds;
-            if (now - _lastLeftClickTime < DoubleClickThreshold) {
+            Point currentPos = _currentMouse.Position;
+            float dist = Vector2.Distance(currentPos.ToVector2(), _lastLeftClickPos.ToVector2());
+
+            if (now - _lastLeftClickTime < DoubleClickThreshold && dist < DoubleClickDistanceThreshold) {
                 _isDoubleClickFrame = true;
                 _lastLeftClickTime = 0; // Reset so triple click isn't two double clicks
             } else {
                  _isDoubleClickFrame = false; 
                  _lastLeftClickTime = now;
+                 _lastLeftClickPos = currentPos;
             }
         }
         
@@ -108,12 +115,16 @@ public static class InputManager {
             GetButtonState(_previousMouse, MouseButton.Right) == ButtonState.Released) {
                 
             double now = gameTime.TotalGameTime.TotalSeconds;
-            if (now - _lastRightClickTime < DoubleClickThreshold) {
+            Point currentPos = _currentMouse.Position;
+            float dist = Vector2.Distance(currentPos.ToVector2(), _lastRightClickPos.ToVector2());
+
+            if (now - _lastRightClickTime < DoubleClickThreshold && dist < DoubleClickDistanceThreshold) {
                 _isRightDoubleClickFrame = true;
                 _lastRightClickTime = 0;
             } else {
                  _isRightDoubleClickFrame = false; 
                  _lastRightClickTime = now;
+                 _lastRightClickPos = currentPos;
             }
         }
     }
