@@ -24,6 +24,7 @@ public class DesktopScene : Core.Scenes.Scene {
     private DesktopPanel _desktopLayer;
     private BlurredWindowLayerPanel _windowLayer;
     private StartMenu _startMenu;
+    private ClipboardHistoryPanel _clipboardPanel;
     private Taskbar _taskbar;
     private ContextMenu _contextMenu;
     private DesktopIcon _trashIconEl;
@@ -79,10 +80,15 @@ public class DesktopScene : Core.Scenes.Scene {
         _uiManager.AddElement(_windowLayer);
 
         // 3. Taskbar Layer (Top of Windows)
-        _startMenu = new StartMenu(new Vector2(0, screenHeight - TaskbarHeight - StartMenuHeight), new Vector2(StartMenuWidth, StartMenuHeight));
+        _startMenu = new StartMenu(new Vector2(0, screenHeight - 500 - 40), new Vector2(400, 500));
+        _startMenu.IsVisible = false;
         _uiManager.AddElement(_startMenu);
 
-        // Initialize Shell
+        _clipboardPanel = new ClipboardHistoryPanel();
+        _clipboardPanel.IsVisible = false;
+        _uiManager.AddElement(_clipboardPanel);
+        
+        // Register Shell event to update Explorers
         Shell.Initialize(_windowLayer, _contextMenu);
         Shell.OnAddOverlayElement = (el) => _uiManager.AddElement(el);
 
@@ -134,19 +140,18 @@ public class DesktopScene : Core.Scenes.Scene {
     }
 
     private void RegisterGlobalHotkeys() {
-        DebugLogger.Log("Registering hotkeys");
+        DebugLogger.Log("Registering global hotkeys");
         Shell.Hotkeys.RegisterGlobal(Keys.None, HotkeyModifiers.Win, () => {
-            DebugLogger.Log("Win button pressed - Opening Start Menu");
-            ToggleStartMenu();
+            _startMenu?.Toggle();
         });
 
         Shell.Hotkeys.RegisterGlobal(Keys.V, HotkeyModifiers.Win, () => {
-            DebugLogger.Log("Win button v");
+            _clipboardPanel?.Toggle();
         });
-    }
 
-    public void ToggleStartMenu() {
-        if (_startMenu != null) _startMenu.Toggle();
+        Shell.Hotkeys.RegisterGlobal(Keys.C, HotkeyModifiers.Ctrl, () => UIManager.FocusedElement?.Copy());
+        Shell.Hotkeys.RegisterGlobal(Keys.X, HotkeyModifiers.Ctrl, () => UIManager.FocusedElement?.Cut());
+        Shell.Hotkeys.RegisterGlobal(Keys.V, HotkeyModifiers.Ctrl, () => UIManager.FocusedElement?.Paste());
     }
 
     private void LoadDesktopIcons() {
@@ -730,6 +735,8 @@ public class DesktopScene : Core.Scenes.Scene {
         }
 
         protected override void UpdateInput() {
+            base.UpdateInput();
+            
             bool alreadyConsumed = InputManager.IsMouseConsumed;
             bool isHovered = InputManager.IsMouseHovering(Bounds);
 
@@ -807,6 +814,8 @@ public class DesktopScene : Core.Scenes.Scene {
 
             if (_isSelecting) {
                 if (InputManager.IsMouseButtonDown(MouseButton.Left)) {
+                    // Once selection is active, we continue updating it even if hit an icon (alreadyConsumed)
+                    // This prevents icons from breaking a selection drag that's already in progress.
                     var currentMouseVec = InputManager.MousePosition.ToVector2();
                     float x = Math.Min(_selectionStart.X, currentMouseVec.X);
                     float y = Math.Min(_selectionStart.Y, currentMouseVec.Y);
@@ -815,13 +824,13 @@ public class DesktopScene : Core.Scenes.Scene {
                     var rawRect = new Rectangle((int)x, (int)y, (int)w, (int)h);
                     _marqueeRect = Rectangle.Intersect(rawRect, Bounds);
                     foreach (var child in Children) if (child is DesktopIcon icon) icon.IsSelected = _marqueeRect.Intersects(icon.Bounds);
+                    
                     InputManager.IsMouseConsumed = true;
                 } else {
                     _isSelecting = false;
                     _marqueeRect = Rectangle.Empty;
                 }
             }
-            base.UpdateInput();
         }
 
         private void CreateNewDesktopItem(string defaultName, string extension, Vector2 clickPos, bool isDirectory) {

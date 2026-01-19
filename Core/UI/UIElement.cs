@@ -39,6 +39,7 @@ public abstract class UIElement {
     public virtual Vector2 ClientSize => Size;
     public bool IsVisible { get; set; } = true;
     public bool ConsumesInput { get; set; } = true; // If true, mouse/keyboard input is blocked for elements below
+    public bool CanFocus { get; set; } = true; // If true, clicking this element will focus it
     public bool IsActive { get; set; } = true;
     public float Opacity { get; set; } = 1.0f;
     public float AbsoluteOpacity => (Parent?.AbsoluteOpacity ?? 1.0f) * Opacity;
@@ -75,7 +76,32 @@ public abstract class UIElement {
     public Rectangle Bounds => new Rectangle(AbsolutePosition.ToPoint(), Size.ToPoint());
 
     public bool IsMouseOver { get; protected set; }
-    public bool IsFocused { get; set; }
+    
+    private bool _isFocused;
+    public bool IsFocused {
+        get => _isFocused;
+        set {
+            if (_isFocused == value) return;
+            _isFocused = value;
+            if (_isFocused) OnFocused();
+            else OnUnfocused();
+        }
+    }
+
+    protected virtual void OnFocused() { }
+    protected virtual void OnUnfocused() { }
+
+    // Clipboard & Selection API
+    public virtual void Copy() { }
+    public virtual void Cut() { }
+    public virtual void Paste() { }
+    public virtual void DeleteSelection() { }
+    public virtual bool HasSelection() => false;
+    
+    /// <summary>
+    /// Returns the absolute screen position of the text caret, if applicable.
+    /// </summary>
+    public virtual Vector2? GetCaretPosition() => null;
 
     public virtual void Update(GameTime gameTime) {
         if (!IsActive || !IsVisible) return;
@@ -102,10 +128,11 @@ public abstract class UIElement {
         if (!IsVisible) return;
 
         bool wasMouseOver = IsMouseOver;
-        // Check hover once at the start. If someone else consumed it, we aren't hovered.
-        IsMouseOver = InputManager.IsMouseHovering(Bounds);
+        // Strict hover check: only true if no one in front has consumed the mouse
+        IsMouseOver = InputManager.IsMouseHovering(Bounds, ignoreConsumed: false);
 
         // Store input states while we are still "the top element" (before we consume it ourselves)
+        // ignoreConsumed: false ensures we only react if no one else (in front) caught the click
         bool justPressed = IsMouseOver && InputManager.IsMouseButtonJustPressed(MouseButton.Left);
         bool justRightPressed = IsMouseOver && InputManager.IsMouseButtonJustPressed(MouseButton.Right);
         bool justReleased = InputManager.IsMouseButtonJustReleased(MouseButton.Left);

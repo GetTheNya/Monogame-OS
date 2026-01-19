@@ -191,7 +191,7 @@ public class Window : UIElement {
         if (IsVisible && !_obscuredByAnotherWindow && !_isDragging && !_isResizing) {
             const int ResizeEdge = 6;
             bool isHoveringRaw = InputManager.IsMouseHovering(Bounds, ignoreConsumed: true);
-            bool isJustPressed = isHoveringRaw && InputManager.IsMouseButtonJustPressed(MouseButton.Left, ignoreConsumed: true);
+            bool isJustPressed = isHoveringRaw && InputManager.IsMouseButtonJustPressed(MouseButton.Left);
             
             // Check for resize edge clicks FIRST (before children can consume input)
             if (isJustPressed && !_isMaximized && CanResize) {
@@ -428,7 +428,7 @@ public class Window : UIElement {
         bool isHoveringRaw = InputManager.IsMouseHovering(Bounds, ignoreConsumed: true); // Raw window hover
         
         bool isDoubleClick = isHoveringRaw && InputManager.IsDoubleClick(MouseButton.Left, ignoreConsumed: true);
-        bool isJustPressed = isHoveringRaw && InputManager.IsMouseButtonJustPressed(MouseButton.Left, ignoreConsumed: true);
+        bool isJustPressed = isHoveringRaw && InputManager.IsMouseButtonJustPressed(MouseButton.Left);
 
         // 2. Hover cursor logic (Always check if hovering over window)
         const int ResizeEdge = 6;

@@ -36,19 +36,22 @@ public class NotificationHistoryPanel : UIElement {
         Size = new Vector2(PanelWidth, viewport.Height - 40);
         _slideOffset = PanelWidth;
         Position = new Vector2(viewport.Width - PanelWidth + _slideOffset, 0);
+        CanFocus = false;
+        ConsumesInput = true;
 
         // Header
-        _headerLabel = new Label(new Vector2(Padding, 15), "Notifications") { FontSize = 20, Color = Color.White };
+        _headerLabel = new Label(new Vector2(Padding, 15), "Notifications") { FontSize = 20, Color = Color.White, CanFocus = false };
         AddChild(_headerLabel);
 
         _clearButton = new Button(new Vector2(PanelWidth - 100, 12), new Vector2(85, 30), "Clear all") {
-            BackgroundColor = new Color(60, 60, 60)
+            BackgroundColor = new Color(60, 60, 60),
+            CanFocus = false
         };
         _clearButton.OnClickAction = ClearAllAnimated;
         AddChild(_clearButton);
 
         // Scrollable content area
-        _scrollPanel = new ScrollPanel(new Vector2(0, HeaderHeight), new Vector2(PanelWidth, Size.Y - HeaderHeight));
+        _scrollPanel = new ScrollPanel(new Vector2(0, HeaderHeight), new Vector2(PanelWidth, Size.Y - HeaderHeight)) { CanFocus = false };
         AddChild(_scrollPanel);
 
         // Subscribe to notification events
@@ -141,7 +144,7 @@ public class NotificationHistoryPanel : UIElement {
         var history = NotificationManager.Instance.History;
 
         if (history.Count == 0) {
-            _scrollPanel.AddChild(new Label(new Vector2(Padding, y), "No notifications") { FontSize = 14, Color = Color.Gray });
+            _scrollPanel.AddChild(new Label(new Vector2(Padding, y), "No notifications") { FontSize = 14, Color = Color.Gray, CanFocus = false });
             _scrollPanel.UpdateContentHeight(y + 30);
             return;
         }
@@ -158,7 +161,7 @@ public class NotificationHistoryPanel : UIElement {
                 string dateLabel = notifDate == DateTime.Today ? "Today" :
                                    notifDate == DateTime.Today.AddDays(-1) ? "Yesterday" :
                                    notifDate.ToString("MMMM d");
-                _scrollPanel.AddChild(new Label(new Vector2(Padding, y), dateLabel) { FontSize = 12, Color = Color.Gray });
+                _scrollPanel.AddChild(new Label(new Vector2(Padding, y), dateLabel) { FontSize = 12, Color = Color.Gray, CanFocus = false });
                 y += 25;
             }
 
@@ -266,7 +269,8 @@ public class NotificationHistoryItem : UIElement {
             foreach (var action in _notification.Actions) {
                 var btn = new Button(new Vector2(btnX, currentY), new Vector2(85, 26), action.Label) {
                     BackgroundColor = new Color(60, 60, 60),
-                    FontSize = 13
+                    FontSize = 13,
+                    CanFocus = false
                 };
                 var capturedAction = action;
                 btn.OnClickAction = () => {
@@ -281,10 +285,12 @@ public class NotificationHistoryItem : UIElement {
         
         float contentHeight = currentY + 22f; // Area for timestamp
         Size = new Vector2(width, Math.Max(75f, contentHeight));
+        CanFocus = false;
 
         _dismissBtn = new Button(new Vector2(Size.X - 25, 5), new Vector2(20, 20), "×") {
             BackgroundColor = Color.Transparent,
-            HoverColor = new Color(200, 50, 50)
+            HoverColor = new Color(200, 50, 50),
+            CanFocus = false
         };
         _dismissBtn.OnClickAction = () => {
             if (!_isAnimatingOut) {

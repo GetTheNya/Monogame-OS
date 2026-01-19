@@ -60,32 +60,41 @@ public class DesktopIcon : UIElement {
     public override void Update(GameTime gameTime) {
         base.Update(gameTime);
         
-        // Update rename input
+        // Handle rename closing logic
         if (_isRenaming && _renameInput != null) {
-            _renameInput.Position = AbsolutePosition + new Vector2(0, 58);
-            _renameInput.Update(gameTime);
-            
             // Cancel on Escape or click outside
             if (InputManager.IsKeyJustPressed(Microsoft.Xna.Framework.Input.Keys.Escape)) {
                 CancelRename();
-            } else if (InputManager.IsMouseButtonJustPressed(MouseButton.Left) && 
-                       !_renameInput.Bounds.Contains(InputManager.MousePosition)) {
-                CompleteRename(_renameInput.Value);
+            } else if (InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
+                // If the mouse press was already consumed by something else in the update loop 
+                // (like a popup or window on top), don't finalize here.
+                if (InputManager.IsMouseConsumed) return;
+
+                // Check if we hit the rename input or icon. 
+                // ignoreConsumed: true because we might have been the ones who consumed it just now.
+                bool hitRename = InputManager.IsMouseHovering(_renameInput.Bounds, ignoreConsumed: true);
+                
+                if (!hitRename) {
+                    CompleteRename(_renameInput.Value);
+                }
             }
         }
     }
     
     protected override void UpdateInput() {
+        base.UpdateInput();
         if (!IsVisible || _isRenaming) return;
 
         // Input capture order:
         // 1. Check for mouse hovering and basic clicks (left, right, double)
         // 2. Handle dragging separately as it can span multiple frames and requires mouse button held down.
 
-        bool isHovering = InputManager.IsMouseHovering(Bounds);
+        // Use IsMouseOver (strict) and ignoreConsumed: true for the click check 
+        // because base.UpdateInput() already consumed the mouse for us if we are hovered.
+        bool isHovering = IsMouseOver;
         bool isJustPressed = isHovering && InputManager.IsMouseButtonJustPressed(MouseButton.Left);
         bool isRightPressed = isHovering && InputManager.IsMouseButtonJustPressed(MouseButton.Right);
-        bool isDoubleClick = isHovering && InputManager.IsDoubleClick(MouseButton.Left);
+        bool isDoubleClick = isHovering && InputManager.IsDoubleClick(MouseButton.Left, ignoreConsumed: true);
 
         if (isHovering && ConsumesInput && !_isDragging)
             InputManager.IsMouseConsumed = true;
@@ -190,18 +199,18 @@ public class DesktopIcon : UIElement {
             currentName = System.IO.Path.GetFileNameWithoutExtension(currentName);
         }
         
-        // Create text input positioned over the label
-        var absPos = AbsolutePosition;
-        float iconSize = 48f;
-        float labelY = absPos.Y + iconSize + 10;
-        
-        _renameInput = new TextInput(new Vector2(absPos.X, labelY), new Vector2(Size.X, 20)) {
+        // Create text input positioned over the label (relative to icon)
+        _renameInput = new TextInput(new Vector2(0, 58), new Vector2(Size.X, 20)) {
             Value = currentName,
             BackgroundColor = Color.White,
+            HoverColor = Color.White,
+            PressedColor = Color.White,
             TextColor = Color.Black
         };
         _renameInput.OnSubmit += CompleteRename;
-        _renameInput.IsFocused = true;
+        AddChild(_renameInput);
+        UIManager.SetFocus(_renameInput);
+        _renameInput.SelectAll();
     }
     
     private void CompleteRename(string newName) {
@@ -261,12 +270,14 @@ public class DesktopIcon : UIElement {
         } catch (Exception ex) {
             Shell.Notifications.Show("Rename Error", ex.Message);
         } finally {
+            if (_renameInput != null) RemoveChild(_renameInput);
             _isRenaming = false;
             _renameInput = null;
         }
     }
     
     private void CancelRename() {
+        if (_renameInput != null) RemoveChild(_renameInput);
         _isRenaming = false;
         _renameInput = null;
     }
@@ -382,10 +393,8 @@ public class DesktopIcon : UIElement {
             batch.BorderRectangle(iconPos, new Vector2(iconSize, iconSize), Color.White, thickness: 1f);
         }
 
-        // Draw Label or Rename Input
-        if (_isRenaming && _renameInput != null) {
-            _renameInput.Draw(spriteBatch, batch);
-        } else if (!string.IsNullOrEmpty(Label) && GameContent.FontSystem != null) {
+        // Draw Label
+        if (!_isRenaming && !string.IsNullOrEmpty(Label) && GameContent.FontSystem != null) {
             var font = GameContent.FontSystem.GetFont(14);
             if (font != null) {
                 DrawWrappedLabel(batch, font, Label, absPos, iconSize);

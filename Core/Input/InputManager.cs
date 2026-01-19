@@ -143,23 +143,15 @@ public static class InputManager {
     // --- Mouse ---
 
     public static bool IsMouseButtonDown(MouseButton button) {
-        // We do NOT block IsDown check based on consumption. 
-        // Logic often consumes input then checks if mouse is still held to continue action (Drag).
         return GetButtonState(_currentMouse, button) == ButtonState.Pressed;
     }
 
-    public static bool IsMouseButtonJustPressed(MouseButton button, bool ignoreConsumed = false) {
-        if (!ignoreConsumed && IsMouseConsumed) return false;
+    public static bool IsMouseButtonJustPressed(MouseButton button) {
         return GetButtonState(_currentMouse, button) == ButtonState.Pressed &&
                GetButtonState(_previousMouse, button) == ButtonState.Released;
     }
 
     public static bool IsMouseButtonJustReleased(MouseButton button) {
-        // We generally don't block release events even if consumed, otherwise drags might get stuck.
-        // But strictly speaking, if consumed, we might want to block. 
-        // For now, let's block only if the press started when not consumed? 
-        // keeping it simple: block if consumed.
-        if (IsMouseConsumed) return false;
         return GetButtonState(_currentMouse, button) == ButtonState.Released &&
                GetButtonState(_previousMouse, button) == ButtonState.Pressed;
     }
@@ -173,9 +165,21 @@ public static class InputManager {
         };
     }
 
+    public static bool IsAnyMouseButtonDown() {
+        return _currentMouse.LeftButton == ButtonState.Pressed ||
+               _currentMouse.RightButton == ButtonState.Pressed ||
+               _currentMouse.MiddleButton == ButtonState.Pressed;
+    }
+
     public static bool IsAnyMouseButtonJustPressed(MouseButton button) {
         return GetButtonState(_currentMouse, button) == ButtonState.Pressed &&
                GetButtonState(_previousMouse, button) == ButtonState.Released;
+    }
+
+    public static bool IsAnyMouseButtonJustPressed() {
+        return (GetButtonState(_currentMouse, MouseButton.Left) == ButtonState.Pressed && GetButtonState(_previousMouse, MouseButton.Left) == ButtonState.Released) ||
+               (GetButtonState(_currentMouse, MouseButton.Right) == ButtonState.Pressed && GetButtonState(_previousMouse, MouseButton.Right) == ButtonState.Released) ||
+               (GetButtonState(_currentMouse, MouseButton.Middle) == ButtonState.Pressed && GetButtonState(_previousMouse, MouseButton.Middle) == ButtonState.Released);
     }
 
     public static bool IsMouseHovering(Rectangle rect, bool ignoreConsumed = false) {

@@ -9,6 +9,16 @@ public class UIManager {
     private UIElement _root;
     private TooltipManager _tooltipManager;
 
+    public static UIElement FocusedElement { get; private set; }
+    
+    public static void SetFocus(UIElement element) {
+        if (FocusedElement == element) return;
+        
+        if (FocusedElement != null) FocusedElement.IsFocused = false;
+        FocusedElement = element;
+        if (FocusedElement != null) FocusedElement.IsFocused = true;
+    }
+
     public UIManager() {
         // A root container that covers the whole screen
         _root = new RootElement();
@@ -27,6 +37,33 @@ public class UIManager {
     public void Update(GameTime gameTime) {
         try {
             _root.Size = new Vector2(G.GraphicsDevice.Viewport.Width, G.GraphicsDevice.Viewport.Height);
+
+            // Handle focus on click
+            if (TheGame.Core.Input.InputManager.IsAnyMouseButtonJustPressed(TheGame.Core.Input.MouseButton.Left)) {
+                UIElement clicked = FindElementAtPosition(_root, TheGame.Core.Input.InputManager.MousePosition.ToVector2());
+                
+                // Traverse up to find the actual element that handles input (for focus logic)
+                UIElement effectiveElement = clicked;
+                while (effectiveElement != null && !effectiveElement.ConsumesInput) {
+                    effectiveElement = effectiveElement.Parent;
+                }
+
+                if (effectiveElement != null) {
+                    // We hit something that consumes input.
+                    // If the deepest clicked element is focusable, focus it.
+                    // Otherwise, if any parent is focusable, maybe focus it? 
+                    // Usually we just want to focus the specific control.
+                    if (clicked != null && clicked.CanFocus) {
+                        SetFocus(clicked);
+                    }
+                    // Else: We hit a non-focusable consuming element (like a panel background).
+                    // We PRESERVE focus instead of clearing it.
+                } else {
+                    // Clicked on raw background or non-consuming area
+                    SetFocus(null);
+                }
+            }
+
             _root.Update(gameTime);
             _tooltipManager.Update(gameTime, _root);
         } catch (Exception ex) {
@@ -60,6 +97,18 @@ public class UIManager {
                 throw;
             }
         }
+    }
+
+    private UIElement FindElementAtPosition(UIElement parent, Vector2 pos) {
+        if (!parent.IsVisible || !parent.Bounds.Contains(pos)) return null;
+
+        // Check children first (top-most)
+        for (int i = parent.Children.Count - 1; i >= 0; i--) {
+            var found = FindElementAtPosition(parent.Children[i], pos);
+            if (found != null) return found;
+        }
+
+        return parent;
     }
 
     // Invisible root container

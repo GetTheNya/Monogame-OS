@@ -4,7 +4,9 @@ using Microsoft.Xna.Framework.Input;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Linq;
 using TheGame.Core.Input;
+using TheGame.Core.OS;
 using TheGame.Graphics;
 
 namespace TheGame.Core.UI.Controls;
@@ -58,26 +60,32 @@ public class TextArea : ValueControl<string> {
     // OnTextChanged is now inherited as OnValueChanged from ValueControl<string>
 
     public TextArea(Vector2 position, Vector2 size) : base(position, size, "") {
-        ConsumesInput = true;
         BackgroundColor = new Color(30, 30, 30);
         BorderColor = new Color(60, 60, 60);
+    }
+
+    protected override void OnHover() {
+        CustomCursor.Instance.SetCursor(CursorType.Beam);
+        base.OnHover();
     }
 
     protected override void UpdateInput() {
         base.UpdateInput();
 
         if (InputManager.IsAnyMouseButtonJustPressed(MouseButton.Left)) {
-            IsFocused = IsMouseOver;
-            if (IsFocused) {
+            if (IsMouseOver) {
                 SetCursorFromMouse();
                 _selStartLine = _cursorLine;
                 _selStartCol = _cursorCol;
                 _isWordSelecting = false;
+                InputManager.IsMouseConsumed = true; // Consume mouse input
             }
         }
 
         if (IsFocused) {
-            if (InputManager.IsMouseButtonDown(MouseButton.Left)) {
+            // Drag selection: Use ignoreConsumed: true so we don't block ourselves if we already consumed the mouse this frame
+            if (_isPressed && InputManager.IsMouseButtonDown(MouseButton.Left)) {
+                InputManager.IsMouseConsumed = true;
                 if (!_isWordSelecting) {
                     SetCursorFromMouse();
                 }
@@ -88,6 +96,7 @@ public class TextArea : ValueControl<string> {
             if (InputManager.IsDoubleClick(MouseButton.Left, ignoreConsumed: true) && IsMouseOver) {
                 SelectWordAtCursor();
                 _isWordSelecting = true;
+                InputManager.IsMouseConsumed = true;
             }
         }
 
@@ -119,12 +128,11 @@ public class TextArea : ValueControl<string> {
                 if (!shift) { _selStartLine = _cursorLine; _selStartCol = _cursorCol; }
             }
 
-            // Select all
-            if (ctrl && InputManager.IsKeyJustPressed(Keys.A)) {
-                _selStartLine = 0; _selStartCol = 0;
-                _cursorLine = _lines.Count - 1;
-                _cursorCol = _lines[_cursorLine].Length;
-            }
+            // Select all / Copy / Cut / Paste
+            if (ctrl && InputManager.IsKeyJustPressed(Keys.A)) SelectAll();
+            if (ctrl && InputManager.IsKeyJustPressed(Keys.C)) Copy();
+            if (ctrl && InputManager.IsKeyJustPressed(Keys.X)) Cut();
+            if (ctrl && InputManager.IsKeyJustPressed(Keys.V)) Paste();
 
             // Backspace
             if (InputManager.IsKeyRepeated(Keys.Back)) {
@@ -219,11 +227,73 @@ public class TextArea : ValueControl<string> {
         _cursorCol = col;
     }
 
+    public override Vector2? GetCaretPosition() {
+        if (GameContent.FontSystem == null) return null;
+        var font = GameContent.FontSystem.GetFont(FontSize);
+        float lineHeight = font.LineHeight;
+        float cursorX = _cursorCol == 0 ? 0 : font.MeasureString(_lines[_cursorLine].Substring(0, _cursorCol)).X;
+        float cursorY = _cursorLine * lineHeight;
+        
+        return AbsolutePosition + new Vector2(5 - _scrollOffsetX + cursorX, 5 - _scrollOffset + cursorY);
+    }
+
     public void SelectAll() {
         _selStartLine = 0;
         _selStartCol = 0;
         _cursorLine = _lines.Count - 1;
         _cursorCol = _lines[_cursorLine].Length;
+    }
+
+    public override void Copy() {
+        if (!HasSelection()) return;
+        GetSelectionRange(out int sl, out int sc, out int el, out int ec);
+        
+        StringBuilder sb = new();
+        for (int i = sl; i <= el; i++) {
+            int start = (i == sl) ? sc : 0;
+            int end = (i == el) ? ec : _lines[i].Length;
+            sb.Append(_lines[i].Substring(start, end - start));
+            if (i < el) sb.Append("\n");
+        }
+        
+        string appId = GetOwnerProcess()?.AppId ?? "Unknown";
+        ClipboardManager.Instance.SetData(sb.ToString(), ClipboardContentType.Text, appId);
+    }
+
+    public override void Cut() {
+        if (!HasSelection()) return;
+        Copy();
+        DeleteSelection();
+    }
+
+    public override void Paste() {
+        string text = Shell.Clipboard.GetText();
+        if (string.IsNullOrEmpty(text)) return;
+
+        if (HasSelection()) DeleteSelection();
+
+        string[] newLines = text.Split('\n');
+        string currentLine = _lines[_cursorLine];
+        string before = currentLine.Substring(0, _cursorCol);
+        string after = currentLine.Substring(_cursorCol);
+
+        if (newLines.Length == 1) {
+            _lines[_cursorLine] = before + newLines[0] + after;
+            _cursorCol += newLines[0].Length;
+        } else {
+            _lines[_cursorLine] = before + newLines[0];
+            for (int i = 1; i < newLines.Length - 1; i++) {
+                _lines.Insert(_cursorLine + i, newLines[i]);
+            }
+            _lines.Insert(_cursorLine + newLines.Length - 1, newLines[^1] + after);
+            _cursorLine += newLines.Length - 1;
+            _cursorCol = newLines[^1].Length;
+        }
+
+        ResetSelection();
+        _maxWidthDirty = true;
+        OnValueChanged?.Invoke(Value);
+        EnsureCursorVisible();
     }
 
     private void SelectWordAtCursor() {
@@ -267,14 +337,14 @@ public class TextArea : ValueControl<string> {
         EnsureCursorVisible();
     }
 
-    private bool HasSelection() => _cursorLine != _selStartLine || _cursorCol != _selStartCol;
+    public override bool HasSelection() => _cursorLine != _selStartLine || _cursorCol != _selStartCol;
 
     private void ResetSelection() {
         _selStartLine = _cursorLine;
         _selStartCol = _cursorCol;
     }
 
-    private void DeleteSelection() {
+    public override void DeleteSelection() {
         GetSelectionRange(out int startLine, out int startCol, out int endLine, out int endCol);
 
         if (startLine == endLine) {
@@ -345,7 +415,8 @@ public class TextArea : ValueControl<string> {
             if (_cursorTimer >= 0.5f) { _showCursor = !_showCursor; _cursorTimer = 0f; }
 
             // Auto-scroll logic while dragging
-            if (InputManager.IsMouseButtonDown(MouseButton.Left) && !_isWordSelecting) {
+            if (_isPressed && InputManager.IsMouseButtonDown(MouseButton.Left) && !_isWordSelecting) {
+                // Input consumption is handled in UpdateInput()
                 var mousePos = InputManager.MousePosition.ToVector2();
                 var absPos = AbsolutePosition;
                 float scrollSpeed = 500f * dt;

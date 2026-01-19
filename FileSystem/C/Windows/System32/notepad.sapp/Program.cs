@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Microsoft.Xna.Framework;
 using TheGame;
 using TheGame.Core.UI;
@@ -67,10 +68,10 @@ public class NotepadWindow : Window {
         _menuBar.AddMenu("Edit", m => {
             m.AddItem("Undo", () => { /* TODO */ }, "Ctrl+Z");
             m.AddSeparator();
-            m.AddItem("Cut", () => { /* TODO */ }, "Ctrl+X");
-            m.AddItem("Copy", () => { /* TODO */ }, "Ctrl+C");
-            m.AddItem("Paste", () => { /* TODO */ }, "Ctrl+V");
-            m.AddItem("Delete", () => { /* TODO */ }, "Del");
+            m.AddItem("Cut", () => _textArea.Cut(), "Ctrl+X");
+            m.AddItem("Copy", () => _textArea.Copy(), "Ctrl+C");
+            m.AddItem("Paste", () => _textArea.Paste(), "Ctrl+V");
+            m.AddItem("Delete", () => { if (_textArea.HasSelection()) _textArea.DeleteSelection(); }, "Del");
             m.AddSeparator();
             m.AddItem("Select All", SelectAll, "Ctrl+A");
         });

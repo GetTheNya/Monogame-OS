@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
 using TheGame.Core.Input;
+using TheGame.Core.OS;
 using TheGame.Graphics;
 
 namespace TheGame.Core.UI.Controls;
@@ -28,6 +29,7 @@ public class TextInput : ValueControl<string> {
     public new string Value {
         get => base.Value;
         set {
+            if (base.Value == value) return;
             base.Value = value;
             _cursorPos = value?.Length ?? 0;
             _selectionEnd = _cursorPos;
@@ -39,22 +41,28 @@ public class TextInput : ValueControl<string> {
         ConsumesInput = true;
     }
 
+    protected override void OnHover() {
+        CustomCursor.Instance.SetCursor(CursorType.Beam);
+        base.OnHover();
+    }
+
     protected override void UpdateInput() {
         base.UpdateInput(); // Update IsMouseOver first
 
         if (InputManager.IsAnyMouseButtonJustPressed(MouseButton.Left)) {
-            IsFocused = IsMouseOver;
-            if (IsFocused) {
+            if (IsMouseOver) {
                 // Set cursor based on click position
                 _cursorPos = GetCursorIndexFromMouse();
                 _selectionEnd = _cursorPos;
                 _isWordSelecting = false;
+                InputManager.IsMouseConsumed = true; // Consume mouse input
             }
         }
 
         if (IsFocused) {
-            if (InputManager.IsMouseButtonDown(MouseButton.Left)) {
-                // Dragging to select
+            // Drag selection: Use ignoreConsumed: true so we don't block ourselves if we already consumed the mouse this frame
+            if (_isPressed && InputManager.IsMouseButtonDown(MouseButton.Left)) {
+                InputManager.IsMouseConsumed = true;
                 if (!_isWordSelecting) {
                     _cursorPos = GetCursorIndexFromMouse();
                 }
@@ -62,9 +70,10 @@ public class TextInput : ValueControl<string> {
                 _isWordSelecting = false;
             }
 
-            if (InputManager.IsDoubleClick(MouseButton.Left, ignoreConsumed: true) && IsMouseOver) {
+            if (IsFocused && InputManager.IsDoubleClick(MouseButton.Left, ignoreConsumed: true) && IsMouseOver) {
                 SelectWordAtCursor();
                 _isWordSelecting = true;
+                InputManager.IsMouseConsumed = true;
             }
 
             // Keyboard navigation & Repeat
@@ -87,6 +96,9 @@ public class TextInput : ValueControl<string> {
                 _selectionEnd = 0;
                 _cursorPos = Value.Length;
             }
+            if (ctrl && InputManager.IsKeyJustPressed(Keys.C)) Copy();
+            if (ctrl && InputManager.IsKeyJustPressed(Keys.X)) Cut();
+            if (ctrl && InputManager.IsKeyJustPressed(Keys.V)) Paste();
 
             // Handle Backspace
             if (InputManager.IsKeyRepeated(Keys.Back)) {
@@ -109,7 +121,7 @@ public class TextInput : ValueControl<string> {
             // Handle Enter
             if (InputManager.IsKeyJustPressed(Keys.Enter)) {
                 OnSubmit?.Invoke(Value);
-                IsFocused = false;
+                UIManager.SetFocus(null);
             }
 
             // Handle Character Input
@@ -126,7 +138,6 @@ public class TextInput : ValueControl<string> {
         }
 
         EnsureCursorVisible();
-        base.UpdateInput();
     }
 
     private int GetCursorIndexFromMouse() {
@@ -149,9 +160,18 @@ public class TextInput : ValueControl<string> {
         return bestIdx;
     }
 
-    private bool HasSelection() => _cursorPos != _selectionEnd;
+    public override Vector2? GetCaretPosition() {
+        if (GameContent.FontSystem == null) return null;
+        var font = GameContent.FontSystem.GetFont(20);
+        float textY = (Size.Y - font.LineHeight) / 2f;
+        float cursorX = _cursorPos == 0 ? 0 : font.MeasureString(Value.Substring(0, _cursorPos)).X;
+        
+        return AbsolutePosition + new Vector2(5 - _scrollX + cursorX, textY);
+    }
 
-    private void DeleteSelection() {
+    public override bool HasSelection() => _cursorPos != _selectionEnd;
+
+    public override void DeleteSelection() {
         if (string.IsNullOrEmpty(Value)) {
             _cursorPos = 0;
             _selectionEnd = 0;
@@ -179,6 +199,40 @@ public class TextInput : ValueControl<string> {
         }
         _cursorPos = start;
         _selectionEnd = _cursorPos;
+        OnValueChanged?.Invoke(Value);
+    }
+
+    public override void Copy() {
+        if (!HasSelection()) return;
+        int start = Math.Min(_cursorPos, _selectionEnd);
+        int length = Math.Abs(_cursorPos - _selectionEnd);
+        string text = Value.Substring(start, length);
+        
+        string appId = GetOwnerProcess()?.AppId ?? "Unknown";
+        ClipboardManager.Instance.SetData(text, ClipboardContentType.Text, appId);
+    }
+
+    public override void Cut() {
+        if (!HasSelection()) return;
+        Copy();
+        DeleteSelection();
+    }
+
+    public override void Paste() {
+        string text = Shell.Clipboard.GetText();
+        if (string.IsNullOrEmpty(text)) return;
+
+        if (HasSelection()) DeleteSelection();
+
+        base.Value = Value.Insert(_cursorPos, text);
+        _cursorPos += text.Length;
+        _selectionEnd = _cursorPos;
+        OnValueChanged?.Invoke(Value);
+    }
+
+    public void SelectAll() {
+        _selectionEnd = 0;
+        _cursorPos = Value.Length;
     }
 
     private void MoveCursor(int delta, bool select) {
@@ -241,9 +295,14 @@ public class TextInput : ValueControl<string> {
                 _showCursor = !_showCursor;
                 _cursorTimer = 0f;
             }
+            
+            // If background should be white (like search bars or renames), don't wait for lerp
+            if (BackgroundColor == Color.White) CurrentBackgroundColor = Color.White;
 
             // Auto-scroll when dragging horizontally
-            if (InputManager.IsMouseButtonDown(MouseButton.Left) && !_isWordSelecting) {
+            if (_isPressed && InputManager.IsMouseButtonDown(MouseButton.Left) && !_isWordSelecting) {
+                // Input consumption is handled in UpdateInput()
+
                 var mousePos = InputManager.MousePosition.ToVector2();
                 var absPos = AbsolutePosition;
                 float scrollSpeed = 500f * dt;

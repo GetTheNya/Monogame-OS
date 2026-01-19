@@ -1,0 +1,13 @@
+{
+  "appId": "CLIPBOARDTEST",
+  "name": "Clipboard test",
+  "icon": "icon.png",
+  "version": "1.0.0",
+  "author": "Unknown",
+  "description": "Clipboard test",
+  "entryPoint": "Program.cs",
+  "entryClass": "ClipboardTest.Program",
+  "entryMethod": "CreateWindow",
+  "permissions": [],
+  "dependencies": []
+}
