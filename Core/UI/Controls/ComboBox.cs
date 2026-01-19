@@ -36,19 +36,10 @@ public class ComboBox : ValueControl<int> {
         _arrowRotation = MathHelper.Lerp(_arrowRotation, targetRot, MathHelper.Clamp(dt * 15f, 0, 1));
     }
 
-    protected override void UpdateInput() {
-        base.UpdateInput();
-
-        if (InputManager.IsAnyMouseButtonJustPressed(MouseButton.Left)) {
-            if (IsMouseOver) {
-                if (_isOpen) {
-                    CloseDropdown();
-                } else {
-                    OpenDropdown();
-                }
-                InputManager.IsMouseConsumed = true;
-            }
-        }
+    protected override void OnClick() {
+        if (_isOpen) CloseDropdown();
+        else OpenDropdown();
+        base.OnClick();
     }
 
     private void OpenDropdown() {
@@ -154,7 +145,13 @@ internal class ComboBoxDropdown : UIElement {
             }
 
             if (!clickedInside) {
+                // If it's a click on the parent combobox, let the parent's OnClick handle it
+                var parent = Parent as ComboBox; // Wait, ComboBox is the one that created this overlay via Shell.AddOverlay
+                // The dropdown is added as a top-level child of UI root.
+                
                 _onClose?.Invoke();
+                // Consume the click that closed the dropdown so it doesn't trigger other UI 
+                InputManager.IsMouseConsumed = true;
             }
         }
     }
