@@ -29,7 +29,10 @@ public static class InputManager {
         OnCharEntered?.Invoke(c);
     }
 
-    public static IEnumerable<char> GetTypedChars() => _typedChars;
+    public static IEnumerable<char> GetTypedChars() {
+        if (IsKeyboardConsumed) return Enumerable.Empty<char>();
+        return _typedChars;
+    }
 
     public static Point MousePosition => _currentMouse.Position;
     public static int MouseX => _currentMouse.X;
