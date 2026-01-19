@@ -687,7 +687,7 @@ public class FileListPanel : ScrollPanel {
         var items = _selectedPaths.ToList();
         if (items.Count == 0) return;
 
-        Shell.StartMenu.CreateShortcut(items);
+        Shell.StartMenu.CreateShortcuts(items);
         _selectedPaths.Clear();
     }
 

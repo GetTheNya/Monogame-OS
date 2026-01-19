@@ -22,7 +22,16 @@ public class Button : UIControl {
 
     protected override void OnClick() {
         TheGame.Core.OS.Shell.Audio.PlaySound("C:\\Windows\\Media\\click.wav", 0.5f);
-        OnClickAction?.Invoke();
+        try {
+            OnClickAction?.Invoke();
+        } catch (Exception ex) {
+            var process = GetOwnerProcess();
+            if (process != null && TheGame.Core.OS.CrashHandler.IsAppException(ex, process)) {
+                TheGame.Core.OS.CrashHandler.HandleAppException(process, ex);
+            } else {
+                throw;
+            }
+        }
         base.OnClick();
     }
 

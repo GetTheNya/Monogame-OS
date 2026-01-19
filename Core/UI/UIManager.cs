@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using TheGame.Graphics;
 using Microsoft.Xna.Framework.Graphics;
+using System;
 
 namespace TheGame.Core.UI;
 
@@ -24,29 +25,41 @@ public class UIManager {
     }
 
     public void Update(GameTime gameTime) {
-        _root.Size = new Vector2(G.GraphicsDevice.Viewport.Width, G.GraphicsDevice.Viewport.Height);
-        _root.Update(gameTime);
-        _tooltipManager.Update(gameTime, _root);
+        try {
+            _root.Size = new Vector2(G.GraphicsDevice.Viewport.Width, G.GraphicsDevice.Viewport.Height);
+            _root.Update(gameTime);
+            _tooltipManager.Update(gameTime, _root);
+        } catch (Exception ex) {
+            if (!TheGame.Core.OS.CrashHandler.TryHandleAnyAppException(ex)) {
+                throw;
+            }
+        }
     }
 
     public void Draw(SpriteBatch spriteBatch, ShapeBatch shapeBatch) {
-        // We iterate through root children and flush between them to ensure strict layering
-        // otherwise SpriteBatch and ShapeBatch passes will overlap across different layers (e.g. icons on top of windows)
-        foreach (var layer in _root.Children) {
-            if (!layer.IsVisible) continue;
-            
-            layer.Draw(spriteBatch, shapeBatch);
-            
-            // Flush batches to "bake in" the layer before starting the next one
-            shapeBatch.End();
-            spriteBatch.End();
-            
-            shapeBatch.Begin();
-            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
-        }
+        try {
+            // We iterate through root children and flush between them to ensure strict layering
+            // otherwise SpriteBatch and ShapeBatch passes will overlap across different layers (e.g. icons on top of windows)
+            foreach (var layer in _root.Children) {
+                if (!layer.IsVisible) continue;
+                
+                layer.Draw(spriteBatch, shapeBatch);
+                
+                // Flush batches to "bake in" the layer before starting the next one
+                shapeBatch.End();
+                spriteBatch.End();
+                
+                shapeBatch.Begin();
+                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+            }
 
-        // Draw tooltips last (always on top)
-        _tooltipManager.Draw(spriteBatch, shapeBatch);
+            // Draw tooltips last (always on top)
+            _tooltipManager.Draw(spriteBatch, shapeBatch);
+        } catch (Exception ex) {
+            if (!TheGame.Core.OS.CrashHandler.TryHandleAnyAppException(ex)) {
+                throw;
+            }
+        }
     }
 
     // Invisible root container

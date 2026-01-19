@@ -5,6 +5,9 @@ using TheGame.Core.Input;
 using TheGame.Graphics;
 using Microsoft.Xna.Framework.Graphics;
 
+using TheGame.Core.OS;
+using System.Linq;
+
 namespace TheGame.Core.UI;
 
 public abstract class UIElement {
@@ -55,6 +58,14 @@ public abstract class UIElement {
         Size = size;
     }
 
+    /// <summary>
+    /// Finds the process that owns this UI element by traversing up the parent tree.
+    /// </summary>
+    public Process GetOwnerProcess() {
+        if (this is Window window) return window.OwnerProcess;
+        return Parent?.GetOwnerProcess();
+    }
+
     // Allows parents to offset children (e.g. Window title bar)
     public virtual Vector2 GetChildOffset(UIElement child) => Vector2.Zero;
 
@@ -69,14 +80,20 @@ public abstract class UIElement {
     public virtual void Update(GameTime gameTime) {
         if (!IsActive || !IsVisible) return;
 
-        // Iterate in reverse using index to avoid allocation and handle removal
-        for (int i = Children.Count - 1; i >= 0; i--) {
-            if (i < Children.Count) { // Check bounds in case child was removed
-                Children[i].Update(gameTime);
+        try {
+            // Iterate in reverse using index to avoid allocation and handle removal
+            for (int i = Children.Count - 1; i >= 0; i--) {
+                if (i < Children.Count) { // Check bounds in case child was removed
+                    Children[i].Update(gameTime);
+                }
+            }
+
+            UpdateInput();
+        } catch (Exception ex) {
+            if (!CrashHandler.TryHandleAnyAppException(ex)) {
+                throw;
             }
         }
-
-        UpdateInput();
     }
 
     protected bool _isPressed;
@@ -104,7 +121,16 @@ public abstract class UIElement {
             }
 
             if (justRightPressed) {
-                OnRightClickAction?.Invoke();
+                try {
+                    OnRightClickAction?.Invoke();
+                } catch (Exception ex) {
+                    var process = GetOwnerProcess();
+                    if (process != null && CrashHandler.IsAppException(ex, process)) {
+                        CrashHandler.HandleAppException(process, ex);
+                    } else {
+                        throw; // Re-throw if it's an OS-level exception
+                    }
+                }
             }
         }
 
@@ -117,7 +143,16 @@ public abstract class UIElement {
                 _isPressed = false;
 
                 if (wasOver) {
-                    OnClick();
+                    try {
+                        OnClick();
+                    } catch (Exception ex) {
+                        var process = GetOwnerProcess();
+                        if (process != null && CrashHandler.IsAppException(ex, process)) {
+                            CrashHandler.HandleAppException(process, ex);
+                        } else {
+                            throw;
+                        }
+                    }
                     if (ConsumesInput)
                         InputManager.IsMouseConsumed = true; // Consume release
                 }
@@ -131,10 +166,16 @@ public abstract class UIElement {
     public virtual void Draw(SpriteBatch spriteBatch, ShapeBatch shapeBatch) {
         if (!IsVisible) return;
 
-        DrawSelf(spriteBatch, shapeBatch);
+        try {
+            DrawSelf(spriteBatch, shapeBatch);
 
-        foreach (var child in Children) {
-            child.Draw(spriteBatch, shapeBatch);
+            foreach (var child in Children) {
+                child.Draw(spriteBatch, shapeBatch);
+            }
+        } catch (Exception ex) {
+            if (!CrashHandler.TryHandleAnyAppException(ex)) {
+                throw;
+            }
         }
     }
 

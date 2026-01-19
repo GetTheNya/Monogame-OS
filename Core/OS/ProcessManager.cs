@@ -110,7 +110,15 @@ public class ProcessManager {
             
             // Foreground processes (with visible windows) always update at full rate
             if (process.State == ProcessState.Running) {
-                process.OnUpdate(gameTime);
+                try {
+                    process.OnUpdate(gameTime);
+                } catch (Exception ex) {
+                    if (CrashHandler.IsAppException(ex, process)) {
+                        CrashHandler.HandleAppException(process, ex);
+                    } else {
+                        throw;
+                    }
+                }
                 continue;
             }
             
@@ -118,7 +126,15 @@ public class ProcessManager {
             if (process.State == ProcessState.Background) {
                 if (process.UpdateInterval <= 0) {
                     // High priority - every frame
-                    process.OnUpdate(gameTime);
+                    try {
+                        process.OnUpdate(gameTime);
+                    } catch (Exception ex) {
+                        if (CrashHandler.IsAppException(ex, process)) {
+                            CrashHandler.HandleAppException(process, ex);
+                        } else {
+                            throw;
+                        }
+                    }
                 } else {
                     process.UpdateAccumulator += gameTime.ElapsedGameTime.TotalSeconds;
                     if (process.UpdateAccumulator >= process.UpdateInterval) {
@@ -126,7 +142,15 @@ public class ProcessManager {
                         // This fixed the bug where throttled processes received only a single frame's time
                         var virtualGameTime = new GameTime(gameTime.TotalGameTime, TimeSpan.FromSeconds(process.UpdateAccumulator));
                         process.UpdateAccumulator = 0;
-                        process.OnUpdate(virtualGameTime);
+                        try {
+                            process.OnUpdate(virtualGameTime);
+                        } catch (Exception ex) {
+                            if (CrashHandler.IsAppException(ex, process)) {
+                                CrashHandler.HandleAppException(process, ex);
+                            } else {
+                                throw;
+                            }
+                        }
                     }
                 }
             }

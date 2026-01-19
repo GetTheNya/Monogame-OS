@@ -226,7 +226,16 @@ public class Window : UIElement {
         }
         
         UpdateButtons();
-        base.Update(gameTime);
+        
+        try {
+            base.Update(gameTime);
+        } catch (Exception ex) {
+            if (OwnerProcess != null && CrashHandler.IsAppException(ex, OwnerProcess)) {
+                CrashHandler.HandleAppException(OwnerProcess, ex);
+            } else {
+                throw;
+            }
+        }
     }
 
     public override Vector2 GetChildOffset(UIElement child) {
@@ -653,28 +662,36 @@ public class Window : UIElement {
     public override void Draw(SpriteBatch spriteBatch, ShapeBatch batch) {
         if (!IsVisible && Opacity <= 0) return;
 
-        // Draw Snap Preview if dragging near edges or animating
-        if (_snapPreviewOpacity > 0.01f) {
-            var color = new Color(0, 120, 215) * (_snapPreviewOpacity * 0.4f);
-            var borderColor = new Color(0, 120, 215) * (_snapPreviewOpacity * 0.8f);
-            batch.FillRectangle(_renderSnapPos, _renderSnapSize, color, rounded: 5f);
-            batch.BorderRectangle(_renderSnapPos, _renderSnapSize, borderColor, thickness: 2f, rounded: 5f);
-        }
+        try {
+            // Draw Snap Preview if dragging near edges or animating
+            if (_snapPreviewOpacity > 0.01f) {
+                var color = new Color(0, 120, 215) * (_snapPreviewOpacity * 0.4f);
+                var borderColor = new Color(0, 120, 215) * (_snapPreviewOpacity * 0.8f);
+                batch.FillRectangle(_renderSnapPos, _renderSnapSize, color, rounded: 5f);
+                batch.BorderRectangle(_renderSnapPos, _renderSnapSize, borderColor, thickness: 2f, rounded: 5f);
+            }
 
-        // 1. Draw Background
-        DrawBackBlur(spriteBatch, batch);
+            // 1. Draw Background
+            DrawBackBlur(spriteBatch, batch);
 
-        // 2. Draw Content and Children (Isolated & Clipped)
-        DrawWindowContent(spriteBatch, batch);
+            // 2. Draw Content and Children (Isolated & Clipped)
+            DrawWindowContent(spriteBatch, batch);
 
-        // 3. Draw Window Chrome (Title bar, border)
-        DrawSelf(spriteBatch, batch);
+            // 3. Draw Window Chrome (Title bar, border)
+            DrawSelf(spriteBatch, batch);
 
 
-        // 4. Draw OVERLAY Children (Chrome Buttons)
-        foreach (var child in Children) {
-            if (child == _closeButton || child == _maxButton || child == _minButton) {
-                child.Draw(spriteBatch, batch);
+            // 4. Draw OVERLAY Children (Chrome Buttons)
+            foreach (var child in Children) {
+                if (child == _closeButton || child == _maxButton || child == _minButton) {
+                    child.Draw(spriteBatch, batch);
+                }
+            }
+        } catch (Exception ex) {
+            if (OwnerProcess != null && CrashHandler.IsAppException(ex, OwnerProcess)) {
+                CrashHandler.HandleAppException(OwnerProcess, ex);
+            } else {
+                throw;
             }
         }
 

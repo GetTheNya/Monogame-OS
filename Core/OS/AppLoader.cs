@@ -169,7 +169,15 @@ public class AppLoader {
                 ProcessManager.Instance.RegisterProcess(process);
                 
                 // Start the process (calls OnStart)
-                process.OnStart(args);
+                try {
+                    process.OnStart(args);
+                } catch (Exception ex) {
+                    if (CrashHandler.IsAppException(ex, process)) {
+                        CrashHandler.HandleAppException(process, ex);
+                    } else {
+                        throw;
+                    }
+                }
                 
                 DebugLogger.Log($"AppLoader: Successfully started background process for {manifest.AppId} (Process: {process.ProcessId})");
                 return null; // Background processes don't return a window
