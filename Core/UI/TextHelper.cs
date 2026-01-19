@@ -14,30 +14,69 @@ public static class TextHelper {
         if (string.IsNullOrEmpty(text)) return "";
         if (font == null) return text;
 
-        string[] words = text.Split(' ');
+        string[] lines = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
         StringBuilder sb = new StringBuilder();
         float spaceWidth = font.MeasureString(" ").X;
-        float currentLineWidth = 0;
 
-        for (int i = 0; i < words.Length; i++) {
-            Vector2 size = font.MeasureString(words[i]);
+        for (int lineIdx = 0; lineIdx < lines.Length; lineIdx++) {
+            if (lineIdx > 0) sb.Append("\n");
 
-            if (currentLineWidth + size.X > maxWidth) {
-                if (currentLineWidth > 0) {
-                    sb.Append("\n");
-                    currentLineWidth = 0;
+            string line = lines[lineIdx];
+            if (string.IsNullOrEmpty(line)) continue;
+
+            string[] words = line.Split(' ');
+            float currentLineWidth = 0;
+
+            for (int i = 0; i < words.Length; i++) {
+                string word = words[i];
+                if (string.IsNullOrEmpty(word)) {
+                    // Handle multiple spaces
+                    if (i < words.Length - 1) { // Only if not the last word
+                        sb.Append(" ");
+                        currentLineWidth += spaceWidth;
+                    }
+                    continue;
                 }
-                
-                // If a single word is wider than maxWidth, it will still take a full line
-                sb.Append(words[i]);
-                currentLineWidth = size.X;
-            } else {
-                if (currentLineWidth > 0) {
-                    sb.Append(" ");
-                    currentLineWidth += spaceWidth;
+
+                Vector2 size = font.MeasureString(word);
+
+                if (size.X > maxWidth) {
+                    // This word is too long, break it character by character
+                    if (currentLineWidth > 0) {
+                        sb.Append("\n");
+                        currentLineWidth = 0;
+                    }
+
+                    for (int j = 0; j < word.Length; j++) {
+                        char c = word[j];
+                        float charWidth = font.MeasureString(c.ToString()).X;
+
+                        if (currentLineWidth + charWidth > maxWidth) {
+                            if (currentLineWidth > 0) {
+                                sb.Append("\n");
+                                currentLineWidth = 0;
+                            }
+                        }
+
+                        sb.Append(c);
+                        currentLineWidth += charWidth;
+                    }
+                } else if (currentLineWidth + size.X > maxWidth) {
+                    if (currentLineWidth > 0) {
+                        sb.Append("\n");
+                        currentLineWidth = 0;
+                    }
+                    
+                    sb.Append(word);
+                    currentLineWidth = size.X;
+                } else {
+                    if (currentLineWidth > 0) {
+                        sb.Append(" ");
+                        currentLineWidth += spaceWidth;
+                    }
+                    sb.Append(word);
+                    currentLineWidth += size.X;
                 }
-                sb.Append(words[i]);
-                currentLineWidth += size.X;
             }
         }
 
