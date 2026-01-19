@@ -175,6 +175,10 @@ public class NotificationToast : UIElement {
                 _isDragging = false;
                 if (_swipeOffset > ToastWidth * 0.25f) {
                     SwipeDismiss();
+                } else if (_swipeOffset < 5f) {
+                    // It was a simple click, not a swipe
+                    OnClick();
+                    Tweener.To(this, v => _swipeOffset = v, _swipeOffset, 0f, 0.15f, Easing.EaseOutQuad);
                 } else {
                     // Snap back
                     Tweener.To(this, v => _swipeOffset = v, _swipeOffset, 0f, 0.15f, Easing.EaseOutQuad);
@@ -183,6 +187,11 @@ public class NotificationToast : UIElement {
         }
 
         base.Update(gameTime);
+    }
+
+    protected override void OnClick() {
+        _notification.OnClick?.Invoke();
+        Close();
     }
 
     private void SwipeDismiss() {

@@ -345,7 +345,7 @@ public class NotificationHistoryItem : UIElement {
             if (!dismissBounds.Contains(InputManager.MousePosition) && !overActionButton) {
                 _isDragging = true;
                 _dragStartX = InputManager.MousePosition.X;
-                InputManager.IsMouseConsumed = true;
+                // Don't consume here yet, let UIElement see the press if it's just a click
             }
         }
 
@@ -358,19 +358,22 @@ public class NotificationHistoryItem : UIElement {
                 _isDragging = false;
                 if (_swipeOffset > Size.X * 0.3f) {
                     AnimateOut(() => OnDismiss?.Invoke());
+                } else if (_swipeOffset < 5f) {
+                    // Simple click
+                    OnClick();
+                    _swipeOffset = 0f;
                 } else {
                     Tweener.To(this, v => _swipeOffset = v, _swipeOffset, 0f, 0.15f, Easing.EaseOutQuad);
                 }
             }
         }
 
-        if (!_isDragging && InputManager.IsMouseButtonJustReleased(MouseButton.Left) && isHovering && Math.Abs(_swipeOffset) < 5) {
-            if (!dismissBounds.Contains(InputManager.MousePosition) && !overActionButton) {
-                _notification.OnClick?.Invoke();
-            }
-        }
-
         base.Update(gameTime);
+    }
+
+    protected override void OnClick() {
+        if (_isAnimatingOut) return;
+        _notification.OnClick?.Invoke();
     }
 
     protected override void DrawSelf(SpriteBatch spriteBatch, ShapeBatch batch) {
