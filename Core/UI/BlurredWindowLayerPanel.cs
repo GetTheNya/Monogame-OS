@@ -2,7 +2,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TheGame.Graphics;
 
-namespace TheGame.Core.UI.Controls;
+namespace TheGame.Core.UI;
 
 /// <summary>
 /// A panel that provides blurred background effects for child windows.
