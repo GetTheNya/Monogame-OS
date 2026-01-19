@@ -20,6 +20,8 @@ public class Game1 : Game {
 
     private SceneManager _sceneManager;
 
+    private WindowsKeyHook _winKeyHook;
+
     private Fps _fps;
 
     public Game1() {
@@ -31,6 +33,8 @@ public class Game1 : Game {
         Content.RootDirectory = "Content";
         IsMouseVisible = true;
         Window.AllowUserResizing = true;
+
+        Window.AllowAltF4 = false;
         
         Window.TextInput += (s, e) => {
             InputManager.AddChar(e.Character);
@@ -48,6 +52,11 @@ public class Game1 : Game {
 
         G.GraphicsDevice = GraphicsDevice;
         G.ContentManager = Content;
+
+        _winKeyHook = new WindowsKeyHook();
+
+        this.Activated += (s, e) => _winKeyHook.SetActive(true);
+        this.Deactivated += (s, e) => _winKeyHook.SetActive(false);
 
         base.Initialize();
     }
@@ -124,6 +133,9 @@ public class Game1 : Game {
 
     protected override void OnExiting(object sender, EventArgs args) {
         AudioManager.Instance.Shutdown();
+
+        _winKeyHook?.Dispose();
+
         base.OnExiting(sender, args);
     }
 
