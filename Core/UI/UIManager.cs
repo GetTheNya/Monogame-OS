@@ -108,7 +108,10 @@ public class UIManager {
             if (found != null) return found;
         }
 
-        return parent;
+        // Only return this element if it actually consumes input.
+        // This allows clicks to "pass through" transparent containers like the desktop layer or window layer
+        // when they don't hit any specific child control.
+        return parent.ConsumesInput ? parent : null;
     }
 
     // Invisible root container
@@ -119,7 +122,7 @@ public class UIManager {
         
         protected override void UpdateInput() {
             // Root element covers screen but should not consume input.
-            // base.UpdateInput() would consume if clicked.
+            ConsumesInput = false;
         }
     }
 }
