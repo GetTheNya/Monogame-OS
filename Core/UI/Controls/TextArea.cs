@@ -27,6 +27,10 @@ public class TextArea : ValueControl<string> {
     private float _cursorTimer = 0f;
     private bool _showCursor = true;
     private bool _isWordSelecting = false;
+    private int _wordSelectAnchorStartLine = 0;
+    private int _wordSelectAnchorStartCol = 0;
+    private int _wordSelectAnchorEndLine = 0;
+    private int _wordSelectAnchorEndCol = 0;
     private float _cachedMaxWidth = 0f;
     private bool _maxWidthDirty = true;
     private static readonly RasterizerState _scissorRasterizer = new RasterizerState { ScissorTestEnable = true, CullMode = CullMode.None };
@@ -88,6 +92,30 @@ public class TextArea : ValueControl<string> {
                 InputManager.IsMouseConsumed = true;
                 if (!_isWordSelecting) {
                     SetCursorFromMouse();
+                } else {
+                    // Word selection drag logic
+                    int oldCursorLine = _cursorLine;
+                    int oldCursorCol = _cursorCol;
+                    SetCursorFromMouse();
+
+                    // Find word boundaries at current position
+                    string line = _lines[_cursorLine];
+                    int start = _cursorCol;
+                    int end = _cursorCol;
+                    while (start > 0 && IsWordChar(line[start - 1])) start--;
+                    while (end < line.Length && IsWordChar(line[end])) end++;
+
+                    // If dragging forward from anchor
+                    if (_cursorLine > _wordSelectAnchorStartLine || (_cursorLine == _wordSelectAnchorStartLine && _cursorCol >= _wordSelectAnchorStartCol)) {
+                        _selStartLine = _wordSelectAnchorStartLine;
+                        _selStartCol = _wordSelectAnchorStartCol;
+                        _cursorCol = end;
+                    } else {
+                        // Dragging backward
+                        _selStartLine = _wordSelectAnchorEndLine;
+                        _selStartCol = _wordSelectAnchorEndCol;
+                        _cursorCol = start;
+                    }
                 }
             } else {
                 _isWordSelecting = false;
@@ -311,6 +339,12 @@ public class TextArea : ValueControl<string> {
         _selStartLine = _cursorLine;
         _selStartCol = start;
         _cursorCol = end;
+
+        // Store anchors for word-selection dragging
+        _wordSelectAnchorStartLine = _cursorLine;
+        _wordSelectAnchorStartCol = start;
+        _wordSelectAnchorEndLine = _cursorLine;
+        _wordSelectAnchorEndCol = end;
     }
 
     private bool IsWordChar(char c) {

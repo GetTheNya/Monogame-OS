@@ -18,6 +18,8 @@ public class TextInput : ValueControl<string> {
     private float _cursorTimer = 0f;
     private bool _showCursor = true;
     private bool _isWordSelecting = false;
+    private int _wordSelectAnchorStart = 0;
+    private int _wordSelectAnchorEnd = 0;
 
     private int _cursorPos = 0;
     private int _selectionEnd = 0; // If != _cursorPos, we have a selection
@@ -65,6 +67,25 @@ public class TextInput : ValueControl<string> {
                 InputManager.IsMouseConsumed = true;
                 if (!_isWordSelecting) {
                     _cursorPos = GetCursorIndexFromMouse();
+                } else {
+                    // Word selection drag logic
+                    _cursorPos = GetCursorIndexFromMouse();
+
+                    // Find word boundaries at current position
+                    int start = _cursorPos;
+                    int end = _cursorPos;
+                    while (start > 0 && IsWordChar(Value[start - 1])) start--;
+                    while (end < Value.Length && IsWordChar(Value[end])) end++;
+
+                    // If dragging forward from anchor
+                    if (_cursorPos >= _wordSelectAnchorStart) {
+                        _selectionEnd = _wordSelectAnchorStart;
+                        _cursorPos = end;
+                    } else {
+                        // Dragging backward
+                        _selectionEnd = _wordSelectAnchorEnd;
+                        _cursorPos = start;
+                    }
                 }
             } else {
                 _isWordSelecting = false;
@@ -274,6 +295,10 @@ public class TextInput : ValueControl<string> {
 
         _selectionEnd = start;
         _cursorPos = end;
+
+        // Store anchors for word-selection dragging
+        _wordSelectAnchorStart = start;
+        _wordSelectAnchorEnd = end;
     }
 
     private bool IsWordChar(char c) {
