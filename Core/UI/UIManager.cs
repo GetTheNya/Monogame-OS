@@ -10,6 +10,17 @@ public class UIManager {
     private TooltipManager _tooltipManager;
 
     public static UIElement FocusedElement { get; private set; }
+    public static UIElement HoveredElement { get; private set; }
+    
+    public static bool IsHovered(UIElement element) {
+        if (element == null) return false;
+        var current = HoveredElement;
+        while (current != null) {
+            if (current == element) return true;
+            current = current.Parent;
+        }
+        return false;
+    }
     
     public static void SetFocus(UIElement element) {
         if (FocusedElement == element) return;
@@ -37,6 +48,9 @@ public class UIManager {
     public void Update(GameTime gameTime) {
         try {
             _root.Size = new Vector2(G.GraphicsDevice.Viewport.Width, G.GraphicsDevice.Viewport.Height);
+
+            // Update global hover state using the recursive hit-test logic
+            HoveredElement = _root.GetElementAt(TheGame.Core.Input.InputManager.MousePosition.ToVector2());
 
             // Handle focus on click
             if (TheGame.Core.Input.InputManager.IsAnyMouseButtonJustPressed(TheGame.Core.Input.MouseButton.Left)) {
@@ -100,18 +114,7 @@ public class UIManager {
     }
 
     private UIElement FindElementAtPosition(UIElement parent, Vector2 pos) {
-        if (!parent.IsVisible || !parent.Bounds.Contains(pos)) return null;
-
-        // Check children first (top-most)
-        for (int i = parent.Children.Count - 1; i >= 0; i--) {
-            var found = FindElementAtPosition(parent.Children[i], pos);
-            if (found != null) return found;
-        }
-
-        // Only return this element if it actually consumes input.
-        // This allows clicks to "pass through" transparent containers like the desktop layer or window layer
-        // when they don't hit any specific child control.
-        return parent.ConsumesInput ? parent : null;
+        return parent.GetElementAt(pos);
     }
 
     // Invisible root container

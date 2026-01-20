@@ -99,6 +99,23 @@ public abstract class UIElement {
     public virtual bool HasSelection() => false;
     
     /// <summary>
+    /// Returns the element at the specified position, recursing into children.
+    /// Default implementation uses simple bounds check.
+    /// </summary>
+    public virtual UIElement GetElementAt(Vector2 pos) {
+        if (!IsVisible || !Bounds.Contains(pos)) return null;
+
+        // Check children first (top-most in Z-order are at the end of the list)
+        for (int i = Children.Count - 1; i >= 0; i--) {
+            var found = Children[i].GetElementAt(pos);
+            if (found != null) return found;
+        }
+
+        // Only return this element if it actually consumes input.
+        return ConsumesInput ? this : null;
+    }
+
+    /// <summary>
     /// Returns the absolute screen position of the text caret, if applicable.
     /// </summary>
     public virtual Vector2? GetCaretPosition() => null;
@@ -128,8 +145,8 @@ public abstract class UIElement {
         if (!IsVisible) return;
 
         bool wasMouseOver = IsMouseOver;
-        // Strict hover check: only true if no one in front has consumed the mouse
-        IsMouseOver = InputManager.IsMouseHovering(Bounds, ignoreConsumed: false);
+        // Unified hover check: uses the global result from recursive GetElementAt
+        IsMouseOver = UIManager.IsHovered(this);
 
         // Store input states while we are still "the top element" (before we consume it ourselves)
         // ignoreConsumed: false ensures we only react if no one else (in front) caught the click
@@ -235,6 +252,16 @@ public abstract class UIElement {
         if (Children.Remove(child)) {
             Children.Add(child);
             child.Parent = this; // Should already be this, but safe to set
+        }
+    }
+
+    /// <summary>
+    /// Recursively closes any open popups or overlays in this element or its children.
+    /// </summary>
+    public virtual void ClosePopups() {
+        // Use a for loop to avoid modification issues during iteration
+        for (int i = 0; i < Children.Count; i++) {
+            Children[i].ClosePopups();
         }
     }
 }

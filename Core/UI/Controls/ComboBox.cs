@@ -69,6 +69,11 @@ public class ComboBox : ValueControl<int> {
         _dropdown = null;
     }
 
+    public override void ClosePopups() {
+        base.ClosePopups();
+        if (_isOpen) CloseDropdown();
+    }
+
     public override void Draw(SpriteBatch spriteBatch, ShapeBatch batch) {
         if (!IsVisible) return;
 

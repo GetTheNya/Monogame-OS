@@ -164,6 +164,11 @@ public class Window : UIElement {
         _restoreRect = new Rectangle(position.ToPoint(), size.ToPoint());
 
         UpdateButtons();
+        
+        // Ensure chrome buttons are at the end of the children list for priority
+        BringToFront(_closeButton);
+        BringToFront(_maxButton);
+        if (_minButton != null) BringToFront(_minButton);
     }
 
     public override void Update(GameTime gameTime) {
@@ -197,6 +202,13 @@ public class Window : UIElement {
                 _isBlinking = false;
                 _blinkTimer = 0;
             }
+        }
+
+        // If we are actively dragging or resizing, we MUST consume the mouse
+        // BEFORE children update so they don't see it as a hover/click.
+        if (_isDragging || _isResizing) {
+            InputManager.IsMouseConsumed = true;
+            InputManager.IsScrollConsumed = true; // Block wheel too
         }
         
         // CRITICAL: Check for resize/drag BEFORE children update
@@ -249,6 +261,34 @@ public class Window : UIElement {
                 throw;
             }
         }
+    }
+
+    public override UIElement GetElementAt(Vector2 pos) {
+        if (!IsVisible || !Bounds.Contains(pos)) return null;
+
+        // 1. Check Chrome Buttons (Topmost priority)
+        var foundChrome = _closeButton.GetElementAt(pos) ?? 
+                          (_maxButton.IsVisible ? _maxButton.GetElementAt(pos) : null) ?? 
+                          _minButton.GetElementAt(pos);
+        if (foundChrome != null) return foundChrome;
+
+        // 2. Check Title Bar area (Blocks children under the title bar)
+        Rectangle titleBarRect = new Rectangle((int)AbsolutePosition.X, (int)AbsolutePosition.Y, (int)Size.X, TitleBarHeight);
+        if (titleBarRect.Contains(pos)) return this;
+
+        // 3. Check Content Area
+        Rectangle contentRect = new Rectangle((int)AbsolutePosition.X, (int)AbsolutePosition.Y + TitleBarHeight, (int)Size.X, (int)Size.Y - TitleBarHeight);
+        if (contentRect.Contains(pos)) {
+            // Only check children that are NOT chrome buttons (they were already checked)
+            for (int i = Children.Count - 1; i >= 0; i--) {
+                var child = Children[i];
+                if (child == _closeButton || child == _maxButton || child == _minButton) continue;
+                var found = child.GetElementAt(pos);
+                if (found != null) return found;
+            }
+        }
+
+        return ConsumesInput ? this : null;
     }
 
     public override Vector2 GetChildOffset(UIElement child) {
@@ -437,7 +477,7 @@ public class Window : UIElement {
             _potentialDrag = false;
         }
 
-        bool isHoveringStrict = InputManager.IsMouseHovering(Bounds); // Normal child-priority hover
+        bool isHoveringStrict = IsMouseOver; // Use unified hover state
         bool isHoveringRaw = InputManager.IsMouseHovering(Bounds, ignoreConsumed: true); // Raw window hover
         
         bool isDoubleClick = isHoveringRaw && InputManager.IsDoubleClick(MouseButton.Left, ignoreConsumed: true);

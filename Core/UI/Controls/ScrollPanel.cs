@@ -36,7 +36,8 @@ public class ScrollPanel : Panel {
     private float _scrollbarAlphaH = 0f;
     private float _scrollbarHoverAlphaV = 0f;
     private float _scrollbarHoverAlphaH = 0f;
-    private bool _scrollbarPriorityConsumed = false;
+    private bool _isMouseOverScrollbarPriority = false;
+    private bool _mouseConsumedBeforeChildren = false;
     
     // Cached RasterizerStates to avoid per-frame allocations
     private static readonly RasterizerState _scissorRasterizer = new RasterizerState { ScissorTestEnable = true };
@@ -72,6 +73,27 @@ public class ScrollPanel : Panel {
         float maxScrollX = MathF.Max(0, _contentWidth - Size.X);
         if (_targetScrollX < -maxScrollX) _targetScrollX = -maxScrollX;
         if (_targetScrollX > 0) _targetScrollX = 0;
+    }
+
+    public override UIElement GetElementAt(Vector2 pos) {
+        if (!IsVisible || !Bounds.Contains(pos)) return null;
+
+        // Check for scrollbar hits FIRST. If we hit a scrollbar, WE are the target.
+        // This prevents children behind scrollbars from being focused or clicked.
+        var trackV = GetScrollbarTrackRectV();
+        var trackH = GetScrollbarTrackRectH();
+        if ((HasScrollableContentV() && trackV.Contains(pos)) || 
+            (HasScrollableContentH() && trackH.Contains(pos))) {
+            return this;
+        }
+
+        // Otherwise recurse into children
+        for (int i = Children.Count - 1; i >= 0; i--) {
+            var found = Children[i].GetElementAt(pos);
+            if (found != null) return found;
+        }
+
+        return ConsumesInput ? this : null;
     }
 
     public override Vector2 GetChildOffset(UIElement child) {
@@ -143,19 +165,24 @@ public class ScrollPanel : Panel {
     public override void Update(GameTime gameTime) {
         if (!IsVisible) return;
 
-        // Custom prioritization:
-        // 1. If we click on a scrollbar, we consume it BEFORE children see it.
+        // Capture consumption state BEFORE children update.
+        // If a child (button) consumes input, we still want to allow OUR wheel logic
+        // because we are the parent container. 
+        _mouseConsumedBeforeChildren = InputManager.IsMouseConsumed;
+
+        // 1. If we click or hover on a scrollbar, we consume it BEFORE children see it.
         // BUT only if input wasn't already consumed by a parent (e.g. Window resize edge)
-        _scrollbarPriorityConsumed = false;
+        // NOTE: We only block HOVER for children here. Clicks are blocked via GetElementAt.
+        _isMouseOverScrollbarPriority = false;
         if (!InputManager.IsMouseConsumed) {
             var trackV = GetScrollbarTrackRectV();
             var trackH = GetScrollbarTrackRectH();
             bool overV = HasScrollableContentV() && trackV.Contains(InputManager.MousePosition);
             bool overH = HasScrollableContentH() && trackH.Contains(InputManager.MousePosition);
             
-            if ((overV || overH) && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
+            if (overV || overH) {
                  InputManager.IsMouseConsumed = true;
-                 _scrollbarPriorityConsumed = true; // Track that WE consumed it
+                 _isMouseOverScrollbarPriority = true; // Mark that WE blocked it
             }
         }
 
@@ -196,15 +223,22 @@ public class ScrollPanel : Panel {
         bool isMouseInViewport = myBounds.Contains(InputManager.MousePosition);
         
         // Handle Mouse Wheel Scroll (respect IsScrollConsumed for nested scrolling)
-        if (isMouseInViewport && InputManager.ScrollDelta != 0 && !InputManager.IsScrollConsumed) {
+        // Relaxation: If the mouse was available BEFORE children updated, 
+        // OR if we specifically blocked it for scrollbars, we can interact.
+        bool isHoveringMeRaw = myBounds.Contains(InputManager.MousePosition);
+        bool canInteract = isHoveringMeRaw && (!_mouseConsumedBeforeChildren || _isMouseOverScrollbarPriority);
+
+        if (canInteract && InputManager.ScrollDelta != 0 && !InputManager.IsScrollConsumed) {
             if (HasScrollableContentV()) {
                 _targetScrollY += (InputManager.ScrollDelta / 120f) * 60f;
                 ClampScroll();
+                ClosePopups();
                 InputManager.IsScrollConsumed = true;
                 InputManager.IsMouseConsumed = true;
             } else if (HasScrollableContentH()) {
                 _targetScrollX += (InputManager.ScrollDelta / 120f) * 60f;
                 ClampScroll();
+                ClosePopups();
                 InputManager.IsScrollConsumed = true;
                 InputManager.IsMouseConsumed = true;
             }
@@ -239,7 +273,7 @@ public class ScrollPanel : Panel {
             bool isOverThumb = thumbRect.Contains(InputManager.MousePosition);
             _scrollbarHoverAlphaV = MathHelper.Lerp(_scrollbarHoverAlphaV, (isOverThumb || _isDraggingScrollbarV) ? 1f : 0f, 0.2f);
 
-            if (!_isDraggingScrollbarV && overTrackV && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
+            if (!_isDraggingScrollbarV && overTrackV && canInteract && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
                 if (isOverThumb) {
                     _isDraggingScrollbarV = true;
                     _scrollbarDragOffsetV = InputManager.MousePosition.Y - thumbRect.Y;
@@ -248,6 +282,7 @@ public class ScrollPanel : Panel {
                     float percentage = (clickY - thumbRect.Height / 2) / Math.Max(1f, trackV.Height - thumbRect.Height);
                     _targetScrollY = -(_contentHeight - Size.Y) * MathHelper.Clamp(percentage, 0f, 1f);
                     ClampScroll();
+                    ClosePopups();
                 }
                 InputManager.IsMouseConsumed = true;
             }
@@ -259,7 +294,7 @@ public class ScrollPanel : Panel {
             bool isOverThumb = thumbRect.Contains(InputManager.MousePosition);
             _scrollbarHoverAlphaH = MathHelper.Lerp(_scrollbarHoverAlphaH, (isOverThumb || _isDraggingScrollbarH) ? 1f : 0f, 0.2f);
 
-            if (!_isDraggingScrollbarH && overTrackH && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
+            if (!_isDraggingScrollbarH && overTrackH && canInteract && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
                 if (isOverThumb) {
                     _isDraggingScrollbarH = true;
                     _scrollbarDragOffsetH = InputManager.MousePosition.X - thumbRect.X;
@@ -268,6 +303,7 @@ public class ScrollPanel : Panel {
                     float percentage = (clickX - thumbRect.Width / 2) / Math.Max(1f, trackH.Width - thumbRect.Width);
                     _targetScrollX = -(_contentWidth - Size.X) * MathHelper.Clamp(percentage, 0f, 1f);
                     ClampScroll();
+                    ClosePopups();
                 }
                 InputManager.IsMouseConsumed = true;
             }
@@ -283,6 +319,7 @@ public class ScrollPanel : Panel {
                 _targetScrollY = -(_contentHeight - Size.Y) * MathHelper.Clamp(percentage, 0f, 1f);
                 ScrollY = _targetScrollY;
                 ClampScroll();
+                ClosePopups();
                 InputManager.IsMouseConsumed = true;
             } else _isDraggingScrollbarV = false;
         }
@@ -296,6 +333,7 @@ public class ScrollPanel : Panel {
                 _targetScrollX = -(_contentWidth - Size.X) * MathHelper.Clamp(percentage, 0f, 1f);
                 ScrollX = _targetScrollX;
                 ClampScroll();
+                ClosePopups();
                 InputManager.IsMouseConsumed = true;
             } else _isDraggingScrollbarH = false;
         }
