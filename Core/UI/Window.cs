@@ -73,7 +73,20 @@ public class Window : UIElement {
     public Color BorderColor { get; set; } = Color.White;
 
     // Process ownership
-    public Process OwnerProcess { get; internal set; }
+    private Process _ownerProcess;
+    public Process OwnerProcess {
+        get => _ownerProcess;
+        internal set {
+            _ownerProcess = value;
+            OnOwnerProcessSet();
+        }
+    }
+
+    /// <summary>
+    /// Called when the OwnerProcess is assigned to the window.
+    /// Override this to perform setup that requires the process owner (like hotkey registration).
+    /// </summary>
+    protected virtual void OnOwnerProcessSet() { }
     
     // Modal support
     public Window ParentWindow { get; set; }

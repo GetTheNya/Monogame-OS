@@ -43,6 +43,7 @@ public class MenuBar : UIControl {
     public Color MenuTextColor { get; set; } = Color.White;
     public Color MenuHoverColor { get; set; } = new Color(60, 60, 60);
     public Color DropdownBackgroundColor { get; set; } = new Color(45, 45, 45);
+    public bool AutoWidth { get; set; } = true;
     private static readonly RasterizerState _scissorRasterizer = new RasterizerState { ScissorTestEnable = true };
 
     public MenuBar(Vector2 position, Vector2 size) : base(position, size) {
@@ -77,6 +78,13 @@ public class MenuBar : UIControl {
     }
 
     public override void Update(GameTime gameTime) {
+        if (AutoWidth && Parent != null) {
+            float parentWidth = Parent.ClientSize.X;
+            if (Math.Abs(Size.X - parentWidth) > 0.01f) {
+                Size = new Vector2(parentWidth, Size.Y);
+            }
+        }
+
         base.Update(gameTime);
 
         // Close dropdown if clicked outside
