@@ -88,7 +88,6 @@ public class NotepadWindow : Window {
             });
         });
 
-        _menuBar.RegisterHotkeys(OwnerProcess);
         AddChild(_menuBar);
 
         // Text Area
@@ -105,8 +104,12 @@ public class NotepadWindow : Window {
         AddChild(_textArea);
     }
 
+    protected override void OnOwnerProcessSet() {
+        base.OnOwnerProcessSet();
+        _menuBar.RegisterHotkeys(OwnerProcess);
+    }
+
     private void LayoutUI() {
-        _menuBar.Size = new Vector2(ClientSize.X, MenuBarHeight);
         _textArea.Position = new Vector2(0, MenuBarHeight);
         _textArea.Size = new Vector2(ClientSize.X, ClientSize.Y - MenuBarHeight);
     }
