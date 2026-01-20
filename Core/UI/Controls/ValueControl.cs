@@ -7,11 +7,13 @@ public abstract class ValueControl<T> : UIControl {
 
     public T Value {
         get => _value;
-        set {
-            if (Equals(_value, value)) return;
-            _value = value;
-            OnValueChanged?.Invoke(_value);
-        }
+        set => SetValue(value);
+    }
+
+    public virtual void SetValue(T value, bool notify = true) {
+        if (Equals(_value, value)) return;
+        _value = value;
+        if (notify) OnValueChanged?.Invoke(_value);
     }
 
     public System.Action<T> OnValueChanged { get; set; }

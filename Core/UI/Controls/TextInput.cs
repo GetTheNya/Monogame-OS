@@ -28,15 +28,12 @@ public class TextInput : ValueControl<string> {
     private static readonly RasterizerState _scissorRasterizer = new RasterizerState { ScissorTestEnable = true, CullMode = CullMode.None };
 
     // Override Value to reset cursor/selection when changed programmatically
-    public new string Value {
-        get => base.Value;
-        set {
-            if (base.Value == value) return;
-            base.Value = value;
-            _cursorPos = value?.Length ?? 0;
-            _selectionEnd = _cursorPos;
-            _targetScrollX = 0;
-        }
+    public override void SetValue(string value, bool notify = true) {
+        if (Value == value) return;
+        base.SetValue(value, notify);
+        _cursorPos = value?.Length ?? 0;
+        _selectionEnd = _cursorPos;
+        _targetScrollX = 0;
     }
 
     public TextInput(Vector2 position, Vector2 size) : base(position, size, "") {
@@ -125,7 +122,8 @@ public class TextInput : ValueControl<string> {
             if (InputManager.IsKeyRepeated(Keys.Back)) {
                 if (HasSelection()) DeleteSelection();
                 else if (_cursorPos > 0) {
-                    base.Value = Value.Remove(_cursorPos - 1, 1);
+                    string newValue = Value.Remove(_cursorPos - 1, 1);
+                    base.SetValue(newValue, true);
                     _cursorPos--;
                     _selectionEnd = _cursorPos;
                 }
@@ -135,7 +133,8 @@ public class TextInput : ValueControl<string> {
             if (InputManager.IsKeyRepeated(Keys.Delete)) {
                 if (HasSelection()) DeleteSelection();
                 else if (_cursorPos < Value.Length) {
-                    base.Value = Value.Remove(_cursorPos, 1);
+                    string newValue = Value.Remove(_cursorPos, 1);
+                    base.SetValue(newValue, true);
                 }
             }
 
@@ -149,7 +148,8 @@ public class TextInput : ValueControl<string> {
             foreach (var c in InputManager.GetTypedChars()) {
                 if (char.IsControl(c)) continue;
                 if (HasSelection()) DeleteSelection();
-                base.Value = Value.Insert(_cursorPos, c.ToString());
+                string newVal = Value.Insert(_cursorPos, c.ToString());
+                base.SetValue(newVal, true);
                 _cursorPos++;
                 _selectionEnd = _cursorPos;
                 TheGame.Core.DebugLogger.Log($"TextInput Char: {c} (Total: {Value})");
@@ -216,11 +216,11 @@ public class TextInput : ValueControl<string> {
         length = Math.Min(length, Value.Length - start);
         
         if (length > 0) {
-            Value = Value.Remove(start, length);
+            string newVal = Value.Remove(start, length);
+            base.SetValue(newVal, true);
         }
         _cursorPos = start;
         _selectionEnd = _cursorPos;
-        OnValueChanged?.Invoke(Value);
     }
 
     public override void Copy() {
@@ -244,11 +244,11 @@ public class TextInput : ValueControl<string> {
         if (string.IsNullOrEmpty(text)) return;
 
         if (HasSelection()) DeleteSelection();
-
-        base.Value = Value.Insert(_cursorPos, text);
+        
+        string newVal = Value.Insert(_cursorPos, text);
+        base.SetValue(newVal, true);
         _cursorPos += text.Length;
         _selectionEnd = _cursorPos;
-        OnValueChanged?.Invoke(Value);
     }
 
     public void SelectAll() {

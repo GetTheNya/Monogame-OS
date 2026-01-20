@@ -35,18 +35,24 @@ public class TextArea : ValueControl<string> {
     private bool _maxWidthDirty = true;
     private static readonly RasterizerState _scissorRasterizer = new RasterizerState { ScissorTestEnable = true, CullMode = CullMode.None };
 
-    public new string Value {
-        get => string.Join("\n", _lines);
-        set {
-            _lines = new List<string>((value ?? "").Split('\n'));
-            if (_lines.Count == 0) _lines.Add("");
-            _cursorLine = 0;
-            _cursorCol = 0;
-            _selStartLine = 0;
-            _selStartCol = 0;
-            _maxWidthDirty = true;
-            base.Value = Value; // Trigger OnValueChanged
-        }
+    public override void SetValue(string value, bool notify = true) {
+        string newValue = value ?? "";
+        if (base.Value == newValue) return;
+
+        _lines = new List<string>(newValue.Split('\n'));
+        if (_lines.Count == 0) _lines.Add("");
+        _cursorLine = 0;
+        _cursorCol = 0;
+        _selStartLine = 0;
+        _selStartCol = 0;
+        _maxWidthDirty = true;
+        
+        base.SetValue(newValue, notify);
+    }
+
+    private void NotifyUserChanged() {
+        _maxWidthDirty = true;
+        base.SetValue(string.Join("\n", _lines), true);
     }
     
     // Backwards compatibility alias
@@ -175,8 +181,7 @@ public class TextArea : ValueControl<string> {
                     _cursorLine--;
                 }
                 ResetSelection();
-                _maxWidthDirty = true;
-                OnValueChanged?.Invoke(Value);
+                NotifyUserChanged();
             }
 
             // Delete
@@ -188,8 +193,7 @@ public class TextArea : ValueControl<string> {
                     _lines[_cursorLine] += _lines[_cursorLine + 1];
                     _lines.RemoveAt(_cursorLine + 1);
                 }
-                _maxWidthDirty = true;
-                OnValueChanged?.Invoke(Value);
+                NotifyUserChanged();
             }
 
             // Enter
@@ -201,8 +205,7 @@ public class TextArea : ValueControl<string> {
                 _cursorLine++;
                 _cursorCol = 0;
                 ResetSelection();
-                _maxWidthDirty = true;
-                OnValueChanged?.Invoke(Value);
+                NotifyUserChanged();
             }
 
             // Tab
@@ -211,8 +214,7 @@ public class TextArea : ValueControl<string> {
                 _lines[_cursorLine] = _lines[_cursorLine].Insert(_cursorCol, "    ");
                 _cursorCol += 4;
                 ResetSelection();
-                _maxWidthDirty = true;
-                OnValueChanged?.Invoke(Value);
+                NotifyUserChanged();
             }
 
             // Character input
@@ -222,8 +224,7 @@ public class TextArea : ValueControl<string> {
                 _lines[_cursorLine] = _lines[_cursorLine].Insert(_cursorCol, c.ToString());
                 _cursorCol++;
                 ResetSelection();
-                _maxWidthDirty = true;
-                OnValueChanged?.Invoke(Value);
+                NotifyUserChanged();
             }
 
             InputManager.IsKeyboardConsumed = true;
@@ -319,8 +320,7 @@ public class TextArea : ValueControl<string> {
         }
 
         ResetSelection();
-        _maxWidthDirty = true;
-        OnValueChanged?.Invoke(Value);
+        NotifyUserChanged();
         EnsureCursorVisible();
     }
 
@@ -393,7 +393,7 @@ public class TextArea : ValueControl<string> {
         _cursorLine = startLine;
         _cursorCol = startCol;
         ResetSelection();
-        OnValueChanged?.Invoke(Value);
+        NotifyUserChanged();
     }
 
     private void GetSelectionRange(out int startLine, out int startCol, out int endLine, out int endCol) {
