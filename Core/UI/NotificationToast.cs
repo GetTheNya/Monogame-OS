@@ -34,6 +34,7 @@ public class NotificationToast : UIElement {
     private bool _isDragging = false;
     private float _dragStartMouseX;
     private float _swipeOffset = 0f;
+    private bool _hasMovedSignificantly = false;
 
     // Hover state
     private bool _isHovered = false;
@@ -170,12 +171,13 @@ public class NotificationToast : UIElement {
             if (InputManager.IsMouseButtonDown(MouseButton.Left)) {
                 float delta = InputManager.MousePosition.X - _dragStartMouseX;
                 _swipeOffset = Math.Max(0, delta); // Only allow swiping right
+                if (Math.Abs(delta) > 10f) _hasMovedSignificantly = true;
             } else {
                 // Mouse released - check if swiped enough
                 _isDragging = false;
-                if (_swipeOffset > ToastWidth * 0.25f) {
+                if (_swipeOffset > ToastWidth * 0.4f) {
                     SwipeDismiss();
-                } else if (_swipeOffset < 5f) {
+                } else if (!_hasMovedSignificantly && _swipeOffset < 5f) {
                     // It was a simple click, not a swipe
                     OnClick();
                     Tweener.To(this, v => _swipeOffset = v, _swipeOffset, 0f, 0.15f, Easing.EaseOutQuad);
@@ -183,6 +185,7 @@ public class NotificationToast : UIElement {
                     // Snap back
                     Tweener.To(this, v => _swipeOffset = v, _swipeOffset, 0f, 0.15f, Easing.EaseOutQuad);
                 }
+                _hasMovedSignificantly = false;
             }
         }
 
