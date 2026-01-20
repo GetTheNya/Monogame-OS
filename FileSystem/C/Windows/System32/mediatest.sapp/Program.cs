@@ -120,7 +120,7 @@ public class MediaTestApp : Window {
         AddChild(new Label(new Vector2(x, y), "One-Shot Test:"));
         y += 25;
         var oneShotBtn = new Button(new Vector2(x, y), new Vector2(200, 30), "Play Alert Sound");
-        oneShotBtn.OnClickAction = () => Shell.Audio.PlaySound("C:\\Windows\\Media\\notify.wav");
+        oneShotBtn.OnClickAction = () => Shell.Audio.PlaySound("C:\\Windows\\Media\\startup.wav");
         AddChild(oneShotBtn);
         y += 40;
 
@@ -154,7 +154,7 @@ public class MediaTestApp : Window {
         Shell.Media.RegisterAsPlayer(OwnerProcess);
         
         // Preload the notification sound for instant one-shot playback
-        Shell.Media.Preload("C:\\Windows\\Media\\notify.wav");
+        Shell.Media.Preload("C:\\Windows\\Media\\startup.wav");
     }
 
     public override void Update(GameTime gameTime) {

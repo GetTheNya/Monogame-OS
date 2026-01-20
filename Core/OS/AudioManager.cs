@@ -12,7 +12,9 @@ namespace TheGame.Core.OS;
 public enum MediaStatus {
     Starting,
     Playing,
+    Pausing,
     Paused,
+    Stopping,
     Stopped
 }
 
@@ -200,7 +202,6 @@ public class AudioManager {
 
     public void Pause(string id) {
         if (_handles.TryGetValue(id, out var handle)) {
-            if (handle.Status != MediaStatus.Playing) return;
             handle.Pause();
         }
     }
@@ -261,7 +262,7 @@ public class AudioManager {
 
     public void RegisterFinishedCallback(string id, Action callback) {
         if (_handles.TryGetValue(id, out var handle)) {
-            handle.OnFinishedCallback += callback;
+            handle.OnFinishedCallback = callback; 
         }
     }
 
@@ -278,11 +279,24 @@ public class AudioManager {
 
     public void Update() {
         var toUnload = new List<string>();
-        foreach (var handle in _handles.Values) {
-            if (handle.Status == MediaStatus.Playing && handle.Position >= handle.Duration - 0.01) {
-                handle.OnFinished();
-                if (handle.AutoUnload) {
-                    toUnload.Add(handle.Id);
+        lock (_lock) {
+            foreach (var handle in _handles.Values.ToList()) {
+                if (handle.Status == MediaStatus.Playing && handle.Position >= handle.Duration - 0.01) {
+                    handle.OnFinished();
+                    if (handle.AutoUnload) {
+                        toUnload.Add(handle.Id);
+                    }
+                } else if (handle.Status == MediaStatus.Stopping) {
+                    if (!handle.IsFading) {
+                        handle.OnFinished(); // Fully stop after fade
+                        if (handle.AutoUnload) {
+                            toUnload.Add(handle.Id);
+                        }
+                    }
+                } else if (handle.Status == MediaStatus.Pausing) {
+                    if (!handle.IsFading) {
+                        handle.InternalPause(); // Fully pause after fade
+                    }
                 }
             }
         }
@@ -368,7 +382,7 @@ public class AudioManager {
         public MediaStatus Status { get; private set; } = MediaStatus.Stopped;
         
         public bool AutoUnload { get; }
-        public event Action OnFinishedCallback;
+        public Action OnFinishedCallback { get; set; }
         
         private ISampleProvider _source;
         private AudioFileReader _reader; 
@@ -380,7 +394,10 @@ public class AudioManager {
         private WdlResamplingSampleProvider _resampler;
         private LockingSampleProvider _finalProvider;
         
+        private bool _useFading;
+        
         public ISampleProvider FinalProvider => _finalProvider;
+        public bool IsFading => _fadeProvider?.IsFading ?? false;
 
         private float _userVolume = 1.0f;
         private float _processEffectiveVolume = 1.0f;
@@ -408,6 +425,7 @@ public class AudioManager {
             Owner = owner;
             VirtualPath = virtualPath;
             AutoUnload = autoUnload;
+            _useFading = useFading;
             _reader = new AudioFileReader(hostPath);
             _source = _reader; 
             Duration = _reader.TotalTime.TotalSeconds;
@@ -418,6 +436,7 @@ public class AudioManager {
             Owner = owner;
             VirtualPath = virtualPath;
             AutoUnload = autoUnload;
+            _useFading = useFading;
             _cachedSource = new CachedSampleProvider(cached);
             _source = _cachedSource;
             Duration = _cachedSource.DurationCorrect.TotalSeconds;
@@ -449,32 +468,49 @@ public class AudioManager {
         }
 
         public void Play() {
-            if (Status == MediaStatus.Playing) return;
             _finalProvider.Lock(() => {
+                if (Status == MediaStatus.Playing) return;
+                
                 _pausableProvider.Paused = false;
-                _fadeProvider?.BeginFadeIn(100);
+                if (_useFading) _fadeProvider?.BeginFadeIn(200);
+                else _fadeProvider?.Reset(1.0f);
                 Status = MediaStatus.Playing;
                 UpdateFinalVolume();
             });
         }
 
         public void Pause() {
-            if (Status != MediaStatus.Playing) return;
+            _finalProvider.Lock(() => {
+                if (Status != MediaStatus.Playing && Status != MediaStatus.Pausing) return;
+
+                if (_useFading && Status == MediaStatus.Playing) {
+                    _fadeProvider?.BeginFadeOut(200);
+                    Status = MediaStatus.Pausing;
+                    UpdateFinalVolume();
+                } else {
+                    InternalPause();
+                }
+            });
+        }
+
+        public void InternalPause() {
             _finalProvider.Lock(() => {
                 Status = MediaStatus.Paused;
                 _pausableProvider.Paused = true;
+                _fadeProvider?.Reset(0.0f);
                 UpdateFinalVolume();
             });
         }
 
         public void Stop() {
             _finalProvider.Lock(() => {
-                _pausableProvider.Paused = true;
-                _fadeProvider?.BeginFadeOut(100);
-                Status = MediaStatus.Stopped;
-                UpdateFinalVolume();
-                if (_reader != null) _reader.CurrentTime = TimeSpan.Zero;
-                else if (_cachedSource != null) _cachedSource.Position = TimeSpan.Zero;
+                if (_useFading && (Status == MediaStatus.Playing || Status == MediaStatus.Stopping || Status == MediaStatus.Pausing)) {
+                    _fadeProvider?.BeginFadeOut(200);
+                    Status = MediaStatus.Stopping;
+                    UpdateFinalVolume();
+                } else {
+                    OnFinished();
+                }
             });
         }
 
@@ -497,7 +533,7 @@ public class AudioManager {
 
         private void UpdateFinalVolume() {
             float master = AudioManager.Instance.MasterVolume;
-            if (Status == MediaStatus.Playing) {
+            if (Status == MediaStatus.Playing || Status == MediaStatus.Stopping || Status == MediaStatus.Pausing) {
                 _volumeProvider.Volume = _userVolume * _processEffectiveVolume * master;
             } else {
                 _volumeProvider.Volume = 0;
@@ -506,11 +542,18 @@ public class AudioManager {
 
         public void OnFinished() {
             _finalProvider.Lock(() => {
+                if (Status == MediaStatus.Stopped) return;
+                
                 Status = MediaStatus.Stopped;
+                _pausableProvider.Paused = true;
                 _volumeProvider.Volume = 0;
+                _fadeProvider?.Reset(0f);
                 if (_reader != null) _reader.CurrentTime = TimeSpan.Zero;
                 else if (_cachedSource != null) _cachedSource.Position = TimeSpan.Zero;
-                OnFinishedCallback?.Invoke();
+                
+                var callback = OnFinishedCallback;
+                OnFinishedCallback = null; 
+                callback?.Invoke();
             });
         }
 
@@ -597,9 +640,8 @@ public class AudioManager {
 
     private class SmoothedVolumeSampleProvider : ISampleProvider {
         private readonly ISampleProvider _source;
-        private float _targetVolume = 1.0f;
-        private float _currentVolume = 1.0f;
-        private const float VolumeStep = 0.05f; // Duration of smoothing in seconds roughly
+        private float _targetVolume = 0.0f;
+        private float _currentVolume = -1.0f; 
 
         public WaveFormat WaveFormat => _source.WaveFormat;
 
@@ -615,6 +657,10 @@ public class AudioManager {
         public int Read(float[] buffer, int offset, int count) {
             int read = _source.Read(buffer, offset, count);
             if (read == 0) return 0;
+
+            if (_currentVolume < 0) {
+                _currentVolume = _targetVolume;
+            }
 
             if (Math.Abs(_currentVolume - _targetVolume) < 0.0001f) {
                 _currentVolume = _targetVolume;
@@ -643,6 +689,73 @@ public class AudioManager {
                         }
                         break;
                     }
+                }
+            }
+
+            return read;
+        }
+    }
+
+    private class FadeInOutSampleProvider : ISampleProvider {
+        private readonly ISampleProvider _source;
+        private float _multiplier = 0.0f;
+        private float _targetMultiplier = 0.0f;
+        private float _increment = 0.0f;
+
+        public WaveFormat WaveFormat => _source.WaveFormat;
+
+        public FadeInOutSampleProvider(ISampleProvider source) {
+            _source = source;
+        }
+
+        public void Reset(float volume) {
+            _multiplier = volume;
+            _targetMultiplier = volume;
+            _increment = 0;
+        }
+
+        public void BeginFadeIn(int milliseconds) {
+            int samples = (WaveFormat.SampleRate * milliseconds) / 1000;
+            _targetMultiplier = 1.0f;
+            _increment = (1.0f - _multiplier) / (samples > 0 ? samples : 1);
+        }
+
+        public void BeginFadeOut(int milliseconds) {
+            int samples = (WaveFormat.SampleRate * milliseconds) / 1000;
+            _targetMultiplier = 0.0f;
+            _increment = (0.0f - _multiplier) / (samples > 0 ? samples : 1);
+        }
+
+        public bool IsFading => _increment != 0;
+
+        public int Read(float[] buffer, int offset, int count) {
+            int read = _source.Read(buffer, offset, count);
+            if (read == 0) return 0;
+
+            if (_increment == 0) {
+                if (_multiplier == 1.0f) return read;
+                if (_multiplier == 0.0f) {
+                    Array.Clear(buffer, offset, read);
+                    return read;
+                }
+                for (int i = 0; i < read; i++) buffer[offset + i] *= _multiplier;
+                return read;
+            }
+
+            int channels = WaveFormat.Channels;
+            for (int i = 0; i < read; i += channels) {
+                for (int ch = 0; ch < channels; ch++) {
+                    buffer[offset + i + ch] *= _multiplier;
+                }
+                _multiplier += _increment;
+
+                if ((_increment > 0 && _multiplier >= _targetMultiplier) || 
+                    (_increment < 0 && _multiplier <= _targetMultiplier)) {
+                    _multiplier = _targetMultiplier;
+                    _increment = 0;
+                    // Fast path for rest of buffer
+                    for (int j = i + channels; j < read; j++) buffer[offset + j] *= _multiplier;
+                    break;
                 }
             }
 
