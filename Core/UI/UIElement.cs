@@ -150,8 +150,8 @@ public abstract class UIElement {
 
         // Store input states while we are still "the top element" (before we consume it ourselves)
         // ignoreConsumed: false ensures we only react if no one else (in front) caught the click
-        bool justPressed = IsMouseOver && InputManager.IsMouseButtonJustPressed(MouseButton.Left);
-        bool justRightPressed = IsMouseOver && InputManager.IsMouseButtonJustPressed(MouseButton.Right);
+        bool justPressed = IsMouseOver && !InputManager.IsMouseConsumed && InputManager.IsMouseButtonJustPressed(MouseButton.Left);
+        bool justRightPressed = IsMouseOver && !InputManager.IsMouseConsumed && InputManager.IsMouseButtonJustPressed(MouseButton.Right);
         bool justReleased = InputManager.IsMouseButtonJustReleased(MouseButton.Left);
 
         if (IsMouseOver) {
