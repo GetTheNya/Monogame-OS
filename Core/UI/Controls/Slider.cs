@@ -7,6 +7,7 @@ namespace TheGame.Core.UI.Controls;
 
 public class Slider : ValueControl<float> {
     private bool _isDraggingSlider;
+    public bool IsDragging => _isDraggingSlider;
 
     public Slider(Vector2 position, float width) : base(position, new Vector2(width, 20)) {
     }

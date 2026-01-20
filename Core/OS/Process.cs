@@ -140,6 +140,9 @@ public class Process {
         
         // Remove tray icons owned by this process
         Shell.SystemTray.RemoveIconsForProcess(this);
+
+        // Remove media owned by this process
+        AudioManager.Instance.CleanupProcess(this);
         
         // Remove local hotkeys for this process
         Shell.Hotkeys.UnregisterLocal(this);

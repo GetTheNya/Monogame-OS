@@ -40,6 +40,9 @@ public class AppCompiler {
             
             // Our assemblies
             MetadataReference.CreateFromFile(Assembly.GetExecutingAssembly().Location),
+
+            // NAudio
+            MetadataReference.CreateFromFile(typeof(NAudio.Wave.WaveOutEvent).Assembly.Location),
         };
     }
 

@@ -1,0 +1,14 @@
+{
+  "appId": "MEDIATEST",
+  "name": "Media test",
+  "icon": "icon.png",
+  "version": "1.0.0",
+  "author": "Unknown",
+  "description": "Simple media tester",
+  "entryPoint": "Program.cs",
+  "entryClass": "MediaTestApp.Program",
+  "entryMethod": "CreateWindow",
+  "permissions": [],
+  "dependencies": []
+}
+
