@@ -51,16 +51,17 @@ public class CustomCursor {
         _spriteBatch = new SpriteBatch(graphicsDevice);
         
         // Load cursor textures from FileSystem
+        // For now lets just hardcode path and hotspot
+        LoadCursor(CursorType.Beam, "C:\\Windows\\SystemResources\\Cursors\\beam.png", new Vector2(15, 15));
+        LoadCursor(CursorType.DiagonalNW, "C:\\Windows\\SystemResources\\Cursors\\dgn1.png", new Vector2(12, 11));
+        LoadCursor(CursorType.DiagonalNE, "C:\\Windows\\SystemResources\\Cursors\\dgn2.png", new Vector2(12, 11));
+        LoadCursor(CursorType.Horizontal, "C:\\Windows\\SystemResources\\Cursors\\horz.png", new Vector2(12, 11));
+        LoadCursor(CursorType.Link, "C:\\Windows\\SystemResources\\Cursors\\link.png", new Vector2(9, 3));
+        LoadCursor(CursorType.Move, "C:\\Windows\\SystemResources\\Cursors\\move.png", new Vector2(12, 11));
         LoadCursor(CursorType.Pointer, "C:\\Windows\\SystemResources\\Cursors\\pointer.png", new Vector2(0, 0));
-        LoadCursor(CursorType.Beam, "C:\\Windows\\SystemResources\\Cursors\\beam.png", new Vector2(8, 8));
-        LoadCursor(CursorType.Link, "C:\\Windows\\SystemResources\\Cursors\\link.png", new Vector2(6, 0));
-        LoadCursor(CursorType.Move, "C:\\Windows\\SystemResources\\Cursors\\move.png", new Vector2(8, 8));
-        LoadCursor(CursorType.Horizontal, "C:\\Windows\\SystemResources\\Cursors\\horz.png", new Vector2(8, 8));
-        LoadCursor(CursorType.Vertical, "C:\\Windows\\SystemResources\\Cursors\\vert.png", new Vector2(8, 8));
-        LoadCursor(CursorType.DiagonalNW, "C:\\Windows\\SystemResources\\Cursors\\dgn1.png", new Vector2(8, 8));
-        LoadCursor(CursorType.DiagonalNE, "C:\\Windows\\SystemResources\\Cursors\\dgn2.png", new Vector2(8, 8));
-        LoadCursor(CursorType.Unavailable, "C:\\Windows\\SystemResources\\Cursors\\unavailable.png", new Vector2(8, 8));
-        
+        LoadCursor(CursorType.Unavailable, "C:\\Windows\\SystemResources\\Cursors\\unavailable.png", new Vector2(0, 0));
+        LoadCursor(CursorType.Vertical, "C:\\Windows\\SystemResources\\Cursors\\vert.png", new Vector2(12, 11));
+
         // Hide Windows cursor
         Game1.Instance.IsMouseVisible = false;
         
