@@ -79,7 +79,6 @@ public class DesktopScene : Core.Scenes.Scene {
         _windowLayer = new BlurredWindowLayerPanel(Vector2.Zero, new Vector2(screenWidth, screenHeight));
         _uiManager.AddElement(_windowLayer);
 
-        // 3. Taskbar Layer (Top of Windows)
         _startMenu = new StartMenu(new Vector2(0, screenHeight - 500 - 40), new Vector2(400, 500));
         _startMenu.IsVisible = false;
         _uiManager.AddElement(_startMenu);
@@ -96,6 +95,7 @@ public class DesktopScene : Core.Scenes.Scene {
         _notificationPanel = new NotificationHistoryPanel();
         _uiManager.AddElement(_notificationPanel);
 
+        // 3. Taskbar Layer (Added LAST so it updates FIRST in the reverse-order loop)
         _taskbar = new Taskbar(new Vector2(0, screenHeight - TaskbarHeight), new Vector2(screenWidth, TaskbarHeight), _windowLayer, _startMenu);
         _uiManager.AddElement(_taskbar);
 

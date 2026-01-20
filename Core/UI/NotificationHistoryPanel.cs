@@ -72,36 +72,34 @@ public class NotificationHistoryPanel : UIElement {
     }
 
     public void Toggle() {
-        if (_isAnimating) {
-            ForceClose();
-            return;
-        }
-        
         if (_isOpen) Close();
         else Open();
     }
 
     public void Open() {
-        if (_isOpen || _isAnimating) return;
+        if (_isOpen && !_isAnimating) return;
         _isOpen = true;
         _isAnimating = true;
         NotificationManager.Instance.MarkAllAsRead();
         RefreshContent();
+        Tweener.CancelAll(this, "slide");
         var tween = Tweener.To(this, v => _slideOffset = v, _slideOffset, 0f, 0.25f, Easing.EaseOutQuad);
         tween.Tag = "slide";
         tween.OnComplete = () => { _isAnimating = false; };
     }
 
     public void Close() {
-        if (!_isOpen || _isAnimating) return;
+        if (!_isOpen && !_isAnimating) return;
         _isOpen = false;
         _isAnimating = true;
+        Tweener.CancelAll(this, "slide");
         var tween = Tweener.To(this, v => _slideOffset = v, _slideOffset, PanelWidth, 0.2f, Easing.EaseInQuad);
         tween.Tag = "slide";
         tween.OnComplete = () => { _isAnimating = false; };
     }
 
     private void ForceClose() {
+        if (!_isOpen && _slideOffset >= PanelWidth) return;
         _isOpen = false;
         _isAnimating = true;
         Tweener.CancelAll(this, "slide");
@@ -212,7 +210,7 @@ public class NotificationHistoryPanel : UIElement {
         Position = new Vector2(viewport.Width - PanelWidth + _slideOffset, 0);
 
         if (_isOpen && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
-            if (!Bounds.Contains(InputManager.MousePosition)) {
+            if (!Bounds.Contains(InputManager.MousePosition) && !InputManager.IsMouseConsumed) {
                 ForceClose();
             }
         }

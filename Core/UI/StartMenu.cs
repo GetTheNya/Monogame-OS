@@ -21,6 +21,7 @@ public class StartMenu : Panel {
     private ScrollPanel _scrollPanel;
     private float _startMenuWidth = 280f;
     private float _startMenuHeight = 450f;
+    private bool _isOpen = false;
 
     public StartMenu(Vector2 position, Vector2 size) : base(position, size) {
         _startMenuWidth = size.X;
@@ -153,19 +154,27 @@ public class StartMenu : Panel {
     }
 
     public void Toggle() {
+        if (_isOpen) Close();
+        else Open();
+    }
+
+    public void Open() {
+        if (_isOpen && Opacity > 0.99f) return;
+        _isOpen = true;
         Tweener.CancelAll(this);
-        if (IsVisible && Position.Y < _hiddenPosition.Y - 10) {
-            Tweener.To(this, v => Position = v, Position, _hiddenPosition, 0.25f, Easing.EaseInQuad).OnComplete = () => { IsVisible = false; };
-            Tweener.To(this, v => Opacity = v, Opacity, 0f, 0.2f, Easing.Linear);
-        } else {
-            RefreshItems(); // Refresh on open
-            IsVisible = true;
-            Position = _hiddenPosition;
-            Opacity = 0f;
-            UpdateDockPosition();
-            Tweener.To(this, v => Position = v, _hiddenPosition, _targetPosition, 0.3f, Easing.EaseOutQuad);
-            Tweener.To(this, v => Opacity = v, 0f, 1f, 0.2f, Easing.Linear);
-        }
+        RefreshItems(); // Refresh on open
+        IsVisible = true;
+        UpdateDockPosition();
+        Tweener.To(this, v => Position = v, Position, _targetPosition, 0.3f, Easing.EaseOutQuad);
+        Tweener.To(this, v => Opacity = v, Opacity, 1f, 0.2f, Easing.Linear);
+    }
+
+    public void Close() {
+        if (!_isOpen && Opacity < 0.01f) return;
+        _isOpen = false;
+        Tweener.CancelAll(this);
+        Tweener.To(this, v => Position = v, Position, _hiddenPosition, 0.25f, Easing.EaseInQuad).OnComplete = () => { IsVisible = false; };
+        Tweener.To(this, v => Opacity = v, Opacity, 0f, 0.2f, Easing.Linear);
     }
     
     protected override void DrawSelf(SpriteBatch spriteBatch, ShapeBatch batch) {
@@ -178,10 +187,10 @@ public class StartMenu : Panel {
     public override void Update(GameTime gameTime) {
         base.Update(gameTime);
         
-        if (IsVisible && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
+        if (_isOpen && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
             if (!Bounds.Contains(InputManager.MousePosition)) {
                 if (!InputManager.IsMouseConsumed) {
-                    Toggle();
+                    Close();
                 }
             }
         }

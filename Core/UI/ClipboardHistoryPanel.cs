@@ -69,15 +69,7 @@ public class ClipboardHistoryPanel : Panel {
             var tween = Tweener.To(this, (v) => _showAnim = v, _showAnim, 1f, 0.2f, Easing.EaseOutQuad);
             tween.Tag = "show_anim";
         } else {
-            // Close
-            _isClosing = true;
-            Tweener.CancelAll(this, "show_anim");
-            var tween = Tweener.To(this, (v) => _showAnim = v, _showAnim, 0f, 0.2f, Easing.EaseOutQuad);
-            tween.Tag = "show_anim";
-            tween.OnCompleteAction(() => {
-                IsVisible = false;
-                _isClosing = false;
-            });
+            Close();
         }
     }
 
@@ -199,7 +191,9 @@ public class ClipboardHistoryPanel : Panel {
         // Close if clicking outside the panel
         // Use ignoreConsumed: false to ensure we don't close if a popup in front was clicked.
         if (IsVisible && !_isClosing && InputManager.IsMouseButtonJustPressed(MouseButton.Left) && !Bounds.Contains(InputManager.MousePosition)) {
-            Close();
+            if (!InputManager.IsMouseConsumed) {
+                Close();
+            }
         }
     }
 
