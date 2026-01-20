@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using TheGame.Core.Input;
 using TheGame.Core.UI; // For MenuItem
+using TheGame.Core.OS;
 using TheGame.Graphics;
 
 namespace TheGame.Core.UI.Controls;
@@ -64,12 +65,12 @@ public class MenuBar : UIControl {
     /// <summary>
     /// Registers all menu shortcuts as local hotkeys for the specified application.
     /// </summary>
-    public void RegisterHotkeys(string appId) {
+    public void RegisterHotkeys(TheGame.Core.OS.Process process) {
         foreach (var menu in _menus) {
             foreach (var item in menu.Items) {
                 if (!string.IsNullOrEmpty(item.Shortcut)) {
                     var action = item.Action;
-                    HotkeyManager.RegisterLocal(appId, Hotkey.Parse(item.Shortcut), () => action?.Invoke());
+                    Shell.Hotkeys.RegisterLocal(process, item.Shortcut, () => action?.Invoke());
                 }
             }
         }

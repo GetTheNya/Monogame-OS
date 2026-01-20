@@ -88,7 +88,7 @@ public class NotepadWindow : Window {
             });
         });
 
-        _menuBar.RegisterHotkeys(AppId);
+        _menuBar.RegisterHotkeys(OwnerProcess);
         AddChild(_menuBar);
 
         // Text Area

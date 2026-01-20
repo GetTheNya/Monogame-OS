@@ -140,15 +140,19 @@ public class DesktopScene : Core.Scenes.Scene {
     }
 
     private void RegisterGlobalHotkeys() {
-        DebugLogger.Log("Registering global hotkeys");
+        DebugLogger.Log("Registering global/system hotkeys");
+        
+        // Win key -> Start Menu (System default)
         Shell.Hotkeys.RegisterGlobal(Keys.None, HotkeyModifiers.Win, () => {
             _startMenu?.Toggle();
         });
 
+        // Win+V -> Clipboard History
         Shell.Hotkeys.RegisterGlobal(Keys.V, HotkeyModifiers.Win, () => {
             _clipboardPanel?.Toggle();
         });
 
+        // Global Copy/Cut/Paste (Standard fallback)
         Shell.Hotkeys.RegisterGlobal(Keys.C, HotkeyModifiers.Ctrl, () => UIManager.FocusedElement?.Copy());
         Shell.Hotkeys.RegisterGlobal(Keys.X, HotkeyModifiers.Ctrl, () => UIManager.FocusedElement?.Cut());
         Shell.Hotkeys.RegisterGlobal(Keys.V, HotkeyModifiers.Ctrl, () => UIManager.FocusedElement?.Paste());

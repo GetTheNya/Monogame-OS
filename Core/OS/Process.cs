@@ -141,14 +141,8 @@ public class Process {
         // Remove tray icons owned by this process
         Shell.SystemTray.RemoveIconsForProcess(this);
         
-        // Remove local hotkeys if this is the last instance of the app
-        if (!string.IsNullOrEmpty(AppId)) {
-            var otherInstances = ProcessManager.Instance.GetProcessesByApp(AppId)
-                .Where(p => p != this && p.State != ProcessState.Terminated);
-            if (!otherInstances.Any()) {
-                HotkeyManager.UnregisterLocal(AppId);
-            }
-        }
+        // Remove local hotkeys for this process
+        Shell.Hotkeys.UnregisterLocal(this);
         
         foreach (var window in Windows.ToList()) {
             window.Close();
