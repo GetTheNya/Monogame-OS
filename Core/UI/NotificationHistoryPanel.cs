@@ -98,16 +98,6 @@ public class NotificationHistoryPanel : UIElement {
         tween.OnComplete = () => { _isAnimating = false; };
     }
 
-    private void ForceClose() {
-        if (!_isOpen && _slideOffset >= PanelWidth) return;
-        _isOpen = false;
-        _isAnimating = true;
-        Tweener.CancelAll(this, "slide");
-        var tween = Tweener.To(this, v => _slideOffset = v, _slideOffset, PanelWidth, 0.2f, Easing.EaseInQuad);
-        tween.Tag = "slide";
-        tween.OnComplete = () => { _isAnimating = false; };
-    }
-
     private void ClearAllAnimated() {
         if (_isClearing || _items.Count == 0) return;
         _isClearing = true;
@@ -211,7 +201,7 @@ public class NotificationHistoryPanel : UIElement {
 
         if (_isOpen && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
             if (!Bounds.Contains(InputManager.MousePosition) && !InputManager.IsMouseConsumed) {
-                ForceClose();
+                Close();
             }
         }
     }

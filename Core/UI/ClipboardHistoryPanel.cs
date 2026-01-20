@@ -18,7 +18,8 @@ public class ClipboardHistoryPanel : Panel {
 
     private ScrollPanel _scrollPanel;
     private float _showAnim = 0f;
-    private bool _isClosing = false;
+    private bool _isOpen = false;
+    private bool _isAnimating = false;
 
     private Label _titleLabel;
     private Button _clearButton;
@@ -57,20 +58,37 @@ public class ClipboardHistoryPanel : Panel {
     }
 
     public void Toggle() {
-        if (!IsVisible || _isClosing) {
-            // Open
-            IsVisible = true;
-            _isClosing = false;
-            RefreshHistory();
-            UpdatePosition();
-            Parent?.BringToFront(this);
-            
-            Tweener.CancelAll(this, "show_anim");
-            var tween = Tweener.To(this, (v) => _showAnim = v, _showAnim, 1f, 0.2f, Easing.EaseOutQuad);
-            tween.Tag = "show_anim";
-        } else {
-            Close();
-        }
+        if (_isOpen) Close();
+        else Open();
+    }
+
+    public void Open() {
+        if (_isOpen && !_isAnimating) return;
+        IsVisible = true;
+        _isOpen = true;
+        _isAnimating = true;
+        RefreshHistory();
+        UpdatePosition();
+        Parent?.BringToFront(this);
+        
+        Tweener.CancelAll(this, "show_anim");
+        var tween = Tweener.To(this, (v) => _showAnim = v, _showAnim, 1f, 0.2f, Easing.EaseOutQuad);
+        tween.Tag = "show_anim";
+        tween.OnCompleteAction(() => _isAnimating = false);
+    }
+
+    public void Close() {
+        if (!_isOpen && !_isAnimating) return;
+        _isOpen = false;
+        _isAnimating = true;
+        
+        Tweener.CancelAll(this, "show_anim");
+        var tween = Tweener.To(this, (v) => _showAnim = v, _showAnim, 0f, 0.2f, Easing.EaseOutQuad);
+        tween.Tag = "show_anim";
+        tween.OnCompleteAction(() => {
+            IsVisible = false;
+            _isAnimating = false;
+        });
     }
 
     private void UpdatePosition() {
@@ -165,18 +183,6 @@ public class ClipboardHistoryPanel : Panel {
         return itemButton;
     }
 
-    public void Close() {
-        if (!IsVisible || _isClosing) return;
-        _isClosing = true;
-        
-        Tweener.CancelAll(this, "show_anim");
-        var tween = Tweener.To(this, (v) => _showAnim = v, _showAnim, 0f, 0.2f, Easing.EaseOutQuad);
-        tween.Tag = "show_anim";
-        tween.OnCompleteAction(() => {
-            IsVisible = false;
-            _isClosing = false;
-        });
-    }
 
     public void ClearAndClose() {
         Shell.Clipboard.Clear();
@@ -190,7 +196,7 @@ public class ClipboardHistoryPanel : Panel {
 
         // Close if clicking outside the panel
         // Use ignoreConsumed: false to ensure we don't close if a popup in front was clicked.
-        if (IsVisible && !_isClosing && InputManager.IsMouseButtonJustPressed(MouseButton.Left) && !Bounds.Contains(InputManager.MousePosition)) {
+        if (_isOpen && InputManager.IsMouseButtonJustPressed(MouseButton.Left) && !Bounds.Contains(InputManager.MousePosition)) {
             if (!InputManager.IsMouseConsumed) {
                 Close();
             }
