@@ -86,7 +86,7 @@ public static class CrashHandler {
         string logPath = LogCrash(appId, ex);
         
         // Show error dialog
-        ShowCrashDialog(appId, ex, logPath);
+        ShowCrashNotification(appId, ex, logPath);
         
         // Terminate the process
         try {
@@ -153,7 +153,7 @@ public static class CrashHandler {
     /// <summary>
     /// Shows a crash dialog to the user.
     /// </summary>
-    private static void ShowCrashDialog(string appId, Exception ex, string logPath) {
+    private static void ShowCrashNotification(string appId, Exception ex, string logPath) {
         try {
             // Build error message
             string title = $"{appId} - Application Error";
@@ -166,7 +166,9 @@ public static class CrashHandler {
             }
             
             // Show notification
-            Shell.Notifications.Show(title, message, onClick: () => {
+            string crashNotifId = "";
+            crashNotifId = Shell.Notifications.Show(title, message, onClick: () => {
+                Shell.Notifications.Dismiss(crashNotifId);
                 Shell.Execute(logPath);
             });
             
