@@ -532,8 +532,7 @@ public class Window : UIElement {
             }
         }
 
-        if (isHoveringStrict && ConsumesInput)
-            InputManager.IsMouseConsumed = true;
+        // No longer consuming early here - base.UpdateInput() handles it via ConsumesInput property
 
         if (inputConsumedByChild) {
             base.UpdateInput(); // Keep base logic alive for state management
