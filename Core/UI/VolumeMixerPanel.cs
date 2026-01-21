@@ -114,7 +114,7 @@ public class VolumeMixerPanel : Panel {
         var masterRow = new VolumeControlRow(
             new Vector2(0, yOffset), 
             new Vector2(_scrollPanel.ClientSize.X, rowHeight),
-            "Master Volume",
+            () => "Master Volume",
             null,
             () => Shell.Media.GetMasterVolume(),
             (v) => Shell.Media.SetMasterVolume(v),
@@ -131,8 +131,8 @@ public class VolumeMixerPanel : Panel {
             var systemRow = new VolumeControlRow(
                 new Vector2(0, yOffset),
                 new Vector2(_scrollPanel.ClientSize.X, rowHeight),
-                "System Sounds",
-                GameContent.PCIcon,
+                () => "System Sounds",
+                () => GameContent.PCIcon,
                 () => Shell.Media.GetProcessVolume(systemProcess),
                 (v) => Shell.Media.SetProcessVolume(systemProcess, v),
                 () => Shell.Media.GetSystemLevel(),
@@ -149,13 +149,11 @@ public class VolumeMixerPanel : Panel {
             .ToList();
 
         foreach (var app in apps) {
-            Texture2D appIcon = app.MainWindow?.Icon ?? GameContent.FileIcon;
-            
             var appRow = new VolumeControlRow(
                 new Vector2(0, yOffset),
                 new Vector2(_scrollPanel.ClientSize.X, rowHeight),
-                app.MainWindow?.Title ?? app.AppId,
-                appIcon,
+                () => app.MainWindow?.Title ?? app.AppId,
+                () => app.MainWindow?.Icon ?? GameContent.FileIcon,
                 () => Shell.Media.GetProcessVolume(app),
                 (v) => Shell.Media.SetProcessVolume(app, v),
                 () => Shell.Media.GetProcessLevel(app),
@@ -206,23 +204,25 @@ public class VolumeMixerPanel : Panel {
         private Label _nameLabel;
         private Slider _slider;
         private LevelMeter _meter;
-        private Texture2D _icon;
+        private Func<string> _nameGetter;
+        private Func<Texture2D> _iconGetter;
         private Func<float> _getter;
         private Action<float> _setter;
         private Func<float> _levelGetter;
         private Func<float> _peakGetter;
         private bool _isUpdatingInternally = false;
 
-        public VolumeControlRow(Vector2 pos, Vector2 size, string name, Texture2D icon, Func<float> getter, Action<float> setter, Func<float> levelGetter, Func<float> peakGetter) : base(pos, size) {
+        public VolumeControlRow(Vector2 pos, Vector2 size, Func<string> nameGetter, Func<Texture2D> iconGetter, Func<float> getter, Action<float> setter, Func<float> levelGetter, Func<float> peakGetter) : base(pos, size) {
             BackgroundColor = new Color(50, 50, 50, 100);
-            _icon = icon;
+            _nameGetter = nameGetter;
+            _iconGetter = iconGetter;
             _getter = getter;
             _setter = setter;
             _levelGetter = levelGetter;
             _peakGetter = peakGetter;
             CanFocus = false;
 
-            _nameLabel = new Label(new Vector2(50, 5), name) { FontSize = 14, CanFocus = false };
+            _nameLabel = new Label(new Vector2(50, 5), _nameGetter()) { FontSize = 14, CanFocus = false };
             AddChild(_nameLabel);
 
             _slider = new Slider(new Vector2(50, 25), size.X - 70) { CanFocus = false };
@@ -247,6 +247,9 @@ public class VolumeMixerPanel : Panel {
             }
             _meter.Level = _levelGetter();
             _meter.Peak = _peakGetter();
+            
+            // Periodically update name if it was a fallback
+            _nameLabel.Text = _nameGetter();
         }
 
         protected override void DrawSelf(SpriteBatch spriteBatch, ShapeBatch batch) {
@@ -255,8 +258,9 @@ public class VolumeMixerPanel : Panel {
             float iconSize = 32;
             Vector2 iconPos = AbsolutePosition + new Vector2(10, (Size.Y - iconSize) / 2f);
             
-            if (_icon != null) {
-                batch.DrawTexture(_icon, iconPos, Color.White * AbsoluteOpacity, iconSize / _icon.Width);
+            var icon = _iconGetter?.Invoke();
+            if (icon != null) {
+                batch.DrawTexture(icon, iconPos, Color.White * AbsoluteOpacity, iconSize / icon.Width);
             } else {
                 var masterIcon = GetVolumeIcon(Shell.Media.GetMasterVolume());
                 batch.DrawTexture(masterIcon, iconPos, Color.White * AbsoluteOpacity, iconSize / masterIcon.Width);
