@@ -101,7 +101,9 @@ public class VolumeMixerPanel : Panel {
             "Master Volume",
             null,
             () => Shell.Media.GetMasterVolume(),
-            (v) => Shell.Media.SetMasterVolume(v)
+            (v) => Shell.Media.SetMasterVolume(v),
+            () => Shell.Media.GetMasterLevel(),
+            () => Shell.Media.GetMasterPeak()
         );
         _scrollPanel.AddChild(masterRow);
         _rows.Add(masterRow);
@@ -116,7 +118,9 @@ public class VolumeMixerPanel : Panel {
                 "System Sounds",
                 GameContent.PCIcon,
                 () => Shell.Media.GetProcessVolume(systemProcess),
-                (v) => Shell.Media.SetProcessVolume(systemProcess, v)
+                (v) => Shell.Media.SetProcessVolume(systemProcess, v),
+                () => Shell.Media.GetSystemLevel(),
+                () => Shell.Media.GetSystemPeak()
             );
             _scrollPanel.AddChild(systemRow);
             _rows.Add(systemRow);
@@ -137,7 +141,9 @@ public class VolumeMixerPanel : Panel {
                 app.MainWindow?.Title ?? app.AppId,
                 appIcon,
                 () => Shell.Media.GetProcessVolume(app),
-                (v) => Shell.Media.SetProcessVolume(app, v)
+                (v) => Shell.Media.SetProcessVolume(app, v),
+                () => Shell.Media.GetProcessLevel(app),
+                () => Shell.Media.GetProcessPeak(app)
             );
             _scrollPanel.AddChild(appRow);
             _rows.Add(appRow);
@@ -183,37 +189,48 @@ public class VolumeMixerPanel : Panel {
     private class VolumeControlRow : Panel {
         private Label _nameLabel;
         private Slider _slider;
+        private LevelMeter _meter;
         private Texture2D _icon;
         private Func<float> _getter;
         private Action<float> _setter;
+        private Func<float> _levelGetter;
+        private Func<float> _peakGetter;
         private bool _isUpdatingInternally = false;
 
-        public VolumeControlRow(Vector2 pos, Vector2 size, string name, Texture2D icon, Func<float> getter, Action<float> setter) : base(pos, size) {
+        public VolumeControlRow(Vector2 pos, Vector2 size, string name, Texture2D icon, Func<float> getter, Action<float> setter, Func<float> levelGetter, Func<float> peakGetter) : base(pos, size) {
             BackgroundColor = new Color(50, 50, 50, 100);
             _icon = icon;
             _getter = getter;
             _setter = setter;
+            _levelGetter = levelGetter;
+            _peakGetter = peakGetter;
             CanFocus = false;
 
             _nameLabel = new Label(new Vector2(50, 5), name) { FontSize = 14, CanFocus = false };
             AddChild(_nameLabel);
 
-            _slider = new Slider(new Vector2(50, 30), size.X - 70) { CanFocus = false };
+            _slider = new Slider(new Vector2(50, 25), size.X - 70) { CanFocus = false };
             _slider.OnValueChanged += (val) => {
                 if (!_isUpdatingInternally) {
                     _setter(val);
                 }
             };
             AddChild(_slider);
+
+            _meter = new LevelMeter(new Vector2(50, 48), new Vector2(size.X - 70, 6)) { CanFocus = false };
+            AddChild(_meter);
             
             UpdateVolumeFromSource();
         }
 
         public void UpdateVolumeFromSource() {
-            if (_slider.IsDragging) return;
-            _isUpdatingInternally = true;
-            _slider.Value = _getter();
-            _isUpdatingInternally = false;
+            if (!_slider.IsDragging) {
+                _isUpdatingInternally = true;
+                _slider.Value = _getter();
+                _isUpdatingInternally = false;
+            }
+            _meter.Level = _levelGetter();
+            _meter.Peak = _peakGetter();
         }
 
         protected override void DrawSelf(SpriteBatch spriteBatch, ShapeBatch batch) {

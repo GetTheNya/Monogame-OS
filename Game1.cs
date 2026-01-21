@@ -91,7 +91,7 @@ public class Game1 : Game {
         _sceneManager.Update(gameTime);
         _fps.Update(gameTime);
 
-        AudioManager.Instance.Update();
+        AudioManager.Instance.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
         Registry.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
         DebugLogger.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
         Shell.Update(gameTime);

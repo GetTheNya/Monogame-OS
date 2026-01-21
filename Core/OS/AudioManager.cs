@@ -26,6 +26,8 @@ public class AudioManager {
     private WaveOutEvent _highLatencyOutput;
     private MixingSampleProvider _lowLatencyMixer;
     private MixingSampleProvider _highLatencyMixer;
+    private PeakSampleProvider _lowLatencyPeak;
+    private PeakSampleProvider _highLatencyPeak;
     private float _masterVolume = 1.0f;
 
     private readonly Dictionary<string, MediaHandle> _handles = new();
@@ -50,24 +52,25 @@ public class AudioManager {
 
     private void InitializeEngine() {
         try {
+            // Create a dummy system process for global sounds
+            _systemProcess = new Process { AppId = "SYSTEM" };
+
             // Low latency (60ms) for one-shots and UI
             _lowLatencyOutput = new WaveOutEvent { DesiredLatency = 60 };
             _lowLatencyMixer = new MixingSampleProvider(WaveFormat.CreateIeeeFloatWaveFormat(44100, 2));
             _lowLatencyMixer.ReadFully = true;
-            _lowLatencyOutput.Init(_lowLatencyMixer);
+            _lowLatencyPeak = new PeakSampleProvider(_lowLatencyMixer);
+            _lowLatencyOutput.Init(_lowLatencyPeak);
             _lowLatencyOutput.Play();
 
             // High latency (150ms) for music and app media
-            // 300ms was too high and caused UI stuttering during lock acquisition
             _highLatencyOutput = new WaveOutEvent { DesiredLatency = 150 };
             _highLatencyMixer = new MixingSampleProvider(WaveFormat.CreateIeeeFloatWaveFormat(44100, 2));
             _highLatencyMixer.ReadFully = true;
-            _highLatencyOutput.Init(_highLatencyMixer);
+            _highLatencyPeak = new PeakSampleProvider(_highLatencyMixer);
+            _highLatencyOutput.Init(_highLatencyPeak);
             _highLatencyOutput.Play();
             
-            // Create a dummy system process for global sounds
-            _systemProcess = new Process { AppId = "SYSTEM" };
-
             // Load values from registry
             _masterVolume = Registry.GetValue($"{Shell.Registry.Audio}\\MasterVolume", 1.0f);
         } catch (Exception ex) {
@@ -119,6 +122,7 @@ public class AudioManager {
 
         lock (_lock) {
             var processContext = GetOrCreateProcessContext(owner);
+            if (processContext == null) return null;
             if (processContext.HandleCount >= 32) {
                 DebugLogger.Log($"Process {owner.AppId} exceeded media handle limit (32).");
                 return null;
@@ -258,6 +262,38 @@ public class AudioManager {
         }
     }
 
+    public float GetProcessLevel(Process process) {
+        if (process == null) return 0;
+        lock (_lock) {
+            return _processContexts.TryGetValue(process, out var context) ? context.Level : 0f;
+        }
+    }
+
+    public float GetProcessPeak(Process process) {
+        if (process == null) return 0;
+        lock (_lock) {
+            return _processContexts.TryGetValue(process, out var context) ? context.PeakHold : 0f;
+        }
+    }
+
+    public float GetMasterLevel() {
+        return Math.Max(_lowLatencyPeak?.Level ?? 0, _highLatencyPeak?.Level ?? 0);
+    }
+
+    public float GetMasterPeak() {
+        return Math.Max(_lowLatencyPeak?.PeakHold ?? 0, _highLatencyPeak?.PeakHold ?? 0);
+    }
+
+    public float GetSystemLevel() {
+        if (_systemProcess == null) return 0;
+        return GetProcessLevel(_systemProcess);
+    }
+
+    public float GetSystemPeak() {
+        if (_systemProcess == null) return 0;
+        return GetProcessPeak(_systemProcess);
+    }
+
     public void SetVolume(string id, float volume) {
         if (_handles.TryGetValue(id, out var handle)) {
             handle.Volume = volume;
@@ -287,6 +323,7 @@ public class AudioManager {
     }
 
     private ProcessContext GetOrCreateProcessContext(Process process) {
+        if (process == null) return null;
         lock (_lock) {
             if (!_processContexts.TryGetValue(process, out var context)) {
                 context = new ProcessContext(process);
@@ -305,10 +342,19 @@ public class AudioManager {
         }
     }
 
-    public void Update() {
+    public void Update(float elapsedSeconds) {
         var toUnload = new List<string>();
         lock (_lock) {
+            _lowLatencyPeak?.Update(elapsedSeconds);
+            _highLatencyPeak?.Update(elapsedSeconds);
+
+            foreach (var context in _processContexts.Values) {
+                context.Update(elapsedSeconds);
+            }
+
             foreach (var handle in _handles.Values.ToList()) {
+                handle.Update(elapsedSeconds);
+
                 if (handle.Status == MediaStatus.Playing && handle.Position >= handle.Duration - 0.01) {
                     handle.OnFinished();
                     if (handle.AutoUnload) {
@@ -334,8 +380,8 @@ public class AudioManager {
     public void CleanupProcess(Process process) {
         lock (_lock) {
             if (_processContexts.Remove(process, out var context)) {
-                _lowLatencyMixer.RemoveMixerInput(context.Mixer);
-                _highLatencyMixer.RemoveMixerInput(context.Mixer);
+                _lowLatencyMixer.RemoveMixerInput(context.PeakProvider);
+                _highLatencyMixer.RemoveMixerInput(context.PeakProvider);
                 context.Dispose();
                 
                 var processHandles = _handles.Where(kvp => kvp.Value.Owner == process).Select(kvp => kvp.Key).ToList();
@@ -349,10 +395,14 @@ public class AudioManager {
     public void Shutdown() {
         _lowLatencyOutput?.Stop();
         _highLatencyOutput?.Stop();
-        foreach (var handle in _handles.Values) handle.Dispose();
-        _handles.Clear();
-        foreach (var context in _processContexts.Values) context.Dispose();
-        _processContexts.Clear();
+        
+        lock (_lock) {
+            foreach (var handle in _handles.Values) handle.Dispose();
+            _handles.Clear();
+            foreach (var context in _processContexts.Values) context.Dispose();
+            _processContexts.Clear();
+        }
+
         _lowLatencyOutput?.Dispose();
         _highLatencyOutput?.Dispose();
     }
@@ -360,6 +410,12 @@ public class AudioManager {
     private class ProcessContext : IDisposable {
         public Process Owner { get; }
         public MixingSampleProvider Mixer { get; }
+        public PeakSampleProvider PeakProvider => _peakProvider;
+        private PeakSampleProvider _peakProvider;
+        private VolumeSampleProvider _masterVolumeProvider;
+        public float Level => _peakProvider?.Level ?? 0f;
+        public float PeakHold => _peakProvider?.PeakHold ?? 0f;
+
         public float Volume { get; set; } = 1.0f;
         public bool IsRegistered { get; set; }
         public int HandleCount => _handles.Count;
@@ -370,38 +426,49 @@ public class AudioManager {
             Owner = owner;
             Mixer = new MixingSampleProvider(WaveFormat.CreateIeeeFloatWaveFormat(44100, 2));
             Mixer.ReadFully = true;
+            _peakProvider = new PeakSampleProvider(Mixer);
+            _masterVolumeProvider = new VolumeSampleProvider(_peakProvider);
+            _masterVolumeProvider.Volume = AudioManager.Instance.MasterVolume;
 
             if (owner.AppId == "SYSTEM") {
-                AudioManager.Instance._lowLatencyMixer.AddMixerInput(Mixer);
+                AudioManager.Instance._lowLatencyMixer.AddMixerInput(_masterVolumeProvider);
             } else {
-                AudioManager.Instance._highLatencyMixer.AddMixerInput(Mixer);
+                AudioManager.Instance._highLatencyMixer.AddMixerInput(_masterVolumeProvider);
             }
         }
 
         public void AddHandle(MediaHandle handle) {
             _handles.Add(handle);
-            handle.UpdateProcessVolume(Volume * AudioManager.Instance.MasterVolume);
+            handle.UpdateProcessVolume(Volume);
         }
         public void RemoveHandle(MediaHandle handle) {
             _handles.Remove(handle);
-            Mixer.RemoveMixerInput(handle.FinalProvider);
+            Mixer.RemoveMixerInput(handle.PeakProvider);
         }
 
         public void PlayHandle(MediaHandle handle) {
-            if (!Mixer.MixerInputs.Contains(handle.FinalProvider)) {
-                Mixer.AddMixerInput(handle.FinalProvider);
+            if (!Mixer.MixerInputs.Contains(handle.PeakProvider)) {
+                Mixer.AddMixerInput(handle.PeakProvider);
             }
             handle.Play();
         }
 
+        public void Update(float elapsedSeconds) {
+            _peakProvider?.Update(elapsedSeconds);
+        }
+
         public void UpdateEffectiveVolume(float masterVolume) {
+            _masterVolumeProvider.Volume = masterVolume;
             foreach (var handle in _handles) {
-                handle.UpdateProcessVolume(Volume * masterVolume);
+                handle.UpdateProcessVolume(Volume);
             }
         }
 
         public void Dispose() {
-            foreach (var handle in _handles) handle.Dispose();
+            foreach (var handle in _handles) {
+                Mixer.RemoveMixerInput(handle.PeakProvider);
+                handle.Dispose();
+            }
             _handles.Clear();
         }
     }
@@ -424,10 +491,12 @@ public class AudioManager {
         private PausableSampleProvider _pausableProvider;
         private WdlResamplingSampleProvider _resampler;
         private LockingSampleProvider _finalProvider;
+        private PeakSampleProvider _peakProvider;
         
         private bool _useFading;
         
         public ISampleProvider FinalProvider => _finalProvider;
+        public PeakSampleProvider PeakProvider => _peakProvider;
         public bool IsFading => _fadeProvider?.IsFading ?? false;
 
         private float _userVolume = 1.0f;
@@ -496,6 +565,11 @@ public class AudioManager {
             }
 
             _finalProvider = new LockingSampleProvider(current);
+            _peakProvider = new PeakSampleProvider(_finalProvider);
+        }
+
+        public void Update(float elapsedSeconds) {
+            _peakProvider?.Update(elapsedSeconds);
         }
 
         public void Play() {
@@ -790,6 +864,68 @@ public class AudioManager {
             }
 
             return read;
+        }
+    }
+
+    private class PeakSampleProvider : ISampleProvider {
+        private readonly ISampleProvider _source;
+        private float _currentPeak = 0;
+        private float _holdPeak = 0;
+        private float _holdTime = 0;
+        private readonly object _lock = new object();
+
+        public WaveFormat WaveFormat => _source.WaveFormat;
+        public float Level => _currentPeak;
+        public float PeakHold => _holdPeak;
+
+        public PeakSampleProvider(ISampleProvider source) {
+            _source = source;
+        }
+
+        public int Read(float[] buffer, int offset, int count) {
+            int read = _source.Read(buffer, offset, count);
+            if (read <= 0) return read;
+
+            float max = 0;
+            for (int i = 0; i < read; i++) {
+                float abs = Math.Abs(buffer[offset + i]);
+                if (abs > max) max = abs;
+            }
+
+            lock (_lock) {
+                if (max > _currentPeak) {
+                    _currentPeak = max;
+                }
+
+                if (max >= _holdPeak) {
+                    _holdPeak = max;
+                    _holdTime = 1.0f; // 1 second hold
+                }
+            }
+
+            return read;
+        }
+
+        public void Update(float elapsedSeconds) {
+            lock (_lock) {
+                // Decay current level
+                // Use exponential decay for smoother, more natural fall (approx -12dB/s)
+                float decay = (float)Math.Pow(0.1, elapsedSeconds * 1.5f);
+                _currentPeak *= decay;
+                
+                // Also ensures it hits zero eventually
+                _currentPeak -= elapsedSeconds * 0.1f;
+                if (_currentPeak < 0) _currentPeak = 0;
+
+                // Update Hold
+                if (_holdTime > 0) {
+                    _holdTime -= elapsedSeconds;
+                } else {
+                    _holdPeak *= (float)Math.Pow(0.1, elapsedSeconds * 0.8f);
+                    _holdPeak -= elapsedSeconds * 0.05f;
+                    if (_holdPeak < 0) _holdPeak = 0;
+                }
+            }
         }
     }
 }

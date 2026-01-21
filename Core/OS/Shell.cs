@@ -888,6 +888,21 @@ public static class Shell {
         /// Sets the volume of a media handle (0.0 to 1.0).
         /// </summary>
         public static void SetVolume(string id, float volume) => AudioManager.Instance.SetVolume(id, volume);
+
+        /// <summary> Gets current master audio level (0.0 to 1.0). </summary>
+        public static float GetMasterLevel() => AudioManager.Instance.GetMasterLevel();
+        /// <summary> Gets master peak hold level. </summary>
+        public static float GetMasterPeak() => AudioManager.Instance.GetMasterPeak();
+
+        /// <summary> Gets current system sounds level. </summary>
+        public static float GetSystemLevel() => AudioManager.Instance.GetSystemLevel();
+        /// <summary> Gets system sounds peak hold level. </summary>
+        public static float GetSystemPeak() => AudioManager.Instance.GetSystemPeak();
+
+        /// <summary> Gets current audio level for a process. </summary>
+        public static float GetProcessLevel(TheGame.Core.OS.Process process) => AudioManager.Instance.GetProcessLevel(process);
+        /// <summary> Gets peak hold level for a process. </summary>
+        public static float GetProcessPeak(TheGame.Core.OS.Process process) => AudioManager.Instance.GetProcessPeak(process);
     }
 
     public static class Notifications {
