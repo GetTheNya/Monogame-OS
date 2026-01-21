@@ -38,6 +38,9 @@ public class AudioManager {
     private Process _systemProcess;
     public Process SystemProcess => _systemProcess;
 
+    public event Action OnProcessRegistered;
+    public event Action OnProcessUnregistered;
+
     public IEnumerable<Process> RegisteredProcesses {
         get {
             lock (_lock) {
@@ -95,7 +98,9 @@ public class AudioManager {
         if (owner == null) return;
         lock (_lock) {
             var context = GetOrCreateProcessContext(owner);
+            bool wasRegistered = context.IsRegistered;
             context.IsRegistered = true;
+            if (!wasRegistered) OnProcessRegistered?.Invoke();
         }
     }
 
@@ -388,6 +393,8 @@ public class AudioManager {
                 foreach (var id in processHandles) {
                     _handles.Remove(id);
                 }
+
+                OnProcessUnregistered?.Invoke();
             }
         }
     }

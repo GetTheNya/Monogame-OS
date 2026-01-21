@@ -22,6 +22,8 @@ public class VolumeMixerPanel : Panel {
     private float _showAnim = 0f;
     private bool _isOpen = false;
     private bool _isAnimating = false;
+    private bool _isPinned = false;
+    private Button _pinButton;
 
     public VolumeMixerPanel() : base(Vector2.Zero, new Vector2(PanelWidth, PanelHeight)) {
         BackgroundColor = new Color(30, 30, 30, 240);
@@ -44,6 +46,20 @@ public class VolumeMixerPanel : Panel {
         _scrollPanel.BorderThickness = 0;
         _scrollPanel.CanFocus = false;
         AddChild(_scrollPanel);
+
+        _pinButton = new Button(new Vector2(PanelWidth - 70, 10), new Vector2(60, 25), "PIN") {
+            FontSize = 12,
+            CanFocus = false,
+            OnClickAction = () => {
+                _isPinned = !_isPinned;
+                _pinButton.Text = _isPinned ? "UNPIN" : "PIN";
+                _pinButton.BackgroundColor = _isPinned ? new Color(100, 100, 100) : new Color(40, 40, 40);
+            }
+        };
+        AddChild(_pinButton);
+
+        AudioManager.Instance.OnProcessRegistered += RefreshRows;
+        AudioManager.Instance.OnProcessUnregistered += RefreshRows;
 
         RefreshRows();
     }
@@ -162,8 +178,8 @@ public class VolumeMixerPanel : Panel {
             row.UpdateVolumeFromSource();
         }
 
-        // Close if clicking outside the panel
-        if (_isOpen && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
+        // Close if clicking outside the panel (and not pinned)
+        if (_isOpen && !_isPinned && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
             if (!Bounds.Contains(InputManager.MousePosition) && !InputManager.IsMouseConsumed) {
                 Close();
             }
