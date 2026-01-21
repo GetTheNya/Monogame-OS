@@ -160,9 +160,11 @@ public abstract class UIElement : IContextMenuProvider {
             if (ConsumesInput)
                 InputManager.IsMouseConsumed = true;
 
-            OnHover();
-            if (justPressed) {
-                _isPressed = true;
+            if (IsEnabled) {
+                OnHover();
+                if (justPressed) {
+                    _isPressed = true;
+                }
             }
 
             if (justRightPressed) {
@@ -180,7 +182,7 @@ public abstract class UIElement : IContextMenuProvider {
                 bool wasOver = IsMouseOver; // Use our calculated hover state
                 _isPressed = false;
 
-                if (wasOver) {
+                if (wasOver && IsEnabled) {
                     try {
                         OnClick();
                     } catch (Exception ex) {

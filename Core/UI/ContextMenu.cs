@@ -101,15 +101,13 @@ public class ContextMenu : Panel {
                 Padding = new Vector2(30, 0),
                 UseBoldFont = item.IsDefault,
                 OnClickAction = () => {
-                    if (item.IsEnabled) {
-                        if (item.Type == MenuItemType.Checkbox) {
-                            item.IsChecked = !item.IsChecked;
-                        }
+                    if (item.Type == MenuItemType.Checkbox) {
+                        item.IsChecked = !item.IsChecked;
+                    }
 
-                        if (!item.HasSubItems) {
-                            item.Action?.Invoke();
-                            CloseAll();
-                        }
+                    if (!item.HasSubItems) {
+                        item.Action?.Invoke();
+                        CloseAll();
                     }
                 }
             };
