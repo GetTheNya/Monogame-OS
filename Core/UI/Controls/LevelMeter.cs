@@ -77,10 +77,8 @@ public class LevelMeter : UIControl {
         }
 
         // Peak line
-        if (_visualPeak > 0.001f) {
-            float peakX = Math.Min(Size.X - 2, Size.X * _visualPeak);
-            sbatch.FillRectangle(absPos + new Vector2(peakX, 0), new Vector2(2, Size.Y), Color.White * 0.8f * opacity);
-        }
+        float peakX = Math.Min(Size.X - 2, Size.X * _visualPeak);
+        sbatch.FillRectangle(absPos + new Vector2(peakX, 0), new Vector2(2, Size.Y), Color.White * 0.8f * opacity);
         
         // Border
         sbatch.BorderRectangle(absPos, Size, Color.White * 0.1f * opacity, 1f);
