@@ -137,6 +137,9 @@ public static class Shell {
         
         /// <summary>Path for desktop settings: HKCU\Desktop</summary>
         public const string Desktop = "HKCU\\Desktop";
+
+        /// <summary>Path for audio settings: HKCU\Audio</summary>
+        public const string Audio = "HKCU\\Audio";
         
         /// <summary>Path for per-app settings: HKCU\Software\{AppId}</summary>
         public static string AppSettings(string appId) => $"HKCU\\Software\\{appId}";

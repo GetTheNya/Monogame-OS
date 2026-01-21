@@ -67,6 +67,9 @@ public class AudioManager {
             
             // Create a dummy system process for global sounds
             _systemProcess = new Process { AppId = "SYSTEM" };
+
+            // Load values from registry
+            _masterVolume = Registry.GetValue($"{Shell.Registry.Audio}\\MasterVolume", 1.0f);
         } catch (Exception ex) {
             DebugLogger.Log($"Failed to initialize NAudio engine: {ex.Message}");
         }
@@ -76,6 +79,7 @@ public class AudioManager {
         get => _masterVolume;
         set {
             _masterVolume = Math.Clamp(value, 0f, 1f);
+            Registry.SetValue($"{Shell.Registry.Audio}\\MasterVolume", _masterVolume);
             lock (_lock) {
                 foreach (var context in _processContexts.Values) {
                     context.UpdateEffectiveVolume(_masterVolume);
@@ -265,6 +269,13 @@ public class AudioManager {
             if (_processContexts.TryGetValue(process, out var context)) {
                 context.Volume = volume;
                 context.UpdateEffectiveVolume(_masterVolume);
+
+                // Save to registry
+                if (process.AppId == "SYSTEM") {
+                    Registry.SetValue($"{Shell.Registry.Audio}\\SystemVolume", volume);
+                } else {
+                    Registry.SetValue($"{Shell.Registry.AppSettings(process.AppId)}\\Volume", volume);
+                }
             }
         }
     }
@@ -279,6 +290,14 @@ public class AudioManager {
         lock (_lock) {
             if (!_processContexts.TryGetValue(process, out var context)) {
                 context = new ProcessContext(process);
+
+                // Load from registry
+                if (process.AppId == "SYSTEM") {
+                    context.Volume = Registry.GetValue($"{Shell.Registry.Audio}\\SystemVolume", 1.0f);
+                } else {
+                    context.Volume = Registry.GetValue($"{Shell.Registry.AppSettings(process.AppId)}\\Volume", 1.0f);
+                }
+
                 _processContexts[process] = context;
                 context.UpdateEffectiveVolume(_masterVolume);
             }
