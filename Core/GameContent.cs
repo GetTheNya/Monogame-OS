@@ -8,6 +8,7 @@ namespace TheGame;
 
 public static class GameContent {
     public static FontSystem FontSystem;
+    public static FontSystem BoldFontSystem;
     public static Texture2D FolderIcon;
     public static Texture2D FileIcon;
     public static Texture2D ExplorerIcon;
@@ -29,6 +30,12 @@ public static class GameContent {
 
         if (File.Exists(@"Assets/Fonts/JetMono.ttf"))
             FontSystem.AddFont(File.ReadAllBytes(@"Assets/Fonts/JetMono.ttf"));
+
+        BoldFontSystem = new FontSystem();
+        if (File.Exists(@"Assets/Fonts/JetMono-Bold.ttf"))
+            BoldFontSystem.AddFont(File.ReadAllBytes(@"Assets/Fonts/JetMono-Bold.ttf"));
+        else if (File.Exists(@"Assets/Fonts/JetMono.ttf"))
+            BoldFontSystem.AddFont(File.ReadAllBytes(@"Assets/Fonts/JetMono.ttf")); // Fallback
 
         Pixel = new Texture2D(G.GraphicsDevice, 1, 1);
         Pixel.SetData(new Color[] { Color.White });

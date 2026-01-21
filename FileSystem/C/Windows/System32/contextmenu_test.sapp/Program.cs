@@ -12,58 +12,77 @@ namespace ContextTesting;
 
 public class ContextMenuTest : Window {
     public static Window CreateWindow() {
-        return new ContextMenuTest(new Vector2(100, 100), new Vector2(500, 450));
+        return new ContextMenuTest(new Vector2(100, 100), new Vector2(550, 500));
     }
 
     private bool _featureA = true;
+    private int _testPriority = 10;
+    private readonly Label _priorityLabel;
     private readonly Texture2D _appIcon;
 
     public ContextMenuTest(Vector2 pos, Vector2 size) : base(pos, size) {
-        Title = "Context Menu & Bubbling Test";
+        Title = "Advanced Context Menu Test";
         AppId = "CONTEXTTEST";
 
         _appIcon = Shell.Images.LoadAppImage("icon.png");
 
-        var label = new Label(new Vector2(20, 20), "1. Basic Menu Test") {
+        var label = new Label(new Vector2(20, 20), "1. Priority & Sorting Test") {
             TextColor = Color.Yellow,
             FontSize = 18
         };
         AddChild(label);
 
-        var btn = new Button(new Vector2(20, 50), new Vector2(160, 35), "Show Base Menu") {
-            OnClickAction = () => {
-                Shell.ContextMenu.Show(this);
-            }
+        _priorityLabel = new Label(new Vector2(250, 55), $"Priority: {_testPriority}") {
+            TextColor = Color.White,
+            FontSize = 16
         };
-        AddChild(btn);
+        AddChild(_priorityLabel);
 
-        var longBtn = new Button(new Vector2(20, 90), new Vector2(160, 35), "This is a very long text that should definitely scroll when hovered") {
-            OnClickAction = () => {
-                Shell.Notifications.Show("Button Test", "Long button clicked!");
-            }
+        var btnMinus = new Button(new Vector2(20, 50), new Vector2(40, 35), "-") {
+            OnClickAction = () => { _testPriority -= 5; _priorityLabel.Text = $"Priority: {_testPriority}"; }
         };
-        AddChild(longBtn);
+        AddChild(btnMinus);
+
+        var btnPlus = new Button(new Vector2(70, 50), new Vector2(40, 35), "+") {
+            OnClickAction = () => { _testPriority += 5; _priorityLabel.Text = $"Priority: {_testPriority}"; }
+        };
+        AddChild(btnPlus);
+
+        var btnMenu = new Button(new Vector2(120, 50), new Vector2(120, 35), "Show Menu") {
+            OnClickAction = () => Shell.ContextMenu.Show(this)
+        };
+        AddChild(btnMenu);
 
         // --- Bubbling Logic Section ---
-        var bubblingLabel = new Label(new Vector2(20, 140), "2. Bubbling Logic Test (Right-click colored boxes)") {
+        var bubblingLabel = new Label(new Vector2(20, 110), "2. Bubbling & Termination (Blue sets Handled=true)") {
             TextColor = Color.Yellow,
             FontSize = 18
         };
         AddChild(bubblingLabel);
 
         // Outer Panel (Red)
-        var outerPanel = new BubblingPanel(new Vector2(20, 170), new Vector2(300, 200), "Level 1 (Outer)", Color.Red * 0.3f);
+        var outerPanel = new BubblingPanel(new Vector2(20, 140), new Vector2(300, 150), "Level 1 (Outer)", Color.Red * 0.3f, false);
         AddChild(outerPanel);
 
         // Middle Panel (Green)
-        var middlePanel = new BubblingPanel(new Vector2(30, 40), new Vector2(240, 130), "Level 2 (Middle)", Color.Green * 0.3f);
+        var middlePanel = new BubblingPanel(new Vector2(30, 40), new Vector2(240, 90), "Level 2 (Middle)", Color.Green * 0.3f, false);
         outerPanel.AddChild(middlePanel);
 
         // Inner Panel (Blue)
-        var innerPanel = new BubblingPanel(new Vector2(30, 40), new Vector2(180, 60), "Level 3 (Inner)", Color.Blue * 0.3f);
+        var innerPanel = new BubblingPanel(new Vector2(30, 30), new Vector2(180, 40), "Level 3 (Terminator)", Color.Blue * 0.5f, true);
         middlePanel.AddChild(innerPanel);
+
+        // --- File Simulation ---
+        var fileLabel = new Label(new Vector2(20, 310), "3. File Simulation (Reports as .txt file)") {
+            TextColor = Color.Yellow,
+            FontSize = 18
+        };
+        AddChild(fileLabel);
+
+        var fileSim = new FileSimulatorPanel(new Vector2(20, 340), new Vector2(150, 60), "C:\\Test.txt", Color.SlateGray);
+        AddChild(fileSim);
         
-        var helpLabel = new Label(new Vector2(20, 380), "Tip: Right-click the Inner (Blue) box to see items from\nall three panels and the Window itself bubbling up.") {
+        var helpLabel = new Label(new Vector2(20, 420), "Tip: Check visuals for Disabled, Hotkey, and Default items.") {
             TextColor = Color.Gray,
             FontSize = 14
         };
@@ -71,40 +90,60 @@ public class ContextMenuTest : Window {
     }
 
     public override void PopulateContextMenu(ContextMenuContext context, List<MenuItem> items) {
-        // Context menu items with some long text
+        // High priority item
         items.Add(new MenuItem { 
-            Text = "Window Action With Very Long Text That Should Scroll On Hover", 
-            Icon = GameContent.PCIcon,
-            Action = () => Shell.Notifications.Show("Context Test", "Window level action triggered") 
+            Text = "Priority-Adjustable Item", 
+            Priority = _testPriority,
+            Icon = GameContent.DiskIcon,
+            Action = () => Shell.Notifications.Show("Priority Test", $"Clicked with priority {_testPriority}")
         });
 
         items.Add(new MenuItem { Type = MenuItemType.Separator });
 
-        // Add checkboxes
+        // Advanced states
         items.Add(new MenuItem { 
-            Text = "Feature A (Global-ish)", 
+            Text = "Default Bold Item", 
+            IsDefault = true,
+            Action = () => Shell.Notifications.Show("Visual Test", "Default item clicked")
+        });
+
+        items.Add(new MenuItem { 
+            Text = "Disabled Item", 
+            IsEnabled = false,
+            Action = () => {} // Should not be callable
+        });
+
+        items.Add(new MenuItem { 
+            Text = "Item with Hotkey", 
+            ShortcutText = "Ctrl+Shift+T",
+            Action = () => Shell.Notifications.Show("Hotkey Test", "Action triggered")
+        });
+
+        items.Add(new MenuItem { Type = MenuItemType.Separator });
+
+        // Checkboxes
+        items.Add(new MenuItem { 
+            Text = "Feature A Toggle", 
             Type = MenuItemType.Checkbox, 
             IsChecked = _featureA,
-            Action = () => { _featureA = !_featureA; Shell.Notifications.Show("Feature A", _featureA ? "Enabled" : "Disabled"); }
+            Action = () => { _featureA = !_featureA; }
         });
 
-        // Add submenus
-        var subMenu = new MenuItem { 
-            Text = "Advanced Options", 
+        // Nested Submenu
+        items.Add(new MenuItem { 
+            Text = "More Sub-Deep", 
             SubItems = new List<MenuItem> {
-                new MenuItem { Text = "Sub-option 1", Action = () => Shell.Notifications.Show("Submenu", "Option 1") },
+                new MenuItem { Text = "Level 2 Sub", Action = () => {} },
                 new MenuItem { 
-                    Text = "Deep Menu", 
+                    Text = "Level 3 Sub", 
                     SubItems = new List<MenuItem> {
-                        new MenuItem { Text = "Level 3 Item", IsDefault = true, Action = () => Shell.Notifications.Show("Level 3", "You found it!") }
+                        new MenuItem { Text = "The deepest layer", Action = () => Shell.Notifications.Show("Deep", "Bottom reached!") }
                     }
                 }
-            } 
-        };
-        items.Add(subMenu);
+            }
+        });
 
-        items.Add(new MenuItem { Type = MenuItemType.Separator });
-        items.Add(new MenuItem { Text = "Close App", Action = () => Close() });
+        items.Add(new MenuItem { Text = "Close", Action = () => Close(), Priority = -100 });
 
         base.PopulateContextMenu(context, items);
     }
@@ -112,32 +151,59 @@ public class ContextMenuTest : Window {
 
 public class BubblingPanel : Panel {
     private string _levelName;
-    private Color _tint;
+    private bool _terminate;
 
-    public BubblingPanel(Vector2 pos, Vector2 size, string levelName, Color tint) : base(pos, size) {
+    public BubblingPanel(Vector2 pos, Vector2 size, string levelName, Color tint, bool terminate) : base(pos, size) {
         _levelName = levelName;
-        _tint = tint;
+        _terminate = terminate;
         BackgroundColor = tint;
         BorderColor = Color.White * 0.5f;
         BorderThickness = 1f;
         ConsumesInput = true;
 
-        var label = new Label(new Vector2(5, 5), levelName) {
-            TextColor = Color.White,
-            FontSize = 14
-        };
+        var label = new Label(new Vector2(5, 5), levelName) { TextColor = Color.White, FontSize = 12 };
         AddChild(label);
     }
 
     public override void PopulateContextMenu(ContextMenuContext context, List<MenuItem> items) {
-        // Add a unique item for this level
         items.Add(new MenuItem { 
-            Text = $"Action from {_levelName}", 
+            Text = $"Item from {_levelName}", 
             Icon = GameContent.FolderIcon,
-            Action = () => Shell.Notifications.Show("Bubbling Test", $"Clicked item from {_levelName}") 
+            Action = () => Shell.Notifications.Show("Bubbling", $"Source: {_levelName}") 
         });
+
+        if (_terminate) {
+            context.Handled = true;
+            items.Add(new MenuItem { Text = "--- BUBBLING STOPPED HERE ---", IsEnabled = false });
+        }
         
-        // Don't add separator here, let the manager handle visual separation or bubble up
+        base.PopulateContextMenu(context, items);
+    }
+}
+
+public class FileSimulatorPanel : Panel {
+    private string _path;
+
+    public FileSimulatorPanel(Vector2 pos, Vector2 size, string path, Color color) : base(pos, size) {
+        _path = path;
+        BackgroundColor = color;
+        BorderColor = Color.White;
+        BorderThickness = 2f;
+        ConsumesInput = true;
+
+        var label = new Label(new Vector2(10, 10), "Right-click me\nSimulates: .txt") { TextColor = Color.White, FontSize = 12 };
+        AddChild(label);
+    }
+
+    public override void PopulateContextMenu(ContextMenuContext context, List<MenuItem> items) {
+        context.SetProperty("VirtualPath", _path);
+        
+        items.Add(new MenuItem { 
+            Text = $"Simulating: {System.IO.Path.GetFileName(_path)}", 
+            IsEnabled = false,
+            Priority = 1000 // Ensure it's at top
+        });
+
         base.PopulateContextMenu(context, items);
     }
 }

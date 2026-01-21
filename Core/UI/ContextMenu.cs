@@ -51,7 +51,7 @@ public class MenuItem : IEquatable<MenuItem> {
 public class ContextMenu : Panel {
     private const float ItemHeight = 30f;
     private const float ItemPadding = 5f;
-    private const float Width = 200f;
+    private const float Width = 260f;
     private ContextMenu _openedSubMenu;
     private ContextMenu _parentMenu;
     private UIElement _hoveredItem;
@@ -99,6 +99,7 @@ public class ContextMenu : Panel {
                 TextColor = item.IsEnabled ? Color.White : Color.Gray,
                 TextAlign = TextAlign.Left,
                 Padding = new Vector2(30, 0),
+                UseBoldFont = item.IsDefault,
                 OnClickAction = () => {
                     if (item.IsEnabled) {
                         if (item.Type == MenuItemType.Checkbox) {
@@ -201,14 +202,6 @@ public class ContextMenu : Panel {
                         font.DrawText(shapeBatch, ">", arrowPos, Color.White * opacity);
                     }
 
-                    // Handle Default Item (Bold) - We don't have a bold font easily accessible, 
-                    // so we might draw it twice with offset or use a different color.
-                    if (mi.IsDefault) {
-                        // Drawing twice for "bold" effect
-                        var font = GameContent.FontSystem.GetFont(16);
-                        // font.DrawText(shapeBatch, mi.Text, b.AbsolutePosition + new Vector2(mi.Icon != null ? 31 : 11, ...), ...)
-                        // Actually, Button draws the text. We should probably let Button handle IsDefault or just draw over it.
-                    }
                 }
             }
         }

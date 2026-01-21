@@ -14,6 +14,7 @@ public class Button : UIControl {
     public Color TextColor { get; set; } = Color.White;
     public TextAlign TextAlign { get; set; } = TextAlign.Center;
     public int FontSize { get; set; } = 20;
+    public bool UseBoldFont { get; set; } = false;
     public Vector2 Padding { get; set; } = new Vector2(5, 5);
     
     // Scrolling logic
@@ -152,8 +153,9 @@ public class Button : UIControl {
         }
 
         // Text (Centering logic with Scrolling/Truncation)
-        if (!string.IsNullOrEmpty(Text) && GameContent.FontSystem != null) {
-            var font = GameContent.FontSystem.GetFont((int)(FontSize * Scale));
+        if (!string.IsNullOrEmpty(Text) && (GameContent.FontSystem != null || GameContent.BoldFontSystem != null)) {
+            var fontSystem = UseBoldFont ? GameContent.BoldFontSystem : GameContent.FontSystem;
+            var font = fontSystem?.GetFont((int)(FontSize * Scale));
             if (font != null) {
                 float contentStartX = drawPos.X + pX + iconSize + (iconSize > 0 ? pX : 0);
                 float remainingWidth = size.X - (contentStartX - drawPos.X) - pX;
