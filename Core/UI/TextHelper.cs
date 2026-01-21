@@ -10,7 +10,7 @@ public static class TextHelper {
     /// <summary>
     /// Wraps text to fit within a specified width.
     /// </summary>
-    public static string WrapText(DynamicSpriteFont font, string text, float maxWidth) {
+    public static string WrapText(SpriteFontBase font, string text, float maxWidth) {
         if (string.IsNullOrEmpty(text)) return "";
         if (font == null) return text;
 
@@ -86,11 +86,52 @@ public static class TextHelper {
     /// <summary>
     /// Measures the size of a string after it has been wrapped.
     /// </summary>
-    public static Vector2 MeasureWrappedText(DynamicSpriteFont font, string text, float maxWidth) {
+    public static Vector2 MeasureWrappedText(SpriteFontBase font, string text, float maxWidth) {
         if (string.IsNullOrEmpty(text)) return Vector2.Zero;
         if (font == null) return Vector2.Zero;
 
         string wrapped = WrapText(font, text, maxWidth);
         return font.MeasureString(wrapped);
+    }
+
+    /// <summary>
+    /// Truncates text with an ellipsis if it exceeds the specified width, with a tolerance to prevent aggressive truncation.
+    /// </summary>
+    public static string TruncateWithEllipsis(SpriteFontBase font, string text, float maxWidth, float tolerance = 2f) {
+        if (string.IsNullOrEmpty(text)) return "";
+        if (font == null) return text;
+
+        var size = font.MeasureString(text);
+        if (size.X <= maxWidth + tolerance) return text;
+
+        // Try to find the longest substring that fits with "..."
+        string ellipsis = "...";
+        float ellipsisWidth = font.MeasureString(ellipsis).X;
+        
+        // If even the ellipsis doesn't fit, return empty or as much of the ellipsis as possible
+        if (ellipsisWidth > maxWidth) {
+            return "";
+        }
+
+        // Binary search for efficiency on long strings, or just a backwards loop if we expect it to be close
+        // Since we are usually close to the limit, a backwards loop is often faster than binary search overhead
+        int low = 0;
+        int high = text.Length;
+        string result = "";
+
+        while (low <= high) {
+            int mid = (low + high) / 2;
+            string sub = text.Substring(0, mid);
+            float subWidth = font.MeasureString(sub).X;
+
+            if (subWidth + ellipsisWidth <= maxWidth + tolerance) {
+                result = sub + ellipsis;
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+
+        return result;
     }
 }

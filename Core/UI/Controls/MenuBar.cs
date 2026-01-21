@@ -21,7 +21,7 @@ public class Menu {
     }
 
     public Menu AddItem(string text, Action action, string shortcut = null) {
-        Items.Add(new MenuItem { Text = text, Action = action, Shortcut = shortcut });
+        Items.Add(new MenuItem { Text = text, Action = action, ShortcutText = shortcut });
         return this;
     }
 
@@ -69,9 +69,9 @@ public class MenuBar : UIControl {
     public void RegisterHotkeys(TheGame.Core.OS.Process process) {
         foreach (var menu in _menus) {
             foreach (var item in menu.Items) {
-                if (!string.IsNullOrEmpty(item.Shortcut)) {
+                if (!string.IsNullOrEmpty(item.ShortcutText)) {
                     var action = item.Action;
-                    Shell.Hotkeys.RegisterLocal(process, item.Shortcut, () => action?.Invoke());
+                    Shell.Hotkeys.RegisterLocal(process, item.ShortcutText, () => action?.Invoke());
                 }
             }
         }
@@ -152,7 +152,7 @@ public class MenuBar : UIControl {
         float dropdownHeight = 0;
 
         foreach (var item in menu.Items) {
-            bool isSeparator = item.Text == "---";
+            bool isSeparator = item.Type == MenuItemType.Separator || item.Text == "---";
             dropdownHeight += isSeparator ? separatorHeight : itemHeight;
         }
 
@@ -193,8 +193,8 @@ public class MenuBar : UIControl {
                 };
 
                 // Add shortcut label if present
-                if (!string.IsNullOrEmpty(item.Shortcut)) {
-                    var shortcutLabel = new Label(new Vector2(dropdownWidth - 80, 5), item.Shortcut) {
+                if (!string.IsNullOrEmpty(item.ShortcutText)) {
+                    var shortcutLabel = new Label(new Vector2(dropdownWidth - 80, 5), item.ShortcutText) {
                         TextColor = MenuTextColor * 0.6f,
                         FontSize = 14
                     };

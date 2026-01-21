@@ -10,7 +10,7 @@ using System.Linq;
 
 namespace TheGame.Core.UI;
 
-public abstract class UIElement {
+public abstract class UIElement : IContextMenuProvider {
     public UIElement Parent { get; set; }
     public List<UIElement> Children { get; private set; } = new();
 
@@ -41,6 +41,7 @@ public abstract class UIElement {
     public bool ConsumesInput { get; set; } = true; // If true, mouse/keyboard input is blocked for elements below
     public bool CanFocus { get; set; } = true; // If true, clicking this element will focus it
     public bool IsActive { get; set; } = true;
+    public bool IsEnabled { get; set; } = true;
     public float Opacity { get; set; } = 1.0f;
     public float AbsoluteOpacity => (Parent?.AbsoluteOpacity ?? 1.0f) * Opacity;
     public Action OnRightClickAction { get; set; }
@@ -165,15 +166,8 @@ public abstract class UIElement {
             }
 
             if (justRightPressed) {
-                try {
-                    OnRightClickAction?.Invoke();
-                } catch (Exception ex) {
-                    var process = GetOwnerProcess();
-                    if (process != null && CrashHandler.IsAppException(ex, process)) {
-                        CrashHandler.HandleAppException(process, ex);
-                    } else {
-                        throw; // Re-throw if it's an OS-level exception
-                    }
+                if (HandleContextMenuInput()) {
+                    InputManager.IsMouseConsumed = true;
                 }
             }
         }
@@ -262,6 +256,27 @@ public abstract class UIElement {
         // Use a for loop to avoid modification issues during iteration
         for (int i = 0; i < Children.Count; i++) {
             Children[i].ClosePopups();
+        }
+    }
+
+    public virtual void PopulateContextMenu(ContextMenuContext context, List<MenuItem> items) {
+        // Override to add items
+    }
+
+    protected bool HandleContextMenuInput() {
+        try {
+            var context = new ContextMenuContext(this, InputManager.MousePosition.ToVector2());
+            Shell.ContextMenu.Show(context);
+            OnRightClickAction?.Invoke();
+            return true;
+        } catch (Exception ex) {
+            var process = GetOwnerProcess();
+            if (process != null && CrashHandler.IsAppException(ex, process)) {
+                CrashHandler.HandleAppException(process, ex);
+            } else {
+                throw; // Re-throw if it's an OS-level exception
+            }
+            return false;
         }
     }
 }

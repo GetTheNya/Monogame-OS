@@ -18,7 +18,7 @@ public static class Shell {
     // Shared state
     public static Panel WindowLayer;
     public static Action RefreshDesktop;
-    public static ContextMenu GlobalContextMenu;
+    public static TheGame.Core.UI.ContextMenu GlobalContextMenu;
     public static class Desktop {
         /// <summary>
         /// Gets the next free position for an icon on the desktop. 
@@ -469,7 +469,7 @@ public static class Shell {
         return handler?.GetIcon(virtualPath) ?? GameContent.FileIcon;
     }
 
-    public static void Initialize(Panel windowLayer, ContextMenu contextMenu) {
+    public static void Initialize(Panel windowLayer, TheGame.Core.UI.ContextMenu contextMenu) {
         WindowLayer = windowLayer;
         GlobalContextMenu = contextMenu;
         Registry.Initialize();
@@ -681,6 +681,7 @@ public static class Shell {
 
                 WindowLayer.AddChild(win);
                 Window.ActiveWindow = win;
+                WindowLayer.BringToFront(win);
 
                 win.OnMove += () => win.LayoutDirty = true;
                 win.OnResize += () => win.LayoutDirty = true;
@@ -764,6 +765,23 @@ public static class Shell {
         /// </summary>
         public static void PlaySound(string virtualPath, float volume = 1.0f) {
             Media.PlayOneShot(virtualPath, volume);
+        }
+    }
+
+    /// <summary>
+    /// Context Menu API.
+    /// </summary>
+    public static class ContextMenu {
+        public static void Show(ContextMenuContext context) => ContextMenuManager.Instance.Show(context);
+        public static void Show(Vector2 position, List<MenuItem> items) => ContextMenuManager.Instance.Show(position, items);
+        
+        public static void Show(UIElement target) {
+            var context = new ContextMenuContext(target, InputManager.MousePosition.ToVector2());
+            Show(context);
+        }
+
+        public static void RegisterProvider(IContextMenuProvider provider) {
+            ContextMenuManager.Instance.RegisterGlobalProvider(provider);
         }
     }
 

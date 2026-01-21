@@ -700,7 +700,7 @@ public class DesktopScene : Core.Scenes.Scene {
             _scene = scene;
             BackgroundColor = Color.Transparent;
             BorderThickness = 0;
-            ConsumesInput = false;
+            ConsumesInput = true;
 
             // Connect to Shell API
             Shell.Desktop.GetNextFreePosition = FindFreeDesktopSpot;
@@ -746,10 +746,10 @@ public class DesktopScene : Core.Scenes.Scene {
         }
 
         protected override void UpdateInput() {
+            bool alreadyConsumed = InputManager.IsMouseConsumed;
             base.UpdateInput();
             
-            bool alreadyConsumed = InputManager.IsMouseConsumed;
-            bool isHovered = InputManager.IsMouseHovering(Bounds);
+            bool isHovered = IsMouseOver; // This is set correctly by base using UIManager.IsHovered
 
             if (!alreadyConsumed && isHovered && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
                 _isSelecting = true;
@@ -780,47 +780,10 @@ public class DesktopScene : Core.Scenes.Scene {
                 DragDropManager.Instance.CancelDrag();
             }
 
-            if (!alreadyConsumed && isHovered && InputManager.IsMouseButtonJustPressed(MouseButton.Right)) {
-                if (ContextMenu != null) {
-                    Vector2 clickPos = InputManager.MousePosition.ToVector2();
-                    ContextMenu.Show(clickPos, new List<MenuItem> {
-                        new MenuItem { Text = "Refresh", Action = RefreshAction },
-                        new MenuItem {
-                            Text = "Sort by",
-                            SubItems = new List<MenuItem> {
-                                new MenuItem { Text = "Name", Action = () => SortAction?.Invoke("Name") },
-                                new MenuItem { Text = "Type", Action = () => SortAction?.Invoke("Type") },
-                                new MenuItem { Text = "Size", Action = () => SortAction?.Invoke("Size") }
-                            }
-                        },
-                        new MenuItem {
-                            Text = "New",
-                            SubItems = new List<MenuItem> {
-                                new MenuItem {
-                                    Text = "Folder", 
-                                    Action = () => CreateNewDesktopItem("New Folder", "", clickPos, true)
-                                },
-                                new MenuItem {
-                                    Text = "Text Document", 
-                                    Action = () => CreateNewDesktopItem("New Text Document", ".txt", clickPos, false)
-                                }
-                            }
-                        },
-                        new MenuItem {
-                            Text = _scene._alignToGrid ? "✓ Align Icons to Grid" : "Align Icons to Grid",
-                            Action = () => {
-                                _scene._alignToGrid = !_scene._alignToGrid;
-                                Registry.SetValue($"{Shell.Registry.Desktop}\\AlignToGrid", _scene._alignToGrid);
-                                
-                                // If turning on, arrange icons to grid
-                                if (_scene._alignToGrid) {
-                                    _scene.ArrangeIconsToGrid();
-                                }
-                            }
-                        }
-                    });
-                    InputManager.IsMouseConsumed = true;
-                }
+            if (isHovered && InputManager.IsMouseButtonJustPressed(MouseButton.Right)) {
+                // Centralized context menu logic in UIElement already triggered ContextMenuManager.Show
+                // We just consume the input and handled = true in PopulateContextMenu if we don't want bubbling.
+                InputManager.IsMouseConsumed = true;
             }
 
             if (_isSelecting) {
@@ -842,6 +805,57 @@ public class DesktopScene : Core.Scenes.Scene {
                     _marqueeRect = Rectangle.Empty;
                 }
             }
+        }
+
+        public override void PopulateContextMenu(ContextMenuContext context, System.Collections.Generic.List<MenuItem> items) {
+            items.Add(new MenuItem { 
+                Text = "Refresh", 
+                Priority = 100,
+                Action = RefreshAction 
+            });
+
+            var sortMenu = new System.Collections.Generic.List<MenuItem> {
+                new MenuItem { Text = "Name", Action = () => SortAction?.Invoke("Name") },
+                new MenuItem { Text = "Type", Action = () => SortAction?.Invoke("Type") },
+                new MenuItem { Text = "Size", Action = () => SortAction?.Invoke("Size") }
+            };
+
+            items.Add(new MenuItem { 
+                Text = "Sort by", 
+                Priority = 90,
+                SubItems = sortMenu 
+            });
+
+            var newMenu = new System.Collections.Generic.List<MenuItem> {
+                new MenuItem {
+                    Text = "Folder", 
+                    Action = () => CreateNewDesktopItem("New Folder", "", context.Position, true)
+                },
+                new MenuItem {
+                    Text = "Text Document", 
+                    Action = () => CreateNewDesktopItem("New Text Document", ".txt", context.Position, false)
+                }
+            };
+
+            items.Add(new MenuItem { 
+                Text = "New", 
+                Priority = 80,
+                SubItems = newMenu 
+            });
+
+            items.Add(new MenuItem { Type = MenuItemType.Separator, Priority = 70 });
+
+            items.Add(new MenuItem { 
+                Text = "Align Icons to Grid",
+                Type = MenuItemType.Checkbox,
+                IsChecked = _scene._alignToGrid,
+                Priority = 60,
+                Action = () => {
+                    _scene._alignToGrid = !_scene._alignToGrid;
+                    Registry.SetValue($"{Shell.Registry.Desktop}\\AlignToGrid", _scene._alignToGrid);
+                    if (_scene._alignToGrid) _scene.ArrangeIconsToGrid();
+                }
+            });
         }
 
         private void CreateNewDesktopItem(string defaultName, string extension, Vector2 clickPos, bool isDirectory) {

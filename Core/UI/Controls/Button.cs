@@ -74,18 +74,8 @@ public class Button : UIControl {
                 float remainingWidth = size.X - (contentStartX - drawPos.X) - pX;
 
                 if (remainingWidth > 5) {
-                    string textToDraw = Text;
+                    string textToDraw = TextHelper.TruncateWithEllipsis(font, Text, remainingWidth);
                     var textSize = font.MeasureString(textToDraw);
-
-                    // Truncate if too long
-                    if (textSize.X > remainingWidth) {
-                        while (textToDraw.Length > 0 && font.MeasureString(textToDraw + "...").X > remainingWidth) {
-                            textToDraw = textToDraw.Substring(0, textToDraw.Length - 1);
-                        }
-
-                        textToDraw += "...";
-                        textSize = font.MeasureString(textToDraw);
-                    }
 
                     Vector2 textPos;
                     if (TextAlign == TextAlign.Left) {

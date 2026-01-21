@@ -19,6 +19,8 @@ public static class GameContent {
     public static Texture2D NotificationIcon;
     public static Texture2D UserIcon;
     public static Texture2D PowerIcon;
+    public static Texture2D CheckboxIcon;
+    public static Texture2D CheckboxCheckedIcon;
     public static Texture2D[] VolumeIcons; // 0: mute, 1: volume0, 2: volume1, 3: volume med, 4: volume high
     public static Texture2D Pixel;
 
@@ -43,6 +45,8 @@ public static class GameContent {
         NotificationIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\notification.png");
         UserIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\user.png");
         PowerIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\power.png");
+        CheckboxIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\UI\\checkbox.png");
+        CheckboxCheckedIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\UI\\checkbox_checked.png");
 
         VolumeIcons = new Texture2D[5];
         VolumeIcons[0] = LoadIcon("C:\\Windows\\SystemResources\\Icons\\Volume\\mute.png");

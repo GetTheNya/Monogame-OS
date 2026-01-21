@@ -377,11 +377,15 @@ public class FileListPanel : ScrollPanel {
     }
     
     protected override void UpdateInput() {
-        // Don't call base.UpdateInput() here - we handle everything manually
+        bool alreadyConsumed = InputManager.IsMouseConsumed;
+
+        // Call base to handle scrollbars, mouse wheel, and centralized context menu trigger
+        base.UpdateInput();
+
         if (!IsVisible || _isRenaming) return;
 
         Vector2 mouse = InputManager.MousePosition.ToVector2();
-        bool inBounds = Bounds.Contains(mouse.ToPoint()) && !InputManager.IsMouseConsumed;
+        bool inBounds = Bounds.Contains(mouse.ToPoint());
 
         // Find hovered item
         FileListItem hoveredItem = null;
@@ -398,6 +402,8 @@ public class FileListPanel : ScrollPanel {
         }
         UpdateDropTargetVisuals();
 
+        if (alreadyConsumed && !IsMouseOver) return;
+
         // Handle active drag release
         if (InputManager.IsMouseButtonJustReleased(MouseButton.Left)) {
             if (Shell.IsDragging && inBounds) {
@@ -413,17 +419,15 @@ public class FileListPanel : ScrollPanel {
             UpdateDropTargetVisuals();
         }
 
-        // Double-click - check BEFORE consuming input
+        // Double-click
         bool isDoubleClick = inBounds && hoveredItem != null && InputManager.IsDoubleClick(MouseButton.Left, ignoreConsumed: true);
         if (isDoubleClick) {
-            // Prevent opening files or folders in the Recycle Bin
             if (_window.CurrentPath.ToUpper().Contains("$RECYCLE.BIN")) {
                 InputManager.IsMouseConsumed = true;
                 return;
             }
 
             if (hoveredItem.IsDir) {
-                // Check if it's a .sapp app - execute it instead of navigating
                 if (hoveredItem.Path.ToLower().EndsWith(".sapp")) {
                     Shell.Execute(hoveredItem.Path, hoveredItem.Bounds);
                 } else {
@@ -433,18 +437,6 @@ public class FileListPanel : ScrollPanel {
                 Shell.Execute(hoveredItem.Path, hoveredItem.Bounds);
             }
             InputManager.IsMouseConsumed = true;
-            return; // Don't process single click logic on double-click
-        }
-
-        // Right-click context menu
-        if (inBounds && hoveredItem != null && InputManager.IsMouseButtonJustPressed(MouseButton.Right)) {
-            if (!_selectedPaths.Contains(hoveredItem.Path)) {
-                _selectedPaths.Clear();
-                _selectedPaths.Add(hoveredItem.Path);
-                UpdateSelectionVisuals();
-            }
-            ShowContextMenu(hoveredItem);
-            InputManager.IsMouseConsumed = true;
             return;
         }
 
@@ -453,7 +445,6 @@ public class FileListPanel : ScrollPanel {
             bool ctrl = Keyboard.GetState().IsKeyDown(Keys.LeftControl);
 
             if (hoveredItem != null) {
-                // Clicked on an item
                 if (ctrl) {
                     if (_selectedPaths.Contains(hoveredItem.Path)) _selectedPaths.Remove(hoveredItem.Path);
                     else _selectedPaths.Add(hoveredItem.Path);
@@ -467,7 +458,6 @@ public class FileListPanel : ScrollPanel {
                 _dragSourcePath = hoveredItem.Path;
                 _isDragging = true;
             } else {
-                // Clicked on empty space - start marquee
                 if (!ctrl) _selectedPaths.Clear();
                 _isSelecting = true;
                 _selectionStart = mouse;
@@ -481,9 +471,6 @@ public class FileListPanel : ScrollPanel {
         if (_isDragging && InputManager.IsMouseButtonDown(MouseButton.Left) && !Shell.IsDragging) {
             if (Vector2.Distance(_dragStartPos, mouse) > 6) {
                 var paths = _selectedPaths.Count > 0 ? _selectedPaths.ToList() : new List<string> { _dragSourcePath };
-                
-                // Use a fixed centered offset (24, 24) for the 48px ghost icon
-                // This prevents the huge offset when clicking the right side of long list items
                 Vector2 grabOffset = new Vector2(24, 24);
 
                 if (paths.Count > 1) Shell.BeginDrag(paths, _dragStartPos, grabOffset);
@@ -511,8 +498,19 @@ public class FileListPanel : ScrollPanel {
             InputManager.IsMouseConsumed = true;
         }
 
-        // Call base to handle scrollbars and mouse wheel
-        base.UpdateInput();
+        // Right Click Selection
+        if (inBounds && InputManager.IsMouseButtonJustPressed(MouseButton.Right)) {
+            bool ctrl = Keyboard.GetState().IsKeyDown(Keys.LeftControl);
+            if (hoveredItem != null) {
+                if (!ctrl && !_selectedPaths.Contains(hoveredItem.Path)) {
+                    _selectedPaths.Clear();
+                    _selectedPaths.Add(hoveredItem.Path);
+                } else if (ctrl) {
+                    _selectedPaths.Add(hoveredItem.Path);
+                }
+                UpdateSelectionVisuals();
+            }
+        }
     }
 
     private void UpdateSelectionVisuals() {
@@ -527,80 +525,138 @@ public class FileListPanel : ScrollPanel {
         }
     }
 
-    private void ShowContextMenu(FileListItem item) {
-        var menuItems = new List<MenuItem>();
+    public override void PopulateContextMenu(ContextMenuContext context, List<MenuItem> items) {
+        // Find item under mouse
+        FileListItem item = null;
+        foreach (var i in _items) {
+            if (i.Bounds.Contains(context.Position.ToPoint())) {
+                item = i;
+                break;
+            }
+        }
+
+        if (item == null) {
+            // Background context menu
+            items.Add(new MenuItem { Text = "Refresh", Action = () => _window.RefreshList(), Priority = 100 });
+            items.Add(new MenuItem { Type = MenuItemType.Separator, Priority = 90 });
+            items.Add(new MenuItem { 
+                Text = "New", 
+                Priority = 80,
+                SubItems = new List<MenuItem> {
+                    new MenuItem { Text = "Folder", Action = () => CreateNewItem("New Folder", true) },
+                    new MenuItem { Text = "Text Document", Action = () => CreateNewItem("New Text Document.txt", false) }
+                }
+            });
+            return;
+        }
+
+        // If item clicked is not selected, select it exclusively
+        if (!_selectedPaths.Contains(item.Path)) {
+            _selectedPaths.Clear();
+            _selectedPaths.Add(item.Path);
+            UpdateSelectionVisuals();
+        }
+
         bool isSapp = item.IsDir && item.Path.ToLower().EndsWith(".sapp");
         bool isRecycleBinRoot = item.Path.ToUpper().TrimEnd('\\') == "C:\\$RECYCLE.BIN";
         bool inRecycleBin = _window.CurrentPath.ToUpper().Contains("$RECYCLE.BIN");
 
         if (inRecycleBin) {
-            // Items inside recycle bin
-            menuItems.Add(new MenuItem { 
+            items.Add(new MenuItem { 
                 Text = _selectedPaths.Count > 1 ? $"Restore ({_selectedPaths.Count} items)" : "Restore", 
-                Action = RestoreSelectedItems
+                Action = RestoreSelectedItems,
+                Priority = 100
             });
-            menuItems.Add(new MenuItem { 
+            items.Add(new MenuItem { 
                 Text = _selectedPaths.Count > 1 ? $"Delete Permanently ({_selectedPaths.Count} items)" : "Delete Permanently", 
-                Action = DeletePermanentlySelectedItems
+                Action = DeletePermanentlySelectedItems,
+                Priority = 90
             });
-            menuItems.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path) });
+            items.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path), Priority = 80 });
         } else if (isSapp) {
-            // .sapp app context menu
-            menuItems.Add(new MenuItem { Text = "Run", Action = () => Shell.Execute(item.Path, item.Bounds) });
-            menuItems.Add(new MenuItem { Text = "Open as Folder", Action = () => _window.NavigateTo(item.Path) });
+            items.Add(new MenuItem { Text = "Run", Action = () => Shell.Execute(item.Path, item.Bounds), Priority = 100 });
+            items.Add(new MenuItem { Text = "Open as Folder", Action = () => _window.NavigateTo(item.Path), Priority = 90 });
             if (_selectedPaths.Count == 1) {
-                menuItems.Add(new MenuItem { Text = "Rename", Action = () => RenameItem(item.Path) });
+                items.Add(new MenuItem { Text = "Rename", Action = () => RenameItem(item.Path), Priority = 80 });
             }
-            menuItems.Add(new MenuItem { 
+            items.Add(new MenuItem { 
                 Text = "Send to", 
+                Priority = 70,
                 SubItems = new List<MenuItem> {
                     new MenuItem { Text = "Desktop (create shortcut)", Action = SendToDesktopShortcut },
                     new MenuItem { Text = "Start menu (create shortcut)", Action = SendToStartMenuShortcut }
                 }
             });
-            menuItems.Add(new MenuItem { Text = "Delete", Action = () => DeleteItems() });
-            menuItems.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path) });
+            items.Add(new MenuItem { Text = "Delete", Action = () => DeleteItems(), Priority = 60 });
+            items.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path), Priority = 50 });
         } else if (isRecycleBinRoot) {
-            // Recycle Bin context menu
-            menuItems.Add(new MenuItem { Text = "Open", Action = () => _window.NavigateTo(item.Path) });
-            menuItems.Add(new MenuItem { 
+            items.Add(new MenuItem { Text = "Open", Action = () => _window.NavigateTo(item.Path), Priority = 100 });
+            items.Add(new MenuItem { 
                 Text = "Empty Recycle Bin", 
-                Action = () => Shell.PromptEmptyRecycleBin()
+                Action = () => Shell.PromptEmptyRecycleBin(),
+                Priority = 90
             });
-            menuItems.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path) });
+            items.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path), Priority = 80 });
         } else if (item.IsDir) {
-            // Regular folder context menu
-            menuItems.Add(new MenuItem { Text = "Open", Action = () => _window.NavigateTo(item.Path) });
+            items.Add(new MenuItem { Text = "Open", Action = () => _window.NavigateTo(item.Path), Priority = 100 });
             if (_selectedPaths.Count == 1) {
-                menuItems.Add(new MenuItem { Text = "Rename", Action = () => RenameItem(item.Path) });
+                items.Add(new MenuItem { Text = "Rename", Action = () => RenameItem(item.Path), Priority = 90 });
             }
-            menuItems.Add(new MenuItem { 
+            items.Add(new MenuItem { 
                 Text = "Send to", 
+                Priority = 80,
                 SubItems = new List<MenuItem> {
                     new MenuItem { Text = "Desktop (create shortcut)", Action = SendToDesktopShortcut },
                     new MenuItem { Text = "Start menu (create shortcut)", Action = SendToStartMenuShortcut }
                 }
             });
-            menuItems.Add(new MenuItem { Text = "Delete", Action = () => DeleteItems() });
-            menuItems.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path) });
+            items.Add(new MenuItem { Text = "Delete", Action = () => DeleteItems(), Priority = 70 });
+            items.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path), Priority = 60 });
         } else {
-            // File context menu
-            menuItems.Add(new MenuItem { Text = "Open", Action = () => Shell.Execute(item.Path, item.Bounds) });
+            items.Add(new MenuItem { Text = "Open", Action = () => Shell.Execute(item.Path, item.Bounds), Priority = 100 });
             if (_selectedPaths.Count == 1) {
-                menuItems.Add(new MenuItem { Text = "Rename", Action = () => RenameItem(item.Path) });
+                items.Add(new MenuItem { Text = "Rename", Action = () => RenameItem(item.Path), Priority = 90 });
             }
-            menuItems.Add(new MenuItem { 
+            items.Add(new MenuItem { 
                 Text = "Send to", 
+                Priority = 80,
                 SubItems = new List<MenuItem> {
                     new MenuItem { Text = "Desktop (create shortcut)", Action = SendToDesktopShortcut },
                     new MenuItem { Text = "Start menu (create shortcut)", Action = SendToStartMenuShortcut }
                 }
             });
-            menuItems.Add(new MenuItem { Text = "Delete", Action = () => DeleteItems() });
-            menuItems.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path) });
+            items.Add(new MenuItem { Text = "Delete", Action = () => DeleteItems(), Priority = 70 });
+            items.Add(new MenuItem { Text = "Properties", Action = () => ShowProperties(item.Path), Priority = 60 });
         }
+    }
 
-        Shell.GlobalContextMenu?.Show(InputManager.MousePosition.ToVector2(), menuItems);
+    private void CreateNewItem(string defaultName, bool isDir) {
+        try {
+            string path = System.IO.Path.Combine(_window.CurrentPath, defaultName);
+            int i = 1;
+            string baseName = System.IO.Path.GetFileNameWithoutExtension(defaultName);
+            string ext = System.IO.Path.GetExtension(defaultName);
+            
+            while (VirtualFileSystem.Instance.Exists(path)) {
+                path = System.IO.Path.Combine(_window.CurrentPath, $"{baseName} ({i++}){ext}");
+            }
+
+            if (isDir) VirtualFileSystem.Instance.CreateDirectory(path);
+            else VirtualFileSystem.Instance.WriteAllText(path, "");
+
+            _window.RefreshList();
+            Shell.RefreshDesktop?.Invoke();
+            Shell.RefreshExplorers();
+            
+            // Start renaming the new item
+            StartRename(path);
+        } catch (Exception ex) {
+            Shell.Notifications.Show("Error", $"Could not create item: {ex.Message}");
+        }
+    }
+
+    [Obsolete("Use PopulateContextMenu instead")]
+    private void ShowContextMenu(FileListItem item) {
     }
 
     private void RestoreSelectedItems() {

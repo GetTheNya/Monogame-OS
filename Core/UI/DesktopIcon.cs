@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -104,6 +105,15 @@ public class DesktopIcon : UIElement {
             
             if (isJustPressed) {
                 if (!IsSelected) {
+                    bool ctrl = Microsoft.Xna.Framework.Input.Keyboard.GetState().IsKeyDown(Microsoft.Xna.Framework.Input.Keys.LeftControl) ||
+                                Microsoft.Xna.Framework.Input.Keyboard.GetState().IsKeyDown(Microsoft.Xna.Framework.Input.Keys.RightControl);
+
+                    if (!ctrl && Parent != null) {
+                        foreach (var child in Parent.Children) {
+                            if (child is DesktopIcon icon) icon.IsSelected = false;
+                        }
+                    }
+
                     OnSelectedAction?.Invoke(this);
                     IsSelected = true;
                 }
@@ -129,9 +139,17 @@ public class DesktopIcon : UIElement {
             }
 
             if (isRightPressed) {
-                OnRightClickAction?.Invoke();
-                InputManager.IsMouseConsumed = true;
+                bool ctrl = Microsoft.Xna.Framework.Input.Keyboard.GetState().IsKeyDown(Microsoft.Xna.Framework.Input.Keys.LeftControl) ||
+                            Microsoft.Xna.Framework.Input.Keyboard.GetState().IsKeyDown(Microsoft.Xna.Framework.Input.Keys.RightControl);
+
+                if (!ctrl && !IsSelected && Parent != null) {
+                    foreach (var child in Parent.Children) {
+                        if (child is DesktopIcon icon) icon.IsSelected = false;
+                    }
+                }
+
                 IsSelected = true;
+                Parent?.BringToFront(this);
             }
         }
 
@@ -320,19 +338,7 @@ public class DesktopIcon : UIElement {
             string remaining = text.Substring(text.IndexOf(lastLine) + lastLine.Length).Trim();
             
             if (!string.IsNullOrEmpty(remaining)) {
-                // Try to add ellipsis to the last line
-                while (lastLine.Length > 0) {
-                    string testWithEllipsis = lastLine + "...";
-                    Vector2 testSize = font.MeasureString(testWithEllipsis);
-                    
-                    if (testSize.X <= maxWidth) {
-                        lines[lines.Count - 1] = testWithEllipsis;
-                        break;
-                    }
-                    
-                    // Remove last character and try again
-                    lastLine = lastLine.Substring(0, lastLine.Length - 1).TrimEnd();
-                }
+                lines[lines.Count - 1] = TextHelper.TruncateWithEllipsis(font, lastLine, maxWidth);
             }
         }
         
@@ -340,18 +346,7 @@ public class DesktopIcon : UIElement {
         for (int i = 0; i < lines.Count; i++) {
             Vector2 lineSize = font.MeasureString(lines[i]);
             if (lineSize.X > maxWidth) {
-                string line = lines[i];
-                while (line.Length > 0) {
-                    string testWithEllipsis = line + "...";
-                    Vector2 testSize = font.MeasureString(testWithEllipsis);
-                    
-                    if (testSize.X <= maxWidth) {
-                        lines[i] = testWithEllipsis;
-                        break;
-                    }
-                    
-                    line = line.Substring(0, line.Length - 1);
-                }
+                lines[i] = TextHelper.TruncateWithEllipsis(font, lines[i], maxWidth);
             }
         }
         
@@ -400,5 +395,60 @@ public class DesktopIcon : UIElement {
                 DrawWrappedLabel(batch, font, Label, absPos, iconSize);
             }
         }
+    }
+
+    public override void PopulateContextMenu(ContextMenuContext context, List<MenuItem> items) {
+        context.SetProperty("FilePath", VirtualPath);
+        context.SetProperty("FileExtension", System.IO.Path.GetExtension(VirtualPath)?.ToLower());
+        
+        items.Add(new MenuItem { 
+            Text = "Open", 
+            IsDefault = true, 
+            Priority = 100,
+            Action = () => Shell.Execute(VirtualPath, Bounds) 
+        });
+
+        items.Add(new MenuItem { 
+            Text = "Run as Administrator", 
+            Priority = 95,
+            Action = () => Shell.Execute(VirtualPath, Bounds) 
+        });
+
+        items.Add(new MenuItem { Type = MenuItemType.Separator, Priority = 90 });
+
+        items.Add(new MenuItem { 
+            Text = "Rename", 
+            Priority = 80,
+            Action = () => StartRename() 
+        });
+
+        items.Add(new MenuItem { 
+            Text = "Delete", 
+            Priority = 70,
+            Action = () => {
+                var fileName = System.IO.Path.GetFileName(VirtualPath?.TrimEnd('\\'));
+                var mb = new MessageBox("Delete", $"Are you sure you want to move '{fileName}' to the Recycle Bin?", MessageBoxButtons.YesNo, (confirmed) => {
+                    if (confirmed) {
+                        VirtualFileSystem.Instance.Recycle(VirtualPath);
+                        Shell.RefreshDesktop?.Invoke();
+                        Shell.RefreshExplorers("$Recycle.Bin");
+                    }
+                });
+                Shell.UI.OpenWindow(mb);
+            } 
+        });
+
+        items.Add(new MenuItem { Type = MenuItemType.Separator, Priority = 60 });
+
+        items.Add(new MenuItem { 
+            Text = "Properties", 
+            Priority = 50,
+            Action = () => DebugLogger.Log($"Properties for {VirtualPath}") 
+        });
+
+        // Icon handles bubbling usually, but if we want to combine with desktop items, 
+        // we leave context.Handled = false.
+        // For icons, we typically WANT to stop here.
+        context.Handled = true;
     }
 }

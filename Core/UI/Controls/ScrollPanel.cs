@@ -340,10 +340,14 @@ public class ScrollPanel : Panel {
 
         // Update basic hover state for Panel but don't let it consume if it was already?
         // Actually, we already handled priority.
-        IsMouseOver = InputManager.IsMouseHovering(myBounds);
+        IsMouseOver = UIManager.IsHovered(this);
         if (IsMouseOver) {
             OnHover();
             if (ConsumesInput) InputManager.IsMouseConsumed = true;
+            
+            if (InputManager.IsMouseButtonJustPressed(MouseButton.Right)) {
+                HandleContextMenuInput();
+            }
         }
     }
 

@@ -11,13 +11,41 @@ using TheGame.Core.OS;
 
 namespace TheGame.Core.UI;
 
-public class MenuItem {
+public enum MenuItemType {
+    Normal,
+    Separator,
+    Checkbox
+}
+
+public class MenuItem : IEquatable<MenuItem> {
     public string Text { get; set; } = "";
     public Action Action { get; set; }
     public Texture2D Icon { get; set; }
-    public string Shortcut { get; set; }
+    public string ShortcutText { get; set; }
     public List<MenuItem> SubItems { get; set; }
     public bool HasSubItems => SubItems != null && SubItems.Count > 0;
+
+    public MenuItemType Type { get; set; } = MenuItemType.Normal;
+    public int Priority { get; set; } = 0;
+    public bool IsDefault { get; set; } = false;
+    public bool IsChecked { get; set; } = false;
+    public bool IsEnabled { get; set; } = true;
+    public bool IsVisible { get; set; } = true;
+
+    // Helper for deduplication
+    public override bool Equals(object obj) => obj is MenuItem other && Equals(other);
+
+    public bool Equals(MenuItem other) {
+        if (other is null) return false;
+        if (ReferenceEquals(this, other)) return true;
+        if (Type == MenuItemType.Separator && other.Type == MenuItemType.Separator) return true;
+        return Text == other.Text && Action == other.Action && Type == other.Type;
+    }
+
+    public override int GetHashCode() {
+        if (Type == MenuItemType.Separator) return typeof(MenuItemType).GetHashCode();
+        return HashCode.Combine(Text, Action, Type);
+    }
 }
 
 public class ContextMenu : Panel {
@@ -46,20 +74,41 @@ public class ContextMenu : Panel {
         Position = position;
         
         IsVisible = true;
-        Opacity = 0f; // Fade in if framework supports it (AbsoluteOpacity uses it)
+        Opacity = 0f;
         
         Children.Clear();
 
         float yOffset = ItemPadding;
         foreach (var item in items) {
+            if (item.Type == MenuItemType.Separator) {
+                var sep = new Panel(new Vector2(ItemPadding, yOffset + 4), new Vector2(Width - ItemPadding * 2, 1)) {
+                    BackgroundColor = new Color(80, 80, 80),
+                    BorderThickness = 0,
+                    ConsumesInput = false
+                };
+                AddChild(sep);
+                yOffset += 10f; // Slot for separator
+                continue;
+            }
+
             var btn = new Button(new Vector2(ItemPadding, yOffset), new Vector2(Width - ItemPadding * 2, ItemHeight), item.Text) {
                 BackgroundColor = Color.Transparent,
                 HoverColor = new Color(60, 60, 60),
                 Tag = item,
+                IsEnabled = item.IsEnabled,
+                TextColor = item.IsEnabled ? Color.White : Color.Gray,
+                TextAlign = TextAlign.Left,
+                Padding = new Vector2(30, 0),
                 OnClickAction = () => {
-                    if (!item.HasSubItems) {
-                        item.Action?.Invoke();
-                        CloseAll();
+                    if (item.IsEnabled) {
+                        if (item.Type == MenuItemType.Checkbox) {
+                            item.IsChecked = !item.IsChecked;
+                        }
+
+                        if (!item.HasSubItems) {
+                            item.Action?.Invoke();
+                            CloseAll();
+                        }
                     }
                 }
             };
@@ -68,11 +117,18 @@ public class ContextMenu : Panel {
         }
 
         Vector2 targetSize = new Vector2(Width, yOffset);
-        Size = targetSize; // Temporarily set size to calculate bounds
+        Size = targetSize;
         
         // Ensure within screen bounds (clamp to viewport)
         var viewport = G.GraphicsDevice.Viewport;
-        if (Position.X + Size.X > viewport.Width) Position = new Vector2(viewport.Width - Size.X, Position.Y);
+        if (Position.X + Size.X > viewport.Width) {
+            // For sub-menus, if we can't fit to the right, flip to the left
+            if (_parentMenu != null) {
+                Position = new Vector2(_parentMenu.Position.X - Size.X, Position.Y);
+            } else {
+                Position = new Vector2(viewport.Width - Size.X, Position.Y);
+            }
+        }
         if (Position.Y + Size.Y > viewport.Height) Position = new Vector2(Position.X, viewport.Height - Size.Y);
 
         // Start animation
@@ -80,9 +136,6 @@ public class ContextMenu : Panel {
         Size = new Vector2(Width, 0); // Start at zero height
         Tweener.To(this, (Action<Vector2>)(s => Size = s), Size, targetSize, 0.25f, Easing.EaseOutQuad);
         Tweener.To(this, (Action<float>)(o => Opacity = o), 0f, 1f, 0.2f, Easing.Linear);
-        
-        // Ensure within screen bounds?
-        // Logic to clamp to viewport could be added here.
     }
 
     public void Close() {
@@ -93,7 +146,10 @@ public class ContextMenu : Panel {
         Tweener.To(this, (System.Action<float>)(o => this.Opacity = o), Opacity, 0f, 0.15f, Easing.Linear)
             .OnCompleteAction(() => {
                 IsVisible = false;
-                _openedSubMenu?.Close();
+                if (_openedSubMenu != null) {
+                    _openedSubMenu.Close();
+                    // We don't remove overlay here - ContextMenu should manage its own overlay if it added one
+                }
                 _openedSubMenu = null;
                 Children.Clear();
             });
@@ -113,11 +169,46 @@ public class ContextMenu : Panel {
             if (child.Position.Y < Size.Y) {
                 child.Draw(spriteBatch, shapeBatch);
 
-                // Draw arrow for submenus
-                if (child is Button b && b.Tag is MenuItem mi && mi.HasSubItems) {
-                    var font = GameContent.FontSystem.GetFont(20);
-                    var arrowPos = b.AbsolutePosition + new Vector2(b.Size.X - 15, (b.Size.Y - font.MeasureString(">").Y) / 2f);
-                    font.DrawText(shapeBatch, ">", arrowPos, Color.White * AbsoluteOpacity);
+                if (child is Button b && b.Tag is MenuItem mi) {
+                    float opacity = AbsoluteOpacity;
+                    if (!mi.IsEnabled) opacity *= 0.5f;
+
+                    // Draw Checkbox
+                    if (mi.Type == MenuItemType.Checkbox) {
+                        var tex = mi.IsChecked ? GameContent.CheckboxCheckedIcon : GameContent.CheckboxIcon;
+                        if (tex != null) {
+                            spriteBatch.Draw(tex, new Rectangle((int)b.AbsolutePosition.X + 7, (int)b.AbsolutePosition.Y + (int)(b.Size.Y - 16) / 2, 16, 16), Color.White * opacity);
+                        }
+                    }
+
+                    // Draw Icon
+                    if (mi.Icon != null) {
+                        spriteBatch.Draw(mi.Icon, new Rectangle((int)b.AbsolutePosition.X + 5, (int)b.AbsolutePosition.Y + 5, 20, 20), Color.White * opacity);
+                    }
+
+                    // Draw Shortcut Text
+                    if (!string.IsNullOrEmpty(mi.ShortcutText)) {
+                        var font = GameContent.FontSystem.GetFont(14);
+                        var text = mi.ShortcutText;
+                        var pos = b.AbsolutePosition + new Vector2(b.Size.X - font.MeasureString(text).X - 25, (b.Size.Y - font.MeasureString(text).Y) / 2f);
+                        font.DrawText(shapeBatch, text, pos, Color.Gray * opacity);
+                    }
+
+                    // Draw arrow for submenus
+                    if (mi.HasSubItems) {
+                        var font = GameContent.FontSystem.GetFont(20);
+                        var arrowPos = b.AbsolutePosition + new Vector2(b.Size.X - 15, (b.Size.Y - font.MeasureString(">").Y) / 2f);
+                        font.DrawText(shapeBatch, ">", arrowPos, Color.White * opacity);
+                    }
+
+                    // Handle Default Item (Bold) - We don't have a bold font easily accessible, 
+                    // so we might draw it twice with offset or use a different color.
+                    if (mi.IsDefault) {
+                        // Drawing twice for "bold" effect
+                        var font = GameContent.FontSystem.GetFont(16);
+                        // font.DrawText(shapeBatch, mi.Text, b.AbsolutePosition + new Vector2(mi.Icon != null ? 31 : 11, ...), ...)
+                        // Actually, Button draws the text. We should probably let Button handle IsDefault or just draw over it.
+                    }
                 }
             }
         }

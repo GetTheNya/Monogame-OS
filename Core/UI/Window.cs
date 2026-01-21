@@ -243,12 +243,21 @@ public class Window : UIElement {
                         _resizeStartSize = Size;
                         _resizeStartPos = Position;
 
-                        ActiveWindow = this;
-                        Parent?.BringToFront(this);
+                        HandleFocus();
                     }
                 }
             }
         }
+
+        // --- NEW: Focus handling moved earlier ---
+        if (IsVisible && !_isAnimating && !_obscuredByAnotherWindow) {
+            bool isHoveringRaw = InputManager.IsMouseHovering(Bounds, ignoreConsumed: true);
+            bool isJustPressed = isHoveringRaw && InputManager.IsMouseButtonJustPressed(MouseButton.Left);
+            if (isJustPressed) {
+                HandleFocus();
+            }
+        }
+        // -----------------------------------------
         
         UpdateButtons();
         
@@ -414,7 +423,15 @@ public class Window : UIElement {
         Tweener.To(this, v => Opacity = v, Opacity, 0f, 0.15f, Easing.Linear).OnComplete = () => {
             Parent?.RemoveChild(this);
             OwnerProcess?.OnWindowClosed(this);
+            if (ActiveWindow == this) ActiveWindow = null;
         };
+    }
+
+    public void HandleFocus() {
+        if (ActiveWindow != this) {
+            ActiveWindow = this;
+            Parent?.BringToFront(this);
+        }
     }
 
     public void ToggleMaximize(Rectangle workArea) {
@@ -517,11 +534,6 @@ public class Window : UIElement {
 
         if (isHoveringStrict && ConsumesInput)
             InputManager.IsMouseConsumed = true;
-
-        if (isJustPressed) {
-            ActiveWindow = this;
-            Parent?.BringToFront(this);
-        }
 
         if (inputConsumedByChild) {
             base.UpdateInput(); // Keep base logic alive for state management
@@ -829,17 +841,8 @@ public class Window : UIElement {
                 float availableWidth = Size.X - controlButtonsWidth - titleXOffset;
 
                 if (availableWidth > 10) { // Only try to draw if we have at least 10px
-                    string textToDraw = Title;
+                    string textToDraw = TextHelper.TruncateWithEllipsis(font, Title, availableWidth);
                     var textSize = font.MeasureString(textToDraw);
-
-                    if (textSize.X > availableWidth) {
-                        while (textSize.X > availableWidth && textToDraw.Length > 0) {
-                            textToDraw = textToDraw.Substring(0, textToDraw.Length - 1);
-                            textSize = font.MeasureString(textToDraw + "...");
-                        }
-
-                        textToDraw += "...";
-                    }
 
                     font.DrawText(batch, textToDraw, absPos + new Vector2(titleXOffset, 5), Color.White * AbsoluteOpacity);
                 }

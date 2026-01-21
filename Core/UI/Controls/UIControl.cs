@@ -14,7 +14,7 @@ public enum ControlState {
 public abstract class UIControl : UIElement {
     public ControlState ControlState {
         get {
-            if (!IsActive) return ControlState.Disabled;
+            if (!IsActive || !IsEnabled) return ControlState.Disabled;
             if (_isPressed) return ControlState.Pressed;
             if (IsMouseOver) return ControlState.Hovered;
             return ControlState.Normal;

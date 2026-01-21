@@ -71,13 +71,11 @@ public class SystemTray : Panel {
         // 2. Power Icon
         _powerIcon = new TrayIcon(GameContent.PowerIcon, "Power") {
             OnClick = () => {
-                var menu = new ContextMenu();
-                menu.Show(InputManager.MousePosition.ToVector2(), new List<MenuItem> {
+                Shell.ContextMenu.Show(InputManager.MousePosition.ToVector2(), new List<MenuItem> {
                     new MenuItem { Text = "Restart", Action = () => {/*TODO*/} },
                     new MenuItem { Text = "Shut down", Action = () => {/*TODO*/} },
                     new MenuItem { Text = "Sign out", Action = () => {/*TODO*/} }
                 });
-                Shell.OnAddOverlayElement?.Invoke(menu);
             }
         };
         _systemIcons.Add(_powerIcon);
