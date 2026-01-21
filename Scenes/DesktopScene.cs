@@ -25,6 +25,7 @@ public class DesktopScene : Core.Scenes.Scene {
     private BlurredWindowLayerPanel _windowLayer;
     private StartMenu _startMenu;
     private ClipboardHistoryPanel _clipboardPanel;
+    private VolumeMixerPanel _volumeMixerPanel;
     private Taskbar _taskbar;
     private ContextMenu _contextMenu;
     private DesktopIcon _trashIconEl;
@@ -87,6 +88,10 @@ public class DesktopScene : Core.Scenes.Scene {
         _clipboardPanel.IsVisible = false;
         _uiManager.AddElement(_clipboardPanel);
         
+        _volumeMixerPanel = new VolumeMixerPanel();
+        _volumeMixerPanel.IsVisible = false;
+        _uiManager.AddElement(_volumeMixerPanel);
+        
         // Register Shell event to update Explorers
         Shell.Initialize(_windowLayer, _contextMenu);
         Shell.OnAddOverlayElement = (el) => _uiManager.AddElement(el);
@@ -96,7 +101,7 @@ public class DesktopScene : Core.Scenes.Scene {
         _uiManager.AddElement(_notificationPanel);
 
         // 3. Taskbar Layer (Added LAST so it updates FIRST in the reverse-order loop)
-        _taskbar = new Taskbar(new Vector2(0, screenHeight - TaskbarHeight), new Vector2(screenWidth, TaskbarHeight), _windowLayer, _startMenu);
+        _taskbar = new Taskbar(new Vector2(0, screenHeight - TaskbarHeight), new Vector2(screenWidth, TaskbarHeight), _windowLayer, _startMenu, _volumeMixerPanel);
         _uiManager.AddElement(_taskbar);
 
         // Add Context Menu last
@@ -410,6 +415,8 @@ public class DesktopScene : Core.Scenes.Scene {
             _taskbar.Position = new Vector2(0, viewport.Height - TaskbarHeight);
             _taskbar.Size = new Vector2(viewport.Width, TaskbarHeight);
             _startMenu.OnResize(viewport.Width, viewport.Height);
+            _clipboardPanel.Position = Vector2.Zero; // Let it re-position on toggle
+            _volumeMixerPanel.Position = Vector2.Zero;
             _notificationPanel.OnResize(viewport.Width, viewport.Height);
         }
 

@@ -30,7 +30,7 @@ public class Taskbar : Panel {
     private float _lastMaxAllowed = 0f;
     private TaskbarWindowPicker _windowPicker;
 
-    public Taskbar(Vector2 position, Vector2 size, UIElement windowLayer, UIElement startMenu) : base(position, size) {
+    public Taskbar(Vector2 position, Vector2 size, UIElement windowLayer, UIElement startMenu, VolumeMixerPanel volumeMixer) : base(position, size) {
         Instance = this;
         _windowLayer = windowLayer;
         _startMenu = startMenu;
@@ -60,7 +60,7 @@ public class Taskbar : Panel {
         AddChild(_windowListPanel);
 
         // System Tray
-        _systemTray = new SystemTray(new Vector2(size.X - 120f, 0), new Vector2(120f, size.Y));
+        _systemTray = new SystemTray(new Vector2(size.X - 120f, 0), new Vector2(120f, size.Y), volumeMixer);
         AddChild(_systemTray);
         OS.Shell.SystemTray.Initialize(_systemTray);
 

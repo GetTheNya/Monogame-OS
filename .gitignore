@@ -49,3 +49,7 @@ $RECYCLE.BIN/
 
 # VS Code directory for the user
 .vscode/
+
+# Personal FileSystem data
+FileSystem/C/Users/Admin/Documents/
+FileSystem/C/Users/Admin/Start Menu/

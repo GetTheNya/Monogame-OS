@@ -19,6 +19,7 @@ public static class GameContent {
     public static Texture2D NotificationIcon;
     public static Texture2D UserIcon;
     public static Texture2D PowerIcon;
+    public static Texture2D[] VolumeIcons; // 0: mute, 1: volume0, 2: volume1, 3: volume med, 4: volume high
     public static Texture2D Pixel;
 
     public static void InitContent() {
@@ -42,6 +43,13 @@ public static class GameContent {
         NotificationIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\notification.png");
         UserIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\user.png");
         PowerIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\power.png");
+
+        VolumeIcons = new Texture2D[5];
+        VolumeIcons[0] = LoadIcon("C:\\Windows\\SystemResources\\Icons\\Volume\\mute.png");
+        VolumeIcons[1] = LoadIcon("C:\\Windows\\SystemResources\\Icons\\Volume\\volume0.png");
+        VolumeIcons[2] = LoadIcon("C:\\Windows\\SystemResources\\Icons\\Volume\\volume1.png");
+        VolumeIcons[3] = LoadIcon("C:\\Windows\\SystemResources\\Icons\\Volume\\volume2.png");
+        VolumeIcons[4] = LoadIcon("C:\\Windows\\SystemResources\\Icons\\Volume\\volume3.png");
     }
 
     private static Texture2D LoadIcon(string virtualPath) {

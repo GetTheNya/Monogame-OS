@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TheGame.Graphics;
@@ -19,9 +20,13 @@ public class SystemTray : Panel {
     private GameTime _gameTime;
 
     private Button _notificationButton;
+    private VolumeMixerPanel _volumeMixerPanel;
+    private TrayIcon _volumeIcon;
+    private TrayIcon _powerIcon;
     
     // Tray Icons
-    private List<TrayIcon> _trayIcons = new();
+    private List<TrayIcon> _appIcons = new();
+    private List<TrayIcon> _systemIcons = new();
     private const float IconSize = 20f;
     private const float IconSpacing = 4f;
     
@@ -32,9 +37,10 @@ public class SystemTray : Panel {
     private float _pendingRightClickTimer = 0f;
     private const float ClickDelayThreshold = 0.3f;
 
-    public SystemTray(Vector2 position, Vector2 size) : base(position, size) {
+    public SystemTray(Vector2 position, Vector2 size, VolumeMixerPanel volumeMixer) : base(position, size) {
         BackgroundColor = Color.Transparent;
         BorderColor = Color.Transparent;
+        _volumeMixerPanel = volumeMixer;
         
         // Create notification button
         _notificationButton = new Button(new Vector2(size.X - 35, 4), new Vector2(30, size.Y - 8)) {
@@ -44,7 +50,79 @@ public class SystemTray : Panel {
         };
         AddChild(_notificationButton);
         
+        // Setup System Icons
+        InitializeSystemIcons();
+        
         UpdateTime();
+    }
+
+    private void InitializeSystemIcons() {
+        // 1. Volume Icon
+        _volumeIcon = new TrayIcon(GameContent.VolumeIcons[4], "Volume") {
+            OnClick = () => ToggleVolumeMixer(),
+            OnMouseWheel = (delta) => {
+                float current = Shell.Media.GetMasterVolume();
+                Shell.Media.SetMasterVolume(MathHelper.Clamp(current + delta * 0.05f, 0f, 1f));
+                UpdateVolumeIcon();
+            }
+        };
+        _systemIcons.Add(_volumeIcon);
+
+        // 2. Power Icon
+        _powerIcon = new TrayIcon(GameContent.PowerIcon, "Power") {
+            OnClick = () => {
+                var menu = new ContextMenu();
+                menu.Show(InputManager.MousePosition.ToVector2(), new List<MenuItem> {
+                    new MenuItem { Text = "Restart", Action = () => {/*TODO*/} },
+                    new MenuItem { Text = "Shut down", Action = () => {/*TODO*/} },
+                    new MenuItem { Text = "Sign out", Action = () => {/*TODO*/} }
+                });
+                Shell.OnAddOverlayElement?.Invoke(menu);
+            }
+        };
+        _systemIcons.Add(_powerIcon);
+    }
+
+    private void ToggleVolumeMixer() {
+        if (_volumeMixerPanel == null || _volumeIcon == null) return;
+
+        if (_volumeMixerPanel.IsVisible) {
+            _volumeMixerPanel.Close();
+        } else {
+            // Calculate position specifically for the volume icon
+            float iconXRel = GetIconXRel(_volumeIcon);
+            
+            float absX = AbsolutePosition.X + iconXRel;
+            float absY = AbsolutePosition.Y;
+            
+            _volumeMixerPanel.Position = new Vector2(
+                absX + IconSize / 2f - _volumeMixerPanel.Size.X / 2f,
+                absY - _volumeMixerPanel.Size.Y - 5
+            );
+            
+            // Keep on screen (absolute check)
+            var viewport = G.GraphicsDevice.Viewport;
+            if (_volumeMixerPanel.Position.X + _volumeMixerPanel.Size.X > viewport.Width)
+                _volumeMixerPanel.Position = new Vector2(viewport.Width - _volumeMixerPanel.Size.X - 10, _volumeMixerPanel.Position.Y);
+            if (_volumeMixerPanel.Position.X < 0)
+                _volumeMixerPanel.Position = new Vector2(10, _volumeMixerPanel.Position.Y);
+
+            _volumeMixerPanel.Open();
+        }
+    }
+
+    private void UpdateVolumeIcon() {
+        if (_volumeIcon == null || GameContent.VolumeIcons == null) return;
+        
+        float vol = Shell.Media.GetMasterVolume();
+        Texture2D icon;
+        if (vol <= 0) icon = GameContent.VolumeIcons[0]; // mute
+        else if (vol < 0.33f) icon = GameContent.VolumeIcons[2]; // volume0
+        else if (vol < 0.66f) icon = GameContent.VolumeIcons[3]; // volume1
+        else icon = GameContent.VolumeIcons[4]; // volume3
+        
+        _volumeIcon.SetIcon(icon);
+        _volumeIcon.Tooltip = $"Volume: {(int)(vol * 100)}%";
     }
 
     public Action OnNotificationClick {
@@ -53,12 +131,12 @@ public class SystemTray : Panel {
     }
 
     /// <summary>
-    /// Adds a tray icon to the system tray.
+    /// Adds a tray icon to the system tray. Use this for application icons.
     /// </summary>
     public void AddIcon(TrayIcon icon) {
-        if (icon == null || _trayIcons.Exists(i => i.Id == icon.Id)) return;
-        _trayIcons.Add(icon);
-        DebugLogger.Log($"[SystemTray] Added icon '{icon.Tooltip}' (ID: {icon.Id}, Window: {icon.OwnerWindow?.Title ?? "NULL"}, Process: {icon.OwnerProcess?.AppId ?? "NULL"}, Persist: {icon.PersistAfterWindowClose})");
+        if (icon == null || _appIcons.Exists(i => i.Id == icon.Id) || _systemIcons.Exists(i => i.Id == icon.Id)) return;
+        _appIcons.Add(icon);
+        DebugLogger.Log($"[SystemTray] Added app icon '{icon.Tooltip}' (ID: {icon.Id})");
         RecalculateWidth();
     }
 
@@ -66,8 +144,9 @@ public class SystemTray : Panel {
     /// Removes a tray icon by ID.
     /// </summary>
     public bool RemoveIcon(string id) {
-        int removed = _trayIcons.RemoveAll(i => i.Id == id);
-        if (removed > 0) {
+        bool removed = _appIcons.RemoveAll(i => i.Id == id) > 0;
+        removed |= _systemIcons.RemoveAll(i => i.Id == id) > 0;
+        if (removed) {
             RecalculateWidth();
             return true;
         }
@@ -86,31 +165,25 @@ public class SystemTray : Panel {
         }
         
         DebugLogger.Log($"[SystemTray] RemoveIconsForProcess called for process {process.AppId} (ID: {process.ProcessId})");
-        DebugLogger.Log($"[SystemTray] Current tray icons: {_trayIcons.Count}");
+        DebugLogger.Log($"[SystemTray] Current app tray icons: {_appIcons.Count}");
         
-        foreach (var icon in _trayIcons) {
+        foreach (var icon in _appIcons) {
             DebugLogger.Log($"  - Icon '{icon.Tooltip}' Owner: {icon.OwnerProcess?.AppId ?? "NULL"}, HasWindow: {icon.OwnerWindow != null} (Match: {icon.OwnerProcess == process})");
         }
         
         // Only remove icons that are process-level (no OwnerWindow)
         // Window-owned icons are handled by RemoveIconsForWindow
-        int removed = _trayIcons.RemoveAll(i => i.OwnerProcess == process && i.OwnerWindow == null);
+        int removed = _appIcons.RemoveAll(i => i.OwnerProcess == process && i.OwnerWindow == null);
         if (removed > 0) {
             DebugLogger.Log($"[SystemTray] Removed {removed} process-level tray icon(s) for process {process.AppId}");
             RecalculateWidth();
-        } else {
-            DebugLogger.Log($"[SystemTray] No process-level tray icons found for process {process.AppId}");
         }
     }
     
-    /// <summary>
-    /// Removes all tray icons owned by the specified window (unless PersistAfterWindowClose is true).
-    /// Called automatically when a window closes.
-    /// </summary>
     public void RemoveIconsForWindow(Window window) {
         if (window == null) return;
         
-        int removed = _trayIcons.RemoveAll(i => i.OwnerWindow == window && !i.PersistAfterWindowClose);
+        int removed = _appIcons.RemoveAll(i => i.OwnerWindow == window && !i.PersistAfterWindowClose);
         if (removed > 0) {
             DebugLogger.Log($"[SystemTray] Removed {removed} tray icon(s) for window '{window.Title}' (non-persistent)");
             RecalculateWidth();
@@ -123,13 +196,13 @@ public class SystemTray : Panel {
     /// Gets a tray icon by ID for dynamic updates.
     /// </summary>
     public TrayIcon GetIcon(string id) {
-        return _trayIcons.Find(i => i.Id == id);
+        return _appIcons.Find(i => i.Id == id) ?? _systemIcons.Find(i => i.Id == id);
     }
 
     /// <summary>
-    /// Gets all registered tray icons.
+    /// Gets all registered tray icons (apps followed by system).
     /// </summary>
-    public IReadOnlyList<TrayIcon> Icons => _trayIcons;
+    public IEnumerable<TrayIcon> AllIcons => _appIcons.Concat(_systemIcons);
 
     public override void Update(GameTime gameTime) {
         _gameTime = gameTime; // Store for HandleTrayIconInput
@@ -140,6 +213,8 @@ public class SystemTray : Panel {
             UpdateTime();
             _updateTimer = 0f;
         }
+
+        UpdateVolumeIcon();
         
         // Update button position based on current size
         _notificationButton.Position = new Vector2(Size.X - 35, 4);
@@ -150,7 +225,7 @@ public class SystemTray : Panel {
             _pendingClickTimer += deltaTime;
             if (_pendingClickTimer >= ClickDelayThreshold) {
                 // Delay exceeded, fire the click
-                var icon = _trayIcons.Find(i => i.Id == _pendingClickIconId);
+                var icon = GetIcon(_pendingClickIconId);
                 icon?.OnClick?.Invoke();
                 _pendingClickIconId = null;
             }
@@ -161,7 +236,7 @@ public class SystemTray : Panel {
             _pendingRightClickTimer += deltaTime;
             if (_pendingRightClickTimer >= ClickDelayThreshold) {
                 // Delay exceeded, fire the right-click
-                var icon = _trayIcons.Find(i => i.Id == _pendingRightClickIconId);
+                var icon = GetIcon(_pendingRightClickIconId);
                 icon?.OnRightClick?.Invoke();
                 _pendingRightClickIconId = null;
             }
@@ -177,13 +252,14 @@ public class SystemTray : Panel {
         if (InputManager.IsMouseConsumed || _gameTime == null) return;
         
         var mousePos = InputManager.MousePosition;
-        float iconStartX = AbsolutePosition.X + 8f; // Start of tray icons
+        float iconStartX = AbsolutePosition.X + 8f; 
         
-        for (int i = 0; i < _trayIcons.Count; i++) {
-            var icon = _trayIcons[i];
-            float x = iconStartX + (i * (IconSize + IconSpacing));
+        int totalIndex = 0;
+        foreach (var icon in AllIcons) {
+            float x = iconStartX + (totalIndex * (IconSize + IconSpacing));
             Rectangle iconBounds = new Rectangle((int)x, (int)(AbsolutePosition.Y + (Size.Y - IconSize) / 2f), (int)IconSize, (int)IconSize);
-            
+            totalIndex++;
+
             if (!iconBounds.Contains(mousePos)) continue;
             
             // Mouse wheel
@@ -195,30 +271,43 @@ public class SystemTray : Panel {
             
             // Left click / double-click
             if (InputManager.IsDoubleClick(MouseButton.Left)) {
-                // Cancel pending click and fire double-click instead
                 _pendingClickIconId = null;
                 icon.OnDoubleClick?.Invoke();
                 InputManager.IsMouseConsumed = true;
             } else if (InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
-                // Delay click to see if double-click follows
-                _pendingClickIconId = icon.Id;
-                _pendingClickTimer = 0f;
+                if (icon.OnDoubleClick == null) {
+                    icon.OnClick?.Invoke();
+                } else {
+                    _pendingClickIconId = icon.Id;
+                    _pendingClickTimer = 0f;
+                }
                 InputManager.IsMouseConsumed = true;
             }
             
-            // Right click / double-click (same delayed pattern as left-click)
+            // Right click / double-click
             if (InputManager.IsDoubleClick(MouseButton.Right)) {
-                // Cancel pending right-click and fire double-click instead
                 _pendingRightClickIconId = null;
                 icon.OnRightDoubleClick?.Invoke();
                 InputManager.IsMouseConsumed = true;
             } else if (InputManager.IsMouseButtonJustPressed(MouseButton.Right)) {
-                // Delay right-click to see if double-click follows
-                _pendingRightClickIconId = icon.Id;
-                _pendingRightClickTimer = 0f;
+                if (icon.OnRightDoubleClick == null) {
+                    icon.OnRightClick?.Invoke();
+                } else {
+                    _pendingRightClickIconId = icon.Id;
+                    _pendingRightClickTimer = 0f;
+                }
                 InputManager.IsMouseConsumed = true;
             }
         }
+    }
+
+    private float GetIconXRel(TrayIcon target) {
+        int index = 0;
+        foreach (var icon in AllIcons) {
+            if (icon == target) return 8f + (index * (IconSize + IconSpacing));
+            index++;
+        }
+        return 8f;
     }
 
 
@@ -231,7 +320,7 @@ public class SystemTray : Panel {
         if (GameContent.FontSystem != null) {
             var font = GameContent.FontSystem.GetFont(16);
             float timeWidth = font.MeasureString(_currentTime).X;
-            float trayIconsWidth = _trayIcons.Count * (IconSize + IconSpacing);
+            float trayIconsWidth = AllIcons.Count() * (IconSize + IconSpacing);
             float notifBtnWidth = 40f;
             DesiredWidth = trayIconsWidth + timeWidth + notifBtnWidth + 30f;
         }
@@ -245,7 +334,7 @@ public class SystemTray : Panel {
         
         // Draw Tray Icons
         float trayIconY = absPos.Y + (Size.Y - IconSize) / 2f;
-        foreach (var icon in _trayIcons) {
+        foreach (var icon in AllIcons) {
             if (icon.Icon != null) {
                 spriteBatch.Draw(icon.Icon, new Rectangle((int)x, (int)trayIconY, (int)IconSize, (int)IconSize), Color.White);
             }

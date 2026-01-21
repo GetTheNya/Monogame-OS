@@ -14,6 +14,8 @@ public class Program {
 
 public class MediaTestApp : Window {
     private string _mediaId;
+    private Slider _mediaVolume;
+    private Slider _appVolume;
     private Slider _seekSlider;
     private Label _timeLabel;
     private float _lastSeekValue = -1f;
@@ -34,10 +36,7 @@ public class MediaTestApp : Window {
         var loadButton = new Button(new Vector2(x, y), new Vector2(100, 30), "Load");
         loadButton.OnClickAction = () => {
             if (_mediaId == null) {
-                _mediaId = Shell.Media.LoadMedia(OwnerProcess, "C:\\Users\\Admin\\Documents\\test.mp3", true);
-                if (_mediaId == null) {
-                    Shell.Notifications.Show("Error", "Could not load test.mp3. Ensure it exists in C:\\Users\\Admin\\Documents\\");
-                }
+                OpenPicker();            
             }
         };
         AddChild(loadButton);
@@ -58,12 +57,7 @@ public class MediaTestApp : Window {
         
         var playButton = new Button(new Vector2(x, y), new Vector2(100, 30), "Play");
         playButton.OnClickAction = () => {
-            if (_mediaId != null) {
-                Shell.Media.RegisterPlaybackFinished(_mediaId, () => {
-                   Shell.Notifications.Show("Finished", "Media finished playing!");
-                });
-                Shell.Media.Play(_mediaId);
-            }
+            Play();
         };
         AddChild(playButton);
         x += 120;
@@ -86,14 +80,14 @@ public class MediaTestApp : Window {
         AddChild(new Label(new Vector2(x, y), "Volume:"));
         y += 25;
 
-        var volumeSlider = new Slider(new Vector2(x, y), 360);
-        volumeSlider.OnValueChanged += (val) => {
+        _mediaVolume = new Slider(new Vector2(x, y), 360);
+        _mediaVolume.OnValueChanged += (val) => {
             if (_mediaId != null) {
                 Shell.Media.SetVolume(_mediaId, val);
             }
         };
         y += 30;
-        AddChild(volumeSlider);
+        AddChild(_mediaVolume);
 
         AddChild(new Label(new Vector2(x, y), "Seek:"));
         y += 25;
@@ -134,10 +128,9 @@ public class MediaTestApp : Window {
         y += 30;
 
         AddChild(new Label(new Vector2(x, y), "App Volume:"));
-        var appSlider = new Slider(new Vector2(x + 140, y), 200);
-        appSlider.SetValue(Shell.Media.GetProcessVolume(OwnerProcess), false);
-        appSlider.OnValueChanged += (val) => Shell.Media.SetProcessVolume(OwnerProcess, val);
-        AddChild(appSlider);
+        _appVolume = new Slider(new Vector2(x + 140, y), 200);
+        _appVolume.OnValueChanged += (val) => Shell.Media.SetProcessVolume(OwnerProcess, val);
+        AddChild(_appVolume);
         y += 40;
 
         var checkLoadBtn = new Button(new Vector2(x, y), new Vector2(200, 30), "Check If Loaded");
@@ -152,6 +145,8 @@ public class MediaTestApp : Window {
         base.OnOwnerProcessSet();
 
         Shell.Media.RegisterAsPlayer(OwnerProcess);
+
+        _appVolume.SetValue(Shell.Media.GetProcessVolume(OwnerProcess), false);
         
         // Preload the notification sound for instant one-shot playback
         Shell.Media.Preload("C:\\Windows\\Media\\startup.wav");
@@ -179,6 +174,40 @@ public class MediaTestApp : Window {
             }
 
             _seekSlider.SetValue(sliderPosition, false);
+        }
+    }
+
+    private void OpenPicker() {
+        var picker = new FilePickerWindow(
+            "Select music",
+            "C:\\Users\\Admin\\Documents",
+            "",
+            FilePickerMode.Open,
+            (selectedPath) => {
+                LoadFile(selectedPath);
+            },
+            new string[] {".mp3"}
+        );
+        Shell.UI.OpenWindow(picker);
+    }
+
+    private void LoadFile(string path) {
+        _mediaId = Shell.Media.LoadMedia(OwnerProcess, path, true);
+        if (_mediaId == null) {
+            Shell.Notifications.Show("Error", $"Could not load {path}");
+            return;
+        }
+        _mediaVolume.SetValue(Shell.Media.GetVolume(_mediaId));
+    }
+
+    private void Play() {
+        if (_mediaId != null) {
+            Shell.Media.RegisterPlaybackFinished(_mediaId, () => {
+                Shell.Notifications.Show("Finished", "Media finished playing!");
+                _seekSlider.SetValue(0, false);
+                _timeLabel.Text = "Time: 0:00 / 0:00";
+            });
+            Shell.Media.Play(_mediaId);
         }
     }
 }

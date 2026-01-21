@@ -34,6 +34,15 @@ public class AudioManager {
     private readonly object _lock = new();
     
     private Process _systemProcess;
+    public Process SystemProcess => _systemProcess;
+
+    public IEnumerable<Process> RegisteredProcesses {
+        get {
+            lock (_lock) {
+                return _processContexts.Where(kvp => kvp.Value.IsRegistered || kvp.Key == _systemProcess).Select(kvp => kvp.Key).ToList();
+            }
+        }
+    }
 
     private AudioManager() {
         InitializeEngine();
@@ -350,7 +359,10 @@ public class AudioManager {
             }
         }
 
-        public void AddHandle(MediaHandle handle) => _handles.Add(handle);
+        public void AddHandle(MediaHandle handle) {
+            _handles.Add(handle);
+            handle.UpdateProcessVolume(Volume * AudioManager.Instance.MasterVolume);
+        }
         public void RemoveHandle(MediaHandle handle) {
             _handles.Remove(handle);
             Mixer.RemoveMixerInput(handle.FinalProvider);
@@ -532,9 +544,8 @@ public class AudioManager {
         }
 
         private void UpdateFinalVolume() {
-            float master = AudioManager.Instance.MasterVolume;
             if (Status == MediaStatus.Playing || Status == MediaStatus.Stopping || Status == MediaStatus.Pausing) {
-                _volumeProvider.Volume = _userVolume * _processEffectiveVolume * master;
+                _volumeProvider.Volume = _userVolume * _processEffectiveVolume;
             } else {
                 _volumeProvider.Volume = 0;
             }
