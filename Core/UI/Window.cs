@@ -40,6 +40,7 @@ public class Window : UIElement {
     // Animation / Minimize state
     private Vector2 _preMinimizeSize;
     private Vector2 _preMinimizePos;
+    private bool _wasMaximizedBeforeMinimize;
     private bool _isAnimating;
 
     // Buttons
@@ -335,6 +336,7 @@ public class Window : UIElement {
         // Save current state to restore to
         _preMinimizePos = Position;
         _preMinimizeSize = Size;
+        _wasMaximizedBeforeMinimize = _isMaximized;
 
         float duration = 0.3f;
         var easing = Easing.EaseInQuad;
@@ -389,12 +391,24 @@ public class Window : UIElement {
         float duration = 0.3f;
         var easing = Easing.EaseOutQuad;
 
-        // Ensure we have some safe defaults if never minimized
-        if (_preMinimizeSize == Vector2.Zero) _preMinimizeSize = new Vector2(400, 300);
-        if (_preMinimizePos == Vector2.Zero) _preMinimizePos = new Vector2(100, 100);
+        // If was maximized, restore to current work area (not saved position)
+        Vector2 targetPos, targetSize;
+        if (_wasMaximizedBeforeMinimize) {
+            var viewport = G.GraphicsDevice.Viewport;
+            var workArea = new Rectangle(0, 0, viewport.Width, viewport.Height - 40);
+            targetPos = workArea.Location.ToVector2();
+            targetSize = workArea.Size.ToVector2();
+            _isMaximized = true;
+        } else {
+            // Ensure we have some safe defaults if never minimized
+            if (_preMinimizeSize == Vector2.Zero) _preMinimizeSize = new Vector2(400, 300);
+            if (_preMinimizePos == Vector2.Zero) _preMinimizePos = new Vector2(100, 100);
+            targetPos = _preMinimizePos;
+            targetSize = _preMinimizeSize;
+        }
 
-        Tweener.To(this, v => Position = v, Position, _preMinimizePos, duration, easing);
-        Tweener.To(this, v => Size = v, Size, _preMinimizeSize, duration, easing);
+        Tweener.To(this, v => Position = v, Position, targetPos, duration, easing);
+        Tweener.To(this, v => Size = v, Size, targetSize, duration, easing);
         Tweener.To(this, v => Opacity = v, 0f, 1f, duration, easing).OnComplete = () => { _isAnimating = false; };
 
         Parent?.BringToFront(this);
