@@ -779,6 +779,12 @@ public class Window : UIElement {
         var screenAbsPos = RawAbsolutePosition; // Screen position without RenderOffset
         var windowW = (int)Size.X;
         var windowH = (int)Size.Y;
+        
+        // Add padding for anti-aliasing (prevents border clipping)
+        const int padding = 2;
+        int rtW = windowW + padding * 2;
+        int rtH = windowH + padding * 2;
+        var paddingOffset = new Vector2(padding, padding);
 
         // Ensure we have valid dimensions
         if (windowW <= 0 || windowH <= 0) {
@@ -787,8 +793,8 @@ public class Window : UIElement {
             return;
         }
 
-        // Ensure RenderTarget is properly sized for FULL window (including title bar)
-        EnsureRenderTarget(gd, windowW, windowH);
+        // Ensure RenderTarget is properly sized for FULL window with AA padding
+        EnsureRenderTarget(gd, rtW, rtH);
 
         // Save current state
         var previousTargets = gd.GetRenderTargets();
@@ -801,13 +807,12 @@ public class Window : UIElement {
         gd.Viewport = new Viewport(0, 0, _windowRenderTarget.Width, _windowRenderTarget.Height);
         gd.Clear(Color.Transparent);
 
-        // Set RenderOffset to window origin (0,0 in RT = screen position of window)
-        UIElement.RenderOffset = screenAbsPos;
+        // Set RenderOffset so window origin (0,0) maps to local (padding, padding) in RT
+        // RenderOffset = RawAbsolutePosition - paddingOffset
+        UIElement.RenderOffset = screenAbsPos - paddingOffset;
         
-        // Set BlurUVOffset and ScreenSizeOverride for correct blur UV calculation
-        // BlurUVOffset: window's screen position (added to local RT pixel position)
-        // ScreenSizeOverride: actual screen size (blur texture is screen-sized, not RT-sized)
-        _contentBatch.BlurUVOffset = screenAbsPos;
+        // Set BlurUVOffset so local RT (0,0) samples from screenAbsPos - paddingOffset
+        _contentBatch.BlurUVOffset = screenAbsPos - paddingOffset;
         _contentBatch.ScreenSizeOverride = new Vector2(previousViewport.Width, previousViewport.Height);
 
         try {
@@ -840,9 +845,8 @@ public class Window : UIElement {
             spriteBatch.End();
 
             // === Pass 3: Local coordinate content (DrawContent override) ===
-            // Temporarily shift offset for DrawContent which expects (0,0) at content top-left
-            UIElement.RenderOffset = screenAbsPos + contentOffsetFromWindow;
-            
+            // This now uses the same RenderOffset as everything else, 
+            // drawing correctly into the padded RT.
             _contentBatch.Begin(null, null);
             spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
 
@@ -851,9 +855,6 @@ public class Window : UIElement {
             _contentBatch.End();
             spriteBatch.End();
             
-            // Restore offset for chrome drawing
-            UIElement.RenderOffset = screenAbsPos;
-
             // === Pass 4: Draw border and chrome buttons ===
             _contentBatch.Begin(null, null);
             spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
@@ -879,15 +880,15 @@ public class Window : UIElement {
         spriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend);
         
         var destRect = new Rectangle(
-            (int)screenAbsPos.X, 
-            (int)screenAbsPos.Y, 
-            windowW, 
-            windowH);
+            (int)screenAbsPos.X - padding, 
+            (int)screenAbsPos.Y - padding, 
+            rtW, 
+            rtH);
 
         spriteBatch.Draw(
             _windowRenderTarget, 
             destRect,
-            new Rectangle(0, 0, windowW, windowH),
+            new Rectangle(0, 0, rtW, rtH),
             Color.White * AbsoluteOpacity
         );
         
