@@ -751,9 +751,18 @@ public class FileListPanel : ScrollPanel {
         base.Draw(spriteBatch, shapeBatch);
 
         // Draw marquee on top
+        // _marqueeRect is in screen coordinates, but during RT rendering AbsolutePosition is offset
+        // So we need to draw the marquee at its correct position relative to current AbsolutePosition
         if (_isSelecting && _marqueeRect.Width > 0 && _marqueeRect.Height > 0) {
-            shapeBatch.FillRectangle(_marqueeRect.Location.ToVector2(), _marqueeRect.Size.ToVector2(), new Color(0, 120, 215, 40));
-            shapeBatch.BorderRectangle(_marqueeRect.Location.ToVector2(), _marqueeRect.Size.ToVector2(), new Color(0, 120, 215, 150), 1f);
+            // The marquee rect was calculated in screen-space. During RT rendering,
+            // AbsolutePosition includes RenderOffset. We draw at the marquee location directly
+            // since the draw coordinates are also offset by RenderOffset.
+            shapeBatch.FillRectangle(_marqueeRect.Location.ToVector2() - UIElement.RenderOffset, 
+                                     _marqueeRect.Size.ToVector2(), 
+                                     new Color(0, 120, 215, 40));
+            shapeBatch.BorderRectangle(_marqueeRect.Location.ToVector2() - UIElement.RenderOffset, 
+                                       _marqueeRect.Size.ToVector2(), 
+                                       new Color(0, 120, 215, 150), 1f);
         }
         
         // Draw rename input on top

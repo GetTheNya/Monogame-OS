@@ -124,6 +124,10 @@ public class Window : UIElement {
 
     private ShapeBatch _contentBatch;
     private RasterizerState _scissorState;
+    
+    // RenderTarget2D for off-screen window content rendering
+    private RenderTarget2D _windowRenderTarget;
+    private bool _renderTargetDirty = true;
 
     public Window(Vector2 position, Vector2 size) {
         Position = position;
@@ -421,10 +425,21 @@ public class Window : UIElement {
         Tweener.CancelAll(this);
         // Fade out then remove
         Tweener.To(this, v => Opacity = v, Opacity, 0f, 0.15f, Easing.Linear).OnComplete = () => {
+            // Dispose graphics resources to prevent memory leaks
+            DisposeGraphicsResources();
+            
             Parent?.RemoveChild(this);
             OwnerProcess?.OnWindowClosed(this);
             if (ActiveWindow == this) ActiveWindow = null;
         };
+    }
+    
+    /// <summary>
+    /// Disposes of graphics resources used by this window.
+    /// </summary>
+    private void DisposeGraphicsResources() {
+        _windowRenderTarget?.Dispose();
+        _windowRenderTarget = null;
     }
 
     public void HandleFocus() {
@@ -850,35 +865,49 @@ public class Window : UIElement {
     }
 
     private void DrawWindowContent(SpriteBatch spriteBatch, ShapeBatch globalBatch) {
-        // End global batches to isolate states and scissor
+        // End global batches to isolate states
         globalBatch.End();
         spriteBatch.End();
 
+        var gd = G.GraphicsDevice;
         var absPos = AbsolutePosition;
-        var clientX = (int)absPos.X;
-        var clientY = (int)absPos.Y + TitleBarHeight;
         var clientW = (int)Size.X;
-        var clientH = (int)Size.Y - TitleBarHeight;
+        var clientH = (int)(Size.Y - TitleBarHeight);
 
-        var screenRect = G.GraphicsDevice.Viewport.Bounds;
-        var scissorRect = new Rectangle(clientX, clientY, clientW, clientH);
-        scissorRect = Rectangle.Intersect(scissorRect, screenRect);
+        // Ensure we have valid dimensions
+        if (clientW <= 0 || clientH <= 0) {
+            globalBatch.Begin();
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+            return;
+        }
 
-        if (scissorRect.Width > 0 && scissorRect.Height > 0) {
-            var oldScissor = G.GraphicsDevice.ScissorRectangle;
-            G.GraphicsDevice.ScissorRectangle = scissorRect;
+        // Ensure RenderTarget is properly sized
+        EnsureRenderTarget(gd, clientW, clientH);
 
-            // --- Pass 1: Background and Standard Children ---
-            // Set up batches for clipping
+        // Save current state
+        var previousTargets = gd.GetRenderTargets();
+        RenderTarget2D previousTarget = previousTargets.Length > 0 ? 
+            previousTargets[0].RenderTarget as RenderTarget2D : null;
+        var previousViewport = gd.Viewport;
+
+        // === RENDER TO WINDOW'S LOCAL RENDER TARGET ===
+        gd.SetRenderTarget(_windowRenderTarget);
+        
+        // Set viewport to match RT dimensions (critical for correct SpriteBatch coordinates)
+        gd.Viewport = new Viewport(0, 0, _windowRenderTarget.Width, _windowRenderTarget.Height);
+        gd.Clear(Color.Transparent);
+
+        // --- Set RenderOffset to shift AbsolutePosition to local coordinates ---
+        // This makes children think they're at (0,0) relative to content area
+        var contentOrigin = new Vector2(absPos.X, absPos.Y + TitleBarHeight);
+        UIElement.RenderOffset = contentOrigin;
+
+        try {
+            // --- Pass 1: Draw Children ---
+            // Children now compute AbsolutePosition with the offset applied
             _contentBatch.Begin(null, null);
-            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, _scissorState);
-            G.GraphicsDevice.RasterizerState = _scissorState;
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
 
-            // Background Fill
-            //_contentBatch.FillRectangle(new Vector2(clientX, clientY), new Vector2(clientW, clientH), BackgroundColor * AbsoluteOpacity);
-
-            // Draw Children that aren't Chrome Buttons
-            // Because of our GetChildOffset override, these will already have shifted AbsolutePositions
             foreach (var child in Children) {
                 if (child == _closeButton || child == _maxButton || child == _minButton) continue;
                 child.Draw(spriteBatch, _contentBatch);
@@ -887,24 +916,73 @@ public class Window : UIElement {
             _contentBatch.End();
             spriteBatch.End();
 
-            // --- Pass 2: Local Coordinate Content (Overrides) ---
-            var transform = Matrix.CreateTranslation(clientX, clientY, 0);
-            _contentBatch.Begin(transform, null);
-            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, _scissorState, null, transform);
-            G.GraphicsDevice.RasterizerState = _scissorState;
+            // --- Pass 2: Local Coordinate Content (DrawContent override) ---
+            // This already expects local coordinates (0,0 at content top-left)
+            _contentBatch.Begin(null, null);
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
 
             DrawContent(spriteBatch, _contentBatch);
 
             _contentBatch.End();
             spriteBatch.End();
-
-            // Restore Scissor
-            G.GraphicsDevice.ScissorRectangle = oldScissor;
+        } finally {
+            // Always clear the RenderOffset to avoid affecting other rendering
+            UIElement.RenderOffset = Vector2.Zero;
         }
 
-        // Restart global batches
+        // === RESTORE AND COMPOSITE ===
+        gd.SetRenderTarget(previousTarget);
+        gd.Viewport = previousViewport;
+
+        // Draw the composited window content at absolute position IMMEDIATELY
+        // We must flush this BEFORE DrawSelf adds the border to shapeBatch
+        spriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend);
+        
+        var destRect = new Rectangle(
+            (int)absPos.X, 
+            (int)absPos.Y + TitleBarHeight, 
+            clientW, 
+            clientH);
+
+        spriteBatch.Draw(
+            _windowRenderTarget, 
+            destRect,
+            new Rectangle(0, 0, clientW, clientH),
+            Color.White * AbsoluteOpacity
+        );
+        
+        spriteBatch.End(); // Flush RT content NOW, before border is drawn
+
+        // Restart global batches for subsequent drawing (DrawSelf, chrome buttons)
         globalBatch.Begin();
         spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+    }
+
+    /// <summary>
+    /// Ensures the window's RenderTarget2D is properly sized for the content area.
+    /// </summary>
+    private void EnsureRenderTarget(GraphicsDevice gd, int width, int height) {
+        // Clamp to minimum size to avoid issues
+        width = Math.Max(1, width);
+        height = Math.Max(1, height);
+
+        if (_windowRenderTarget == null || 
+            _windowRenderTarget.Width != width || 
+            _windowRenderTarget.Height != height) {
+            
+            _windowRenderTarget?.Dispose();
+            _windowRenderTarget = new RenderTarget2D(
+                gd, 
+                width, 
+                height,
+                false,
+                SurfaceFormat.Color,
+                DepthFormat.None,
+                0,
+                RenderTargetUsage.DiscardContents
+            );
+            _renderTargetDirty = true;
+        }
     }
 
     public virtual void DrawContent(SpriteBatch spriteBatch, ShapeBatch batch) {

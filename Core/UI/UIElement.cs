@@ -71,9 +71,19 @@ public abstract class UIElement : IContextMenuProvider {
     // Allows parents to offset children (e.g. Window title bar)
     public virtual Vector2 GetChildOffset(UIElement child) => Vector2.Zero;
 
+    /// <summary>
+    /// Static render offset used during RenderTarget rendering.
+    /// When set, AbsolutePosition is adjusted to create local coordinates.
+    /// </summary>
+    public static Vector2 RenderOffset { get; set; } = Vector2.Zero;
+
     // Relative to parent, or absolute if no parent? 
     // Let's assume Position is relative to Parent.
-    public Vector2 AbsolutePosition => (Parent?.AbsolutePosition ?? Vector2.Zero) + (Parent?.GetChildOffset(this) ?? Vector2.Zero) + Position;
+    // RawAbsolutePosition computes the true screen position without any offset
+    private Vector2 RawAbsolutePosition => (Parent?.RawAbsolutePosition ?? Vector2.Zero) + (Parent?.GetChildOffset(this) ?? Vector2.Zero) + Position;
+    
+    // AbsolutePosition subtracts RenderOffset ONCE at the end (not recursively)
+    public Vector2 AbsolutePosition => RawAbsolutePosition - RenderOffset;
     public Rectangle Bounds => new Rectangle(AbsolutePosition.ToPoint(), Size.ToPoint());
 
     public bool IsMouseOver { get; protected set; }
