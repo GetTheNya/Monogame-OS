@@ -80,7 +80,7 @@ public abstract class UIElement : IContextMenuProvider {
     // Relative to parent, or absolute if no parent? 
     // Let's assume Position is relative to Parent.
     // RawAbsolutePosition computes the true screen position without any offset
-    private Vector2 RawAbsolutePosition => (Parent?.RawAbsolutePosition ?? Vector2.Zero) + (Parent?.GetChildOffset(this) ?? Vector2.Zero) + Position;
+    protected Vector2 RawAbsolutePosition => (Parent?.RawAbsolutePosition ?? Vector2.Zero) + (Parent?.GetChildOffset(this) ?? Vector2.Zero) + Position;
     
     // AbsolutePosition subtracts RenderOffset ONCE at the end (not recursively)
     public Vector2 AbsolutePosition => RawAbsolutePosition - RenderOffset;

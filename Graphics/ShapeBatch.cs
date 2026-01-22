@@ -28,8 +28,22 @@ public class ShapeBatch : IFontStashRenderer2 {
 
     private EffectParameter _screenSizeParam;
     private EffectParameter _blurredTextureParam;
+    private EffectParameter _blurUVOffsetParam;
 
     public Texture2D BlurredBackground { get; set; }
+    
+    /// <summary>
+    /// Offset for correct blur UV sampling when rendering to a local RenderTarget.
+    /// Set to the screen position of the RT's origin (e.g., window content area position).
+    /// </summary>
+    public Vector2 BlurUVOffset { get; set; } = Vector2.Zero;
+    
+    /// <summary>
+    /// Override for ScreenSize parameter when rendering to a local RenderTarget.
+    /// Set to the actual screen size (not RT viewport size) for correct blur UV calculation.
+    /// If null, uses current viewport size.
+    /// </summary>
+    public Vector2? ScreenSizeOverride { get; set; } = null;
 
     private float _pixelSize = 1f;
     private float _aaSize = 2f;
@@ -46,6 +60,7 @@ public class ShapeBatch : IFontStashRenderer2 {
 
         _screenSizeParam = _effect.Parameters["ScreenSize"];
         _blurredTextureParam = _effect.Parameters["BlurredBackgroundTexture"];
+        _blurUVOffsetParam = _effect.Parameters["BlurUVOffset"];
 
         _batchItemList = new ShapeBatchItem[_initialSprites];
         _vertices = new VertexShape[_initialVertices];
@@ -427,14 +442,23 @@ public class ShapeBatch : IFontStashRenderer2 {
         _effect.Parameters["view_projection"].SetValue(_view * _projection);
 
         if (_screenSizeParam != null) {
-            float w = _graphicsDevice.Viewport.Width;
-            float h = _graphicsDevice.Viewport.Height;
-
-            _screenSizeParam.SetValue(new Vector2(w, h));
+            // Use override if set (for RT rendering), otherwise use viewport size
+            if (ScreenSizeOverride.HasValue) {
+                _screenSizeParam.SetValue(ScreenSizeOverride.Value);
+            } else {
+                float w = _graphicsDevice.Viewport.Width;
+                float h = _graphicsDevice.Viewport.Height;
+                _screenSizeParam.SetValue(new Vector2(w, h));
+            }
         }
 
         if (_blurredTextureParam != null && BlurredBackground != null) {
             _blurredTextureParam.SetValue(BlurredBackground);
+        }
+        
+        // Set blur UV offset for correct sampling when rendering to local RT
+        if (_blurUVOffsetParam != null) {
+            _blurUVOffsetParam.SetValue(BlurUVOffset);
         }
 
         _graphicsDevice.DepthStencilState = DepthStencilState.None;

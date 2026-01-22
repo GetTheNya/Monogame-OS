@@ -127,7 +127,6 @@ public class Window : UIElement {
     
     // RenderTarget2D for off-screen window content rendering
     private RenderTarget2D _windowRenderTarget;
-    private bool _renderTargetDirty = true;
 
     public Window(Vector2 position, Vector2 size) {
         Position = position;
@@ -742,7 +741,7 @@ public class Window : UIElement {
         if (!IsVisible && Opacity <= 0) return;
 
         try {
-            // Draw Snap Preview if dragging near edges or animating
+            // Draw Snap Preview if dragging near edges or animating (screen space, before RT)
             if (_snapPreviewOpacity > 0.01f) {
                 var color = new Color(0, 120, 215) * (_snapPreviewOpacity * 0.4f);
                 var borderColor = new Color(0, 120, 215) * (_snapPreviewOpacity * 0.8f);
@@ -750,22 +749,9 @@ public class Window : UIElement {
                 batch.BorderRectangle(_renderSnapPos, _renderSnapSize, borderColor, thickness: 2f, rounded: 5f);
             }
 
-            // 1. Draw Background
-            DrawBackBlur(spriteBatch, batch);
+            // Render entire window to RenderTarget
+            DrawWindowToRT(spriteBatch, batch);
 
-            // 2. Draw Content and Children (Isolated & Clipped)
-            DrawWindowContent(spriteBatch, batch);
-
-            // 3. Draw Window Chrome (Title bar, border)
-            DrawSelf(spriteBatch, batch);
-
-
-            // 4. Draw OVERLAY Children (Chrome Buttons)
-            foreach (var child in Children) {
-                if (child == _closeButton || child == _maxButton || child == _minButton) {
-                    child.Draw(spriteBatch, batch);
-                }
-            }
         } catch (Exception ex) {
             if (OwnerProcess != null && CrashHandler.IsAppException(ex, OwnerProcess)) {
                 CrashHandler.HandleAppException(OwnerProcess, ex);
@@ -774,11 +760,218 @@ public class Window : UIElement {
             }
         }
 
-        // 4. Final barrier flush
+        // Final barrier flush
         batch.End();
         spriteBatch.End();
         batch.Begin();
         spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+    }
+    
+    /// <summary>
+    /// Renders the entire window (blur, title bar, content, border, chrome buttons) to a RenderTarget2D.
+    /// </summary>
+    private void DrawWindowToRT(SpriteBatch spriteBatch, ShapeBatch globalBatch) {
+        // End global batches to isolate states
+        globalBatch.End();
+        spriteBatch.End();
+
+        var gd = G.GraphicsDevice;
+        var screenAbsPos = RawAbsolutePosition; // Screen position without RenderOffset
+        var windowW = (int)Size.X;
+        var windowH = (int)Size.Y;
+
+        // Ensure we have valid dimensions
+        if (windowW <= 0 || windowH <= 0) {
+            globalBatch.Begin();
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+            return;
+        }
+
+        // Ensure RenderTarget is properly sized for FULL window (including title bar)
+        EnsureRenderTarget(gd, windowW, windowH);
+
+        // Save current state
+        var previousTargets = gd.GetRenderTargets();
+        RenderTarget2D previousTarget = previousTargets.Length > 0 ? 
+            previousTargets[0].RenderTarget as RenderTarget2D : null;
+        var previousViewport = gd.Viewport;
+
+        // === RENDER TO WINDOW'S LOCAL RENDER TARGET ===
+        gd.SetRenderTarget(_windowRenderTarget);
+        gd.Viewport = new Viewport(0, 0, _windowRenderTarget.Width, _windowRenderTarget.Height);
+        gd.Clear(Color.Transparent);
+
+        // Set RenderOffset to window origin (0,0 in RT = screen position of window)
+        UIElement.RenderOffset = screenAbsPos;
+        
+        // Set BlurUVOffset and ScreenSizeOverride for correct blur UV calculation
+        // BlurUVOffset: window's screen position (added to local RT pixel position)
+        // ScreenSizeOverride: actual screen size (blur texture is screen-sized, not RT-sized)
+        _contentBatch.BlurUVOffset = screenAbsPos;
+        _contentBatch.ScreenSizeOverride = new Vector2(previousViewport.Width, previousViewport.Height);
+
+        try {
+            // === Pass 1: Draw blur background and title bar ===
+            _contentBatch.Begin(null, null);
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+
+            // Draw blur for body (uses AbsolutePosition which now has RenderOffset applied)
+            DrawBackBlur(spriteBatch, _contentBatch);
+            
+            // Draw title bar with blur
+            DrawTitleBarToRT(_contentBatch);
+
+            _contentBatch.End();
+            spriteBatch.End();
+
+            // === Pass 2: Draw children (content area) ===
+            // Adjust RenderOffset to content origin for children
+            var contentOffsetFromWindow = new Vector2(0, TitleBarHeight);
+            
+            _contentBatch.Begin(null, null);
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+
+            foreach (var child in Children) {
+                if (child == _closeButton || child == _maxButton || child == _minButton) continue;
+                child.Draw(spriteBatch, _contentBatch);
+            }
+
+            _contentBatch.End();
+            spriteBatch.End();
+
+            // === Pass 3: Local coordinate content (DrawContent override) ===
+            // Temporarily shift offset for DrawContent which expects (0,0) at content top-left
+            UIElement.RenderOffset = screenAbsPos + contentOffsetFromWindow;
+            
+            _contentBatch.Begin(null, null);
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+
+            DrawContent(spriteBatch, _contentBatch);
+
+            _contentBatch.End();
+            spriteBatch.End();
+            
+            // Restore offset for chrome drawing
+            UIElement.RenderOffset = screenAbsPos;
+
+            // === Pass 4: Draw border and chrome buttons ===
+            _contentBatch.Begin(null, null);
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+
+            // Draw border (but not title bar blur - already drawn)
+            DrawBorderAndChrome(spriteBatch, _contentBatch);
+
+            _contentBatch.End();
+            spriteBatch.End();
+
+        } finally {
+            // Always clear the offsets to avoid affecting other rendering
+            UIElement.RenderOffset = Vector2.Zero;
+            _contentBatch.BlurUVOffset = Vector2.Zero;
+            _contentBatch.ScreenSizeOverride = null;
+        }
+
+        // === RESTORE AND COMPOSITE ===
+        gd.SetRenderTarget(previousTarget);
+        gd.Viewport = previousViewport;
+
+        // Draw the composited window at absolute position IMMEDIATELY
+        spriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend);
+        
+        var destRect = new Rectangle(
+            (int)screenAbsPos.X, 
+            (int)screenAbsPos.Y, 
+            windowW, 
+            windowH);
+
+        spriteBatch.Draw(
+            _windowRenderTarget, 
+            destRect,
+            new Rectangle(0, 0, windowW, windowH),
+            Color.White * AbsoluteOpacity
+        );
+        
+        spriteBatch.End(); // Flush RT content NOW
+
+        // Restart global batches
+        globalBatch.Begin();
+        spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+    }
+    
+    /// <summary>
+    /// Draws the title bar with blur effect to the RenderTarget.
+    /// </summary>
+    private void DrawTitleBarToRT(ShapeBatch batch) {
+        var absPos = AbsolutePosition; // Uses RenderOffset, so this is local coords
+
+        Color baseTitleBarColor = ((ActiveWindow == this) ? new Color(60, 60, 60) : new Color(40, 40, 40));
+        
+        if (_isBlinking) {
+            float blinkPhase = (float)(_blinkTimer / BlinkDuration);
+            float intensity = (float)Math.Abs(Math.Sin(blinkPhase * Math.PI * 6));
+            baseTitleBarColor = Color.Lerp(baseTitleBarColor, new Color(120, 120, 140), intensity * 0.6f);
+        }
+        
+        Color titleBarColor = baseTitleBarColor * 0.8f;
+        batch.DrawBlurredRectangle(
+            absPos,
+            new Vector2(Size.X, TitleBarHeight),
+            titleBarColor * AbsoluteOpacity,
+            Color.Transparent,
+            0f,
+            5f,
+            AbsoluteOpacity
+        );
+    }
+    
+    /// <summary>
+    /// Draws border, separator line, icon, title text, and chrome buttons to the RT.
+    /// </summary>
+    private void DrawBorderAndChrome(SpriteBatch spriteBatch, ShapeBatch batch) {
+        var absPos = AbsolutePosition;
+        var border = BorderColor * AbsoluteOpacity;
+
+        // Border
+        if (!_isMaximized) {
+            batch.BorderRectangle(absPos, Size, border, thickness: 1f, rounded: 5f);
+        }
+
+        // Subtle title bar separator
+        batch.DrawLine(
+            new Vector2(absPos.X + 5, absPos.Y + TitleBarHeight), 
+            new Vector2(absPos.X + Size.X - 5, absPos.Y + TitleBarHeight), 
+            1f, border * 0.5f, border * 0.5f, 1f);
+
+        float titleXOffset = 10;
+        float controlButtonsWidth = 85;
+
+        // Draw Icon in Title Bar
+        if (Icon != null && Size.X > controlButtonsWidth + 40) {
+            float iconSize = 18f;
+            float iconY = absPos.Y + (TitleBarHeight - iconSize) / 2f;
+            float scale = iconSize / Icon.Width;
+            batch.DrawTexture(Icon, new Vector2(absPos.X + 10, iconY), Color.White * AbsoluteOpacity, scale);
+            titleXOffset += iconSize + 8;
+        }
+
+        // Title Text
+        if (GameContent.FontSystem != null) {
+            SpriteFontBase font = GameContent.FontSystem.GetFont(20);
+            if (font != null) {
+                float availableWidth = Size.X - controlButtonsWidth - titleXOffset;
+                if (availableWidth > 10) {
+                    string textToDraw = TextHelper.TruncateWithEllipsis(font, Title, availableWidth);
+                    font.DrawText(batch, textToDraw, absPos + new Vector2(titleXOffset, 5), Color.White * AbsoluteOpacity);
+                }
+            }
+        }
+        
+        // Draw chrome buttons (close, max, min)
+        foreach (var child in Children) {
+            if (child == _closeButton || child == _maxButton || child == _minButton) {
+                child.Draw(spriteBatch, batch);
+            }
+        }
     }
 
     protected void DrawBackBlur(SpriteBatch spriteBatch, ShapeBatch batch) {
@@ -981,7 +1174,6 @@ public class Window : UIElement {
                 0,
                 RenderTargetUsage.DiscardContents
             );
-            _renderTargetDirty = true;
         }
     }
 

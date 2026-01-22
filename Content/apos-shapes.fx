@@ -27,6 +27,7 @@ sampler BlurredBackgroundSampler = sampler_state
 };
 
 float2 ScreenSize;
+float2 BlurUVOffset; // Offset for correct blur sampling when rendering to local RenderTarget
 
 struct VertexInput {
     float4 Position : POSITION0;
@@ -285,7 +286,8 @@ float4 SpritePixelShader(PixelInput p) : SV_TARGET {
     float4 fillContent = p.Color1;
 
     if (p.Meta1.y > 8.5 && p.Meta1.y < 9.5) {
-        float2 screenUV = p.Position.xy / ScreenSize;
+        // Add BlurUVOffset to convert local RT position to screen position for correct blur sampling
+        float2 screenUV = (p.Position.xy + BlurUVOffset) / ScreenSize;
         float4 bgBlur = tex2D(BlurredBackgroundSampler, screenUV);
        
         float3 mixedColor = lerp(bgBlur.rgb, p.Color1.rgb, p.Color1.a);
