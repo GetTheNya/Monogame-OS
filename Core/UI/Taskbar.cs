@@ -28,7 +28,13 @@ public class Taskbar : Panel {
     private List<OS.Process> _trackedProcesses = new();
     private Dictionary<OS.Process, float> _cachedButtonWidths = new();
     private float _lastMaxAllowed = 0f;
-    private TaskbarWindowPicker _windowPicker;
+    private TaskbarPreviewPopup _previewPopup;
+    private OS.Process _hoveredProcess;
+    private float _hoverTimer = 0f;
+    private const float HoverThreshold = 0.4f; // 400ms delay
+    
+    private float _hideTimer = 0f;
+    private const float HideThreshold = 0.3f; // 300ms grace period
 
     public Taskbar(Vector2 position, Vector2 size, UIElement windowLayer, UIElement startMenu, VolumeMixerPanel volumeMixer) : base(position, size) {
         Instance = this;
@@ -64,10 +70,9 @@ public class Taskbar : Panel {
         AddChild(_systemTray);
         OS.Shell.SystemTray.Initialize(_systemTray);
 
-        // Window Picker
-        _windowPicker = new TaskbarWindowPicker();
-        // Window picker is added to the scene's top layer by the Shell usually, 
-        // but here we'll let it be managed by the Taskbar or Shell.UI
+        // Window Preview Popup
+        _previewPopup = new TaskbarPreviewPopup();
+        OS.Shell.AddOverlayElement(_previewPopup);
     }
 
     public override void Update(GameTime gameTime) {
@@ -185,8 +190,74 @@ public class Taskbar : Panel {
             }
         }
 
-        _windowPicker.Update(gameTime);
+        UpdatePreviewPopup(gameTime);
         base.Update(gameTime); // Update Children (Buttons)
+    }
+
+    private void UpdatePreviewPopup(GameTime gameTime) {
+        // If we are dragging, don't show previews
+        if (_draggingButton != null) {
+            _previewPopup.Hide();
+            _hoveredProcess = null;
+            return;
+        }
+
+        OS.Process currentlyHovered = null;
+        Button hoveredBtn = null;
+
+        foreach (var child in _windowListPanel.Children) {
+            if (child is Button btn && btn.IsMouseOver && btn.Tag is OS.Process proc) {
+                currentlyHovered = proc;
+                hoveredBtn = btn;
+                break;
+            }
+        }
+
+        if (currentlyHovered != null) {
+            _hideTimer = 0f;
+            if (_hoveredProcess != currentlyHovered) {
+                // We moved to a NEW process button or just started hovering
+                // If a preview is already showing for a DIFFERENT process, hide it immediately
+                if (_previewPopup.IsVisible && _hoveredProcess != null) {
+                    _previewPopup.Hide(force: true);
+                    // If switching between buttons, make it feel faster
+                    _hoverTimer = HoverThreshold; 
+                } else {
+                    _hoverTimer = 0f;
+                }
+                
+                _hoveredProcess = currentlyHovered;
+            }
+
+            if (!_previewPopup.IsVisible || (_previewPopup.Opacity < 1.0f && !_previewPopup.IsPinned)) {
+                _hoverTimer += (float)gameTime.ElapsedGameTime.TotalSeconds;
+                if (_hoverTimer >= HoverThreshold) {
+                    _previewPopup.Show(currentlyHovered, hoveredBtn.AbsolutePosition, hoveredBtn.Size.X, pin: false);
+                }
+            }
+        } else {
+            // No button is currently hovered
+            _hoverTimer = 0f;
+            
+            // Check if mouse is over the preview popup itself, if so, keep it open
+            if (_previewPopup.IsMouseOver) {
+                _hideTimer = 0f;
+            } else {
+                _hideTimer += (float)gameTime.ElapsedGameTime.TotalSeconds;
+                
+                // If clicked somewhere else, force hide even pinned
+                bool justClicked = InputManager.IsMouseButtonJustPressed(MouseButton.Left) || InputManager.IsMouseButtonJustPressed(MouseButton.Right);
+                if (justClicked || _hideTimer >= HideThreshold) {
+                    _previewPopup.Hide(force: justClicked);
+                }
+            }
+            
+            // Clear process if it actually went away
+            if (!_previewPopup.IsVisible) {
+                _hoveredProcess = null;
+            }
+        }
+
     }
 
     private Button _potentialDragButton;
@@ -343,7 +414,7 @@ public class Taskbar : Panel {
 
         btn.OnClickAction = () => {
             // Get all taskbar windows for this process
-            var currentWindows = _windowLayer.Children.OfType<Window>().ToList();
+            var currentWindows = _windowLayer.Children.OfType<TheGame.Core.UI.Window>().ToList();
             var procWindows = currentWindows.Where(w => w.ShowInTaskbar && w.OwnerProcess == proc).ToList();
             
             if (procWindows.Count == 0) return;
@@ -354,7 +425,7 @@ public class Taskbar : Panel {
                 if (!win.IsVisible || win.Opacity < 0.5f) {
                     win.Restore(center);
                 } else {
-                    if (Window.ActiveWindow == win) {
+                    if (TheGame.Core.UI.Window.ActiveWindow == win) {
                         win.Minimize(center);
                     } else {
                         Window.ActiveWindow = win;
@@ -362,11 +433,12 @@ public class Taskbar : Panel {
                     }
                 }
             } else {
-                // Multiple windows - show picker
-                if (_windowPicker.IsVisible) {
-                    _windowPicker.Hide();
+                // Multiple windows - show previews pinned
+                if (_previewPopup.IsVisible && _previewPopup.IsPinned && _hoveredProcess == proc) {
+                    _previewPopup.Hide(force: true);
                 } else {
-                    _windowPicker.Show(proc, btn.AbsolutePosition + new Vector2(btn.Size.X / 2f, 0));
+                    _previewPopup.Show(proc, btn.AbsolutePosition, btn.Size.X, pin: true);
+                    _hoveredProcess = proc;
                 }
             }
         };
@@ -439,7 +511,7 @@ public class Taskbar : Panel {
                     if (btn == _draggingButton) continue;
                     btn.Draw(spriteBatch, batch);
                 }
-            } else {
+            } else if (child != _previewPopup) {
                 child.Draw(spriteBatch, batch);
             }
         }
@@ -449,8 +521,6 @@ public class Taskbar : Panel {
             _draggingButton.Draw(spriteBatch, batch);
         }
 
-        // Window Picker
-        _windowPicker.Draw(spriteBatch, batch);
     }
 
     protected override void DrawSelf(SpriteBatch spriteBatch, ShapeBatch batch) {

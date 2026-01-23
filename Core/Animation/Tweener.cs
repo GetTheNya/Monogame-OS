@@ -44,6 +44,20 @@ public static class Tweener {
         }
     }
 
+    public static bool IsAnimating(object target) {
+        for (int i = 0; i < _tweens.Count; i++) {
+            if (_tweens[i].Target == target) return true;
+        }
+        return false;
+    }
+
+    public static bool IsAnimating(object target, string tag) {
+        for (int i = 0; i < _tweens.Count; i++) {
+            if (_tweens[i].Target == target && _tweens[i].Tag == tag) return true;
+        }
+        return false;
+    }
+
     public static Tween Delay(float duration, Action onComplete) {
         // We use a dummy tween to represent a delay
         var tween = new Tween(null, (float _) => { }, 0, 0, duration, Easing.Linear);

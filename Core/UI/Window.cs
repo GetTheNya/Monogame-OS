@@ -26,7 +26,7 @@ public class Window : UIElement {
     private Vector2 _resizeStartPos;
     private Vector2 _resizeDir;
 
-    // Drag/Click Discrimination
+    // Drag/Click Discriminationw
     private bool _potentialDrag;
     private Vector2 _potentialDragStart;
 
@@ -128,6 +128,28 @@ public class Window : UIElement {
     
     // RenderTarget2D for off-screen window content rendering
     private RenderTarget2D _windowRenderTarget;
+    public RenderTarget2D WindowRenderTarget => _windowRenderTarget;
+
+    /// <summary>
+    /// A static snapshot of the window texture, used for previews when the window is minimized or animating.
+    /// </summary>
+    public Texture2D Snapshot { get; private set; }
+
+    /// <summary>
+    /// Captures the current content of the WindowRenderTarget into a Snapshot texture.
+    /// </summary>
+    public void CaptureSnapshot() {
+        if (_windowRenderTarget == null) return;
+        
+        // Dispose old snapshot if it exists
+        Snapshot?.Dispose();
+        
+        // Create a new texture and copy data
+        Snapshot = new Texture2D(G.GraphicsDevice, _windowRenderTarget.Width, _windowRenderTarget.Height);
+        Color[] data = new Color[_windowRenderTarget.Width * _windowRenderTarget.Height];
+        _windowRenderTarget.GetData(data);
+        Snapshot.SetData(data);
+    }
 
     public Window(Vector2 position, Vector2 size) {
         Position = position;
@@ -329,6 +351,11 @@ public class Window : UIElement {
 
     public void Minimize(Vector2 targetPos) {
         if (_isAnimating) return;
+        
+        // Capture a snapshot before starting the minimize animation
+        // so we have a good quality image for the taskbar preview.
+        CaptureSnapshot();
+
         _isAnimating = true;
 
         Tweener.CancelAll(this);
@@ -377,6 +404,11 @@ public class Window : UIElement {
 
     public void Restore(Vector2 sourcePos) {
         if (_isAnimating) return;
+        
+        // Clear snapshot when restoring so we use live RT for previews
+        Snapshot?.Dispose();
+        Snapshot = null;
+
         _isAnimating = true;
 
         DebugLogger.Log($"Window.Restore() called: {Title}");
@@ -453,6 +485,8 @@ public class Window : UIElement {
     private void DisposeGraphicsResources() {
         _windowRenderTarget?.Dispose();
         _windowRenderTarget = null;
+        Snapshot?.Dispose();
+        Snapshot = null;
     }
 
     public void HandleFocus() {
