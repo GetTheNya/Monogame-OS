@@ -102,7 +102,7 @@ public class Taskbar : Panel {
                 // Calculate center offset the same way as in UpdateWindowButtons
                 float totalWidth = 0;
                 foreach (var child in _windowListPanel.Children) {
-                    if (child is Button btn && btn.Tag is OS.Process proc) {
+                    if (child is ProgressButton btn && btn.Tag is OS.Process proc) {
                         totalWidth += CalculateButtonWidth(proc, maxAllowed) + Padding;
                     } else if (child is Button btnOther) {
                         totalWidth += btnOther.Size.X + Padding;
@@ -158,6 +158,7 @@ public class Taskbar : Panel {
             } else {
                 // Drop (Just release, order is already correct from live swap)
                 _draggingButton = null;
+                InputManager.IsMouseConsumed = true; // Still consume in release frame
             }
         }
 
@@ -370,12 +371,16 @@ public class Taskbar : Panel {
                     btn.Icon = proc.MainWindow?.Icon ?? procWindows.FirstOrDefault()?.Icon;
                     btn.Size = new Vector2(width, Size.Y - (Padding * 2));
 
+                    if (btn is ProgressButton pbtn) {
+                        pbtn.Progress = proc.Progress;
+                        pbtn.ProgressColor = proc.ProgressColor;
+                    }
+
                     // Visuals
                     if (isActive) btn.BackgroundColor = new Color(80, 80, 80);
                     else if (!isAnyVisible) btn.BackgroundColor = new Color(40, 40, 40, 150);
                     else btn.BackgroundColor = new Color(50, 50, 50);
                 }
-                _lastMaxAllowed = maxAllowedCur;
 
                 // Dragging Visual Override
                 if (btn == _draggingButton) {
@@ -403,10 +408,11 @@ public class Taskbar : Panel {
                 currentX += btn.Size.X + Padding;
             }
         }
+        _lastMaxAllowed = maxAllowedCur;
     }
 
     private Button CreateTaskbarButton(OS.Process proc, Vector2 pos, float width) {
-        var btn = new Button(pos, new Vector2(width, Size.Y - (Padding * 2)), proc.AppId) {
+        var btn = new ProgressButton(pos, new Vector2(width, Size.Y - (Padding * 2)), proc.AppId) {
             BackgroundColor = new Color(50, 50, 50),
             HoverColor = new Color(70, 70, 70),
             Tag = proc // Store process reference

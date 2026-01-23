@@ -155,14 +155,10 @@ public abstract class UIElement : IContextMenuProvider {
     protected virtual void UpdateInput() {
         if (!IsVisible) return;
 
-        bool wasMouseOver = IsMouseOver;
-        // Unified hover check: uses the global result from recursive GetElementAt
+        bool alreadyConsumed = InputManager.IsMouseConsumed;
         IsMouseOver = UIManager.IsHovered(this);
-
-        // Store input states while we are still "the top element" (before we consume it ourselves)
-        // ignoreConsumed: false ensures we only react if no one else (in front) caught the click
-        bool justPressed = IsMouseOver && !InputManager.IsMouseConsumed && InputManager.IsMouseButtonJustPressed(MouseButton.Left);
-        bool justRightPressed = IsMouseOver && !InputManager.IsMouseConsumed && InputManager.IsMouseButtonJustPressed(MouseButton.Right);
+        bool justPressed = IsMouseOver && !alreadyConsumed && InputManager.IsMouseButtonJustPressed(MouseButton.Left);
+        bool justRightPressed = IsMouseOver && !alreadyConsumed && InputManager.IsMouseButtonJustPressed(MouseButton.Right);
         bool justReleased = InputManager.IsMouseButtonJustReleased(MouseButton.Left);
 
         if (IsMouseOver) {
@@ -192,7 +188,7 @@ public abstract class UIElement : IContextMenuProvider {
                 bool wasOver = IsMouseOver; // Use our calculated hover state
                 _isPressed = false;
 
-                if (wasOver && IsEnabled) {
+                if (wasOver && IsEnabled && !alreadyConsumed) {
                     try {
                         OnClick();
                     } catch (Exception ex) {

@@ -48,6 +48,12 @@ public class Process {
     
     /// <summary>The main/primary window of this process (can be null for background).</summary>
     public Window MainWindow { get; set; }
+
+    /// <summary>Current progress value (-1.0 to 1.0). -1.0 means no progress.</summary>
+    public float Progress { get; set; } = -1.0f;
+
+    /// <summary>Color of the progress bar.</summary>
+    public Color ProgressColor { get; set; } = new Color(0, 200, 0); // Default Green
     
     // Priority-based update timing (only applies when in Background state)
     internal double UpdateAccumulator;
