@@ -843,31 +843,50 @@ public class Window : UIElement {
             _contentBatch.End();
             spriteBatch.End();
 
-            // === Pass 2: Draw children (content area) ===
-            // Adjust RenderOffset to content origin for children
+            // === Pass 2: Draw children (content area) with scissor clipping ===
+            // Content must be clipped to actual window bounds, not the padded RT
             var contentOffsetFromWindow = new Vector2(0, TitleBarHeight);
             
+            // Set up scissor rect for content area (in RT coordinates)
+            // Content starts at (padding, padding + TitleBarHeight) and is (windowW, windowH - TitleBarHeight)
+            var contentScissorRect = new Rectangle(
+                padding, 
+                padding + TitleBarHeight, 
+                windowW, 
+                windowH - TitleBarHeight);
+            
+            var previousScissorRect = gd.ScissorRectangle;
+            var previousRasterizerState = gd.RasterizerState;
+            gd.ScissorRectangle = contentScissorRect;
+            
             _contentBatch.Begin(null, null);
-            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, _scissorState);
 
             foreach (var child in Children) {
                 if (child == _closeButton || child == _maxButton || child == _minButton) continue;
                 child.Draw(spriteBatch, _contentBatch);
             }
 
+            // Set scissor RasterizerState BEFORE End() - this is when GPU drawing happens
+            gd.RasterizerState = _scissorState;
             _contentBatch.End();
             spriteBatch.End();
 
             // === Pass 3: Local coordinate content (DrawContent override) ===
-            // This now uses the same RenderOffset as everything else, 
-            // drawing correctly into the padded RT.
+            // Also uses scissor clipping
             _contentBatch.Begin(null, null);
-            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, _scissorState);
 
             DrawContent(spriteBatch, _contentBatch);
 
+            // Set scissor RasterizerState BEFORE End()
+            gd.RasterizerState = _scissorState;
             _contentBatch.End();
             spriteBatch.End();
+            
+            // Restore scissor state
+            gd.ScissorRectangle = previousScissorRect;
+            gd.RasterizerState = previousRasterizerState;
             
             // === Pass 4: Draw border and chrome buttons ===
             _contentBatch.Begin(null, null);
