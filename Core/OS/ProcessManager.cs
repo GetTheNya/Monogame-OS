@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
+using TheGame.Graphics;
 
 namespace TheGame.Core.OS;
 
@@ -111,7 +113,7 @@ public class ProcessManager {
             // Foreground processes (with visible windows) always update at full rate
             if (process.State == ProcessState.Running) {
                 try {
-                    process.OnUpdate(gameTime);
+                    process.Update(gameTime);
                 } catch (Exception ex) {
                     if (CrashHandler.IsAppException(ex, process)) {
                         CrashHandler.HandleAppException(process, ex);
@@ -127,7 +129,7 @@ public class ProcessManager {
                 if (process.UpdateInterval <= 0) {
                     // High priority - every frame
                     try {
-                        process.OnUpdate(gameTime);
+                        process.Update(gameTime);
                     } catch (Exception ex) {
                         if (CrashHandler.IsAppException(ex, process)) {
                             CrashHandler.HandleAppException(process, ex);
@@ -143,7 +145,7 @@ public class ProcessManager {
                         var virtualGameTime = new GameTime(gameTime.TotalGameTime, TimeSpan.FromSeconds(process.UpdateAccumulator));
                         process.UpdateAccumulator = 0;
                         try {
-                            process.OnUpdate(virtualGameTime);
+                            process.Update(virtualGameTime);
                         } catch (Exception ex) {
                             if (CrashHandler.IsAppException(ex, process)) {
                                 CrashHandler.HandleAppException(process, ex);
@@ -159,6 +161,25 @@ public class ProcessManager {
         // Clean up terminated processes
         foreach (var key in toRemove) {
             _processes.Remove(key);
+        }
+    }
+    
+    /// <summary>
+    /// Draws all running processes (for global app overlays).
+    /// </summary>
+    public void Draw(SpriteBatch spriteBatch, ShapeBatch shapeBatch) {
+        foreach (var process in _processes.Values) {
+            if (process.State == ProcessState.Terminated) continue;
+            
+            try {
+                process.Draw(spriteBatch, shapeBatch);
+            } catch (Exception ex) {
+                if (CrashHandler.IsAppException(ex, process)) {
+                    CrashHandler.HandleAppException(process, ex);
+                } else {
+                    throw;
+                }
+            }
         }
     }
     

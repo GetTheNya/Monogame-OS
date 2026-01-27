@@ -388,15 +388,15 @@ public static class Shell {
         /// <summary>
         /// Shows a modal dialog that blocks input to the current window.
         /// </summary>
-        public static void ShowModal(Window dialog) {
+        public static void ShowModal(Window dialog, Rectangle? startBounds = null) {
             var process = Current;
             if (process == null) {
-                UI.OpenWindow(dialog);
+                UI.OpenWindow(dialog, startBounds);
                 return;
             }
             // Use MainWindow as parent, not ActiveWindow, to avoid confusing behavior
             // when secondary windows are active
-            process.ShowModal(dialog, process.MainWindow);
+            process.ShowModal(dialog, process.MainWindow, startBounds);
         }
         
         /// <summary>
@@ -423,6 +423,11 @@ public static class Shell {
         /// </summary>
         public static IEnumerable<OS.Process> GetAll() => ProcessManager.Instance.GetAllProcesses();
     }
+
+    /// <summary>
+    /// Gets the Application instance for the current process.
+    /// </summary>
+    public static Application App => Process.Current?.Application;
 
 
     // Hot Reload Control
@@ -613,7 +618,7 @@ public static class Shell {
             _appRegistry[appId.ToUpper()] = factory;
         }
 
-        public static void SetTooltip(UIElement element, string text, float delay = 0.5f) {
+    public static void SetTooltip(UIElement element, string text, float delay = 0.5f) {
             if (element == null) return;
             element.Tooltip = text;
             element.TooltipDelay = delay;

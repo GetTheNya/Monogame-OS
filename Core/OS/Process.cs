@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using TheGame.Core.UI;
 using TheGame.Core.Input;
+using TheGame.Graphics;
 
 namespace TheGame.Core.OS;
 
@@ -64,23 +66,47 @@ public class Process {
         _ => 0
     };
     
+    /// <summary>
+    /// The application instance associated with this process, if any.
+    /// </summary>
+    public Application Application { get; internal set; }
+    
     public Process() {
     }
     
-    /// <summary>
-    /// Called when the process starts. Override to create windows or initialize.
-    /// </summary>
+    // --- Lifecycle Hooks (Legacy Support) ---
+    
+    /// <summary> Legacy. Use Initialize in Application or override Initialize in Process. </summary>
     public virtual void OnStart(string[] args) { }
     
-    /// <summary>
-    /// Called each frame (or throttled if in background). Override for background work.
-    /// </summary>
+    /// <summary> Legacy. Use Update in Application or override Update in Process. </summary>
     public virtual void OnUpdate(GameTime gameTime) { }
     
-    /// <summary>
-    /// Called when the process is terminating. Override for cleanup.
-    /// </summary>
+    /// <summary> Legacy. Use Terminate in Application or override Cleanup in Process. </summary>
     public virtual void OnTerminate() { }
+
+    // --- Modern Lifecycle Methods ---
+
+    protected internal virtual void Initialize(string[] args) {
+        OnStart(args);
+        Application?.Initialize(args);
+    }
+
+    protected internal virtual void Update(GameTime gameTime) {
+        OnUpdate(gameTime);
+        Application?.Update(gameTime);
+    }
+
+    protected internal virtual void Draw(SpriteBatch spriteBatch, ShapeBatch shapeBatch) {
+        Application?.Draw(spriteBatch, shapeBatch);
+    }
+
+    protected internal virtual void Cleanup() {
+        OnTerminate();
+        Application?.Terminate();
+    }
+    
+    // --- Public API ---
     
     /// <summary>
     /// Creates and returns a new window owned by this process.
@@ -110,10 +136,10 @@ public class Process {
     /// <summary>
     /// Shows a modal dialog that blocks input to its parent window.
     /// </summary>
-    public void ShowModal(Window dialog, Window parent = null) {
+    public void ShowModal(Window dialog, Window parent = null, Rectangle? startBounds = null) {
         parent ??= MainWindow;
         if (parent == null) {
-            Shell.UI.OpenWindow(dialog);
+            Shell.UI.OpenWindow(dialog, startBounds);
             return;
         }
         
@@ -122,7 +148,7 @@ public class Process {
         dialog.IsModal = true;
         Windows.Add(dialog);
         parent.ChildWindows.Add(dialog);
-        Shell.UI.OpenWindow(dialog);
+        Shell.UI.OpenWindow(dialog, startBounds);
     }
     
     /// <summary>
@@ -142,7 +168,7 @@ public class Process {
     public void Terminate() {
         if (State == ProcessState.Terminated) return;
         
-        OnTerminate();
+        Cleanup();
         
         // Remove tray icons owned by this process
         Shell.SystemTray.RemoveIconsForProcess(this);

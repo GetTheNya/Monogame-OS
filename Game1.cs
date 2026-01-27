@@ -106,6 +106,9 @@ public class Game1 : Game {
 
         _sceneManager.Draw(_spriteBatch, _shapeBatch);
 
+        // Draw global application overlays
+        ProcessManager.Instance.Draw(_spriteBatch, _shapeBatch);
+
         _shapeBatch.Begin();
         _spriteBatch.Begin();
 

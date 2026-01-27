@@ -151,6 +151,8 @@ public class Window : UIElement {
         Snapshot.SetData(data);
     }
 
+    public Window() : this(Vector2.Zero, new Vector2(400, 300)) { }
+
     public Window(Vector2 position, Vector2 size) {
         Position = position;
         Size = size;

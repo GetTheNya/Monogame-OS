@@ -1,0 +1,7 @@
+{
+    "appId": "UNIFIED_TEST",
+    "name": "Unified API Test",
+    "entryClass": "UnifiedTestApp.Program",
+    "entryMethod": "Main",
+    "singleInstance": true
+}

@@ -163,6 +163,34 @@ public class AppLoader {
                 return window;
             }
             
+            // Handle Application-returning apps (modern)
+            if (result is Application app) {
+                app.Process = new Process {
+                    AppId = manifest.AppId.ToUpper(),
+                    Application = app
+                };
+                ProcessManager.Instance.RegisterProcess(app.Process);
+                
+                // Initialize the app (calls Application.Initialize)
+                try {
+                    app.Process.Initialize(args);
+                } catch (Exception ex) {
+                    if (CrashHandler.IsAppException(ex, app.Process)) {
+                        CrashHandler.HandleAppException(app.Process, ex);
+                    } else {
+                        throw;
+                    }
+                }
+                
+                if (app.MainWindow != null) {
+                    app.MainWindow.AppId = manifest.AppId;
+                    DebugLogger.Log($"AppLoader: Application created MainWindow: {app.MainWindow.Title}");
+                }
+
+                DebugLogger.Log($"AppLoader: Successfully started application for {manifest.AppId} (Process: {app.Process.ProcessId})");
+                return app.MainWindow;
+            }
+
             // Handle Process-returning apps (true background processes)
             if (result is Process process) {
                 process.AppId = manifest.AppId.ToUpper();
@@ -170,7 +198,7 @@ public class AppLoader {
                 
                 // Start the process (calls OnStart)
                 try {
-                    process.OnStart(args);
+                    process.Initialize(args); // Use modern Initialize instead of OnStart
                 } catch (Exception ex) {
                     if (CrashHandler.IsAppException(ex, process)) {
                         CrashHandler.HandleAppException(process, ex);
