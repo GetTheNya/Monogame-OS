@@ -25,7 +25,7 @@ public class SecondaryWindow : Window {
             TextColor = Color.White 
         });
         
-        var processInfo = Shell.Process.Current;
+        var processInfo = this.OwnerProcess;
         if (processInfo != null) {
             AddChild(new Label(new Vector2(10, 35), $"Owner: {processInfo.AppId}") { 
                 TextColor = Color.Gray,

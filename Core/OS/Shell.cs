@@ -364,8 +364,10 @@ public static class Shell {
     /// </summary>
     public static class Process {
         /// <summary>
-        /// Gets the calling app's process (detected from the active window).
+        /// [DEPRECATED] Gets the calling app's process (detected from the active window).
+        /// This is focus-dependent and fragile. Use explicit process context instead.
         /// </summary>
+        [Obsolete("Use explicit Process context instead of relying on focus.")]
         public static TheGame.Core.OS.Process Current => Window.ActiveWindow?.OwnerProcess;
         
         /// <summary>
@@ -374,47 +376,44 @@ public static class Shell {
         public static ProcessManager Manager => ProcessManager.Instance;
         
         /// <summary>
-        /// Creates a new window of the specified type owned by the current process.
+        /// Creates a new window of the specified type owned by the specified process.
         /// </summary>
-        public static T CreateWindow<T>() where T : Window, new() {
-            var process = Current;
-            if (process == null) {
-                DebugLogger.Log("Shell.Process.CreateWindow: No active process");
+        public static T CreateWindow<T>(TheGame.Core.OS.Process owner) where T : Window, new() {
+            if (owner == null) {
+                DebugLogger.Log("Shell.Process.CreateWindow: No process context provided");
                 return null;
             }
-            return process.CreateWindow<T>();
+            return owner.CreateWindow<T>();
         }
         
         /// <summary>
         /// Shows a modal dialog that blocks input to the current window.
         /// </summary>
-        public static void ShowModal(Window dialog, Rectangle? startBounds = null) {
-            var process = Current;
-            if (process == null) {
+        public static void ShowModal(TheGame.Core.OS.Process owner, Window dialog, Window parent = null, Rectangle? startBounds = null) {
+            if (owner == null) {
                 UI.OpenWindow(dialog, startBounds);
                 return;
             }
-            // Use MainWindow as parent, not ActiveWindow, to avoid confusing behavior
-            // when secondary windows are active
-            process.ShowModal(dialog, process.MainWindow, startBounds);
+            // Use MainWindow as default parent if none provided
+            parent ??= owner.MainWindow;
+            owner.ShowModal(dialog, parent, startBounds);
         }
         
         /// <summary>
         /// Closes all windows and enters background mode.
         /// The process continues receiving OnUpdate calls.
         /// </summary>
-        public static void GoToBackground() {
-            Current?.GoToBackground();
+        public static void GoToBackground(TheGame.Core.OS.Process owner) {
+            owner?.GoToBackground();
         }
         
         /// <summary>
-        /// Terminates the current process.
+        /// Terminates the specified process.
         /// </summary>
-        public static void Exit() {
-            var process = Current;
-            if (process != null) {
-                AudioManager.Instance.CleanupProcess(process);
-                process.Terminate();
+        public static void Exit(TheGame.Core.OS.Process owner) {
+            if (owner != null) {
+                AudioManager.Instance.CleanupProcess(owner);
+                owner.Terminate();
             }
         }
         
@@ -425,8 +424,10 @@ public static class Shell {
     }
 
     /// <summary>
-    /// Gets the Application instance for the current process.
+    /// Gets the Application instance for the focused application.
+    /// [DEPRECATED] Use explicit application context instead.
     /// </summary>
+    [Obsolete("Use explicit Application context instead.")]
     public static Application App => Process.Current?.Application;
 
 
@@ -678,18 +679,34 @@ public static class Shell {
             return handler;
         }
 
-        public static void OpenWindow(Window win, Rectangle? startBounds = null) {
+        public static void OpenWindow(Window win, Rectangle? startBounds = null, TheGame.Core.OS.Process owner = null, Window parent = null) {
             if (WindowLayer != null) {
-                // For modal windows, automatically set up parent-child relationship
-                // ONLY if not already set (e.g. by Process.ShowModal)
-                if (win.IsModal && Window.ActiveWindow != null && win.ParentWindow == null) {
-                    win.ParentWindow = Window.ActiveWindow;
-                    Window.ActiveWindow.ChildWindows.Add(win);
+                // If owner is provided, ensure it's set on the window
+                if (owner != null) {
+                    if (win.OwnerProcess == null) win.OwnerProcess = owner;
+                    if (!owner.Windows.Contains(win)) owner.Windows.Add(win);
+                }
+
+                // Handle parenting and modal logic
+                if (win.IsModal) {
+                    // 1. Explicitly requested parent
+                    // 2. Window's existing ParentWindow
+                    // 3. Current ActiveWindow (fallback - still allowed but less ideal)
+                    var finalParent = parent ?? win.ParentWindow ?? Window.ActiveWindow;
                     
-                    // Copy process ownership if not already set
-                    if (win.OwnerProcess == null && Window.ActiveWindow.OwnerProcess != null) {
-                        win.OwnerProcess = Window.ActiveWindow.OwnerProcess;
-                        Window.ActiveWindow.OwnerProcess.Windows.Add(win);
+                    if (finalParent != null && finalParent != win) {
+                        win.ParentWindow = finalParent;
+                        if (!finalParent.ChildWindows.Contains(win)) {
+                            finalParent.ChildWindows.Add(win);
+                        }
+                    }
+
+                    // Ensure process ownership consistency for modals
+                    if (owner == null && win.ParentWindow?.OwnerProcess != null) {
+                        win.OwnerProcess = win.ParentWindow.OwnerProcess;
+                        if (!win.OwnerProcess.Windows.Contains(win)) {
+                            win.OwnerProcess.Windows.Add(win);
+                        }
                     }
                 }
                 

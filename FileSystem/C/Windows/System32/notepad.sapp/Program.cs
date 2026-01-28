@@ -151,7 +151,7 @@ public class NotepadWindow : Window {
             },
             SupportedExtensions
         );
-        Shell.UI.OpenWindow(picker);
+        Shell.UI.OpenWindow(picker, owner: this.OwnerProcess);
     }
 
     private void SaveFile() {
@@ -178,7 +178,7 @@ public class NotepadWindow : Window {
             },
             SupportedExtensions
         );
-        Shell.UI.OpenWindow(picker);
+        Shell.UI.OpenWindow(picker, owner: this.OwnerProcess);
     }
 
     private void DoSave(string path) {

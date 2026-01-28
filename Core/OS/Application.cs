@@ -54,14 +54,14 @@ public abstract class Application {
     /// </summary>
     protected T CreateWindow<T>() where T : Window, new() {
         if (Process == null) throw new InvalidOperationException("Application has not been initialized with a Process.");
-        return Process.CreateWindow<T>();
+        return Shell.Process.CreateWindow<T>(Process);
     }
 
     /// <summary>
     /// Opens a window and registers it with the UI layer.
     /// </summary>
     public void OpenWindow(Window window, Rectangle? startBounds = null) {
-        Shell.UI.OpenWindow(window, startBounds);
+        Shell.UI.OpenWindow(window, startBounds, Process);
     }
 
     /// <summary>
@@ -72,13 +72,29 @@ public abstract class Application {
             Shell.UI.OpenWindow(dialog, startBounds);
             return;
         }
-        Process.ShowModal(dialog, MainWindow, startBounds);
+        Shell.Process.ShowModal(Process, dialog, MainWindow, startBounds);
     }
 
     /// <summary>
     /// Terminates the application and closes all its windows.
     /// </summary>
     public void Exit() {
-        Process?.Terminate();
+        if (Process != null) Shell.Process.Exit(Process);
+    }
+
+    /// <summary>
+    /// Closes all windows and enters background mode.
+    /// The process continues receiving OnUpdate calls.
+    /// </summary>
+    public void GoToBackground() {
+        if (Process != null) Shell.Process.GoToBackground(Process);
+    }
+
+    /// <summary>
+    /// Sets the progress value on the application's taskbar button.
+    /// value: -1.0 to 1.0. -1.0 hides the progress bar.
+    /// </summary>
+    public void SetProgress(float value, Color? color = null) {
+        if (Process != null) Shell.Taskbar.SetProgress(Process, value, color);
     }
 }

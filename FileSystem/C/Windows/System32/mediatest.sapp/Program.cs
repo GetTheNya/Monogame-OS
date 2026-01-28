@@ -188,7 +188,7 @@ public class MediaTestApp : Window {
             },
             new string[] {".mp3"}
         );
-        Shell.UI.OpenWindow(picker);
+        Shell.UI.OpenWindow(picker, owner: this.OwnerProcess);
     }
 
     private void LoadFile(string path) {

@@ -39,9 +39,9 @@ public class MainWindow : Window {
         y += 25;
         
         AddButton("Create New Window", y, () => {
-            var win = Shell.Process.CreateWindow<SecondaryWindow>();
+            var win = Shell.Process.CreateWindow<SecondaryWindow>(this.OwnerProcess);
             if (win != null) {
-                Shell.UI.OpenWindow(win);
+                Shell.UI.OpenWindow(win, owner: this.OwnerProcess);
                 Shell.Notifications.Show("Success", $"Created window: {win.Title}");
             } else {
                 Shell.Notifications.Show("Error", "Failed to create window (no active process?)");
@@ -51,7 +51,7 @@ public class MainWindow : Window {
         
         AddButton("Show Modal Dialog", y, () => {
             var dialog = new ModalDialogWindow();
-            Shell.Process.ShowModal(dialog);
+            Shell.Process.ShowModal(this.OwnerProcess, dialog);
         });
         y += buttonHeight + gap;
         
@@ -62,13 +62,13 @@ public class MainWindow : Window {
         AddButton("Go To Background (5 sec)", y, () => {
             Shell.Notifications.Show("Background Mode", "App will hide and continue running for 5 seconds...");
             // Demonstrate background mode - app stays alive but hidden
-            Shell.Process.GoToBackground();
+            Shell.Process.GoToBackground(this.OwnerProcess);
         });
         y += buttonHeight + gap;
         
         AddButton("Exit Process", y, () => {
             Shell.Notifications.Show("Exiting", "Process will terminate now.");
-            Shell.Process.Exit();
+            Shell.Process.Exit(this.OwnerProcess);
         });
         y += buttonHeight + gap;
         
@@ -86,10 +86,10 @@ public class MainWindow : Window {
             if (string.IsNullOrEmpty(info)) info = "No processes running";
             
             // Create window owned by this process so it doesn't block main window
-            var infoWindow = Shell.Process.CreateWindow<ProcessListWindow>();
+            var infoWindow = Shell.Process.CreateWindow<ProcessListWindow>(this.OwnerProcess);
             if (infoWindow != null) {
                 infoWindow.SetProcessInfo(info);
-                Shell.UI.OpenWindow(infoWindow);
+                Shell.UI.OpenWindow(infoWindow, owner: this.OwnerProcess);
             }
         });
         y += buttonHeight + gap;
@@ -126,7 +126,7 @@ public class MainWindow : Window {
     }
     
     private string GetProcessInfo() {
-        var process = Shell.Process.Current;
+        var process = this.OwnerProcess;
         if (process == null) return "No process context\n(App is still initializing)";
         
         string shortPid = process.ProcessId.Length > 8 ? process.ProcessId.Substring(0, 8) : process.ProcessId;

@@ -50,7 +50,10 @@ public class FileExplorerWindow : Window {
     private void SetupUI() {
         _menuBar = new MenuBar(Vector2.Zero, new Vector2(ClientSize.X, 26f));
         _menuBar.AddMenu("File", m => {
-            m.AddItem("New Window", () => Shell.UI.OpenWindow(CreateWindow()));
+            m.AddItem("New Window", () => {
+                var win = CreateWindow();
+                Shell.UI.OpenWindow(win, owner: this.OwnerProcess);
+            });
             m.AddSeparator();
             m.AddItem("Close", Close);
         });
@@ -692,7 +695,7 @@ public class FileListPanel : ScrollPanel {
                 Shell.RefreshExplorers();
             }
         });
-        Shell.UI.OpenWindow(mb);
+        Shell.UI.OpenWindow(mb, owner: _window.OwnerProcess);
     }
 
     private void DeleteItems() {
@@ -714,7 +717,7 @@ public class FileListPanel : ScrollPanel {
                 Shell.RefreshExplorers();
             }
         });
-        Shell.UI.OpenWindow(mb);
+        Shell.UI.OpenWindow(mb, owner: _window.OwnerProcess);
     }
 
     private void ShowProperties(string path) {
