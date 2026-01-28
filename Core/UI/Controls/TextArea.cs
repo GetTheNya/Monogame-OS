@@ -15,25 +15,44 @@ namespace TheGame.Core.UI.Controls;
 /// A multiline text editing control similar to a Windows TextBox with multiline support.
 /// </summary>
 public class TextArea : ValueControl<string> {
-    private List<string> _lines = new() { "" };
-    private int _cursorLine = 0;
-    private int _cursorCol = 0;
-    private int _selStartLine = 0;
-    private int _selStartCol = 0;
-    private float _scrollOffset = 0f;
-    private float _targetScrollOffset = 0f;
-    private float _scrollOffsetX = 0f;
-    private float _targetScrollOffsetX = 0f;
-    private float _cursorTimer = 0f;
-    private bool _showCursor = true;
-    private bool _isWordSelecting = false;
-    private int _wordSelectAnchorStartLine = 0;
-    private int _wordSelectAnchorStartCol = 0;
-    private int _wordSelectAnchorEndLine = 0;
-    private int _wordSelectAnchorEndCol = 0;
-    private float _cachedMaxWidth = 0f;
-    private bool _maxWidthDirty = true;
-    private static readonly RasterizerState _scissorRasterizer = new RasterizerState { ScissorTestEnable = true, CullMode = CullMode.None };
+    protected List<string> _lines = new() { "" };
+    protected int _cursorLine = 0;
+    protected int _cursorCol = 0;
+    protected int _selStartLine = 0;
+    protected int _selStartCol = 0;
+    protected float _scrollOffset = 0f;
+    protected float _targetScrollOffset = 0f;
+    protected float _scrollOffsetX = 0f;
+    protected float _targetScrollOffsetX = 0f;
+    protected float _cursorTimer = 0f;
+    protected bool _showCursor = true;
+    protected bool _isWordSelecting = false;
+    protected int _wordSelectAnchorStartLine = 0;
+    protected int _wordSelectAnchorStartCol = 0;
+    protected int _wordSelectAnchorEndLine = 0;
+    protected int _wordSelectAnchorEndCol = 0;
+    protected float _cachedMaxWidth = 0f;
+    protected bool _maxWidthDirty = true;
+    protected static readonly RasterizerState _scissorRasterizer = new RasterizerState { ScissorTestEnable = true, CullMode = CullMode.None };
+
+    protected virtual bool CanEditAt(int line, int col) => true;
+    protected virtual void OnEnterPressed() {
+        if (HasSelection()) DeleteSelection();
+        string remainder = _lines[_cursorLine].Substring(_cursorCol);
+        _lines[_cursorLine] = _lines[_cursorLine].Substring(0, _cursorCol);
+        _lines.Insert(_cursorLine + 1, remainder);
+        _cursorLine++;
+        _cursorCol = 0;
+        ResetSelection();
+        NotifyUserChanged();
+    }
+    protected virtual void OnTabPressed() {
+        if (HasSelection()) DeleteSelection();
+        _lines[_cursorLine] = _lines[_cursorLine].Insert(_cursorCol, "    ");
+        _cursorCol += 4;
+        ResetSelection();
+        NotifyUserChanged();
+    }
 
     public override void SetValue(string value, bool notify = true) {
         string newValue = value ?? "";
@@ -50,7 +69,7 @@ public class TextArea : ValueControl<string> {
         base.SetValue(newValue, notify);
     }
 
-    private void NotifyUserChanged() {
+    protected virtual void NotifyUserChanged() {
         _maxWidthDirty = true;
         base.SetValue(string.Join("\n", _lines), true);
     }
@@ -170,68 +189,72 @@ public class TextArea : ValueControl<string> {
 
             // Backspace
             if (InputManager.IsKeyRepeated(Keys.Back)) {
-                if (HasSelection()) DeleteSelection();
-                else if (_cursorCol > 0) {
-                    _lines[_cursorLine] = _lines[_cursorLine].Remove(_cursorCol - 1, 1);
-                    _cursorCol--;
+                if (HasSelection()) {
+                    DeleteSelection();
+                } else if (_cursorCol > 0) {
+                    if (CanEditAt(_cursorLine, _cursorCol - 1)) {
+                        _lines[_cursorLine] = _lines[_cursorLine].Remove(_cursorCol - 1, 1);
+                        _cursorCol--;
+                        ResetSelection();
+                        NotifyUserChanged();
+                    }
                 } else if (_cursorLine > 0) {
-                    _cursorCol = _lines[_cursorLine - 1].Length;
-                    _lines[_cursorLine - 1] += _lines[_cursorLine];
-                    _lines.RemoveAt(_cursorLine);
-                    _cursorLine--;
+                    if (CanEditAt(_cursorLine - 1, _lines[_cursorLine - 1].Length)) {
+                        _cursorCol = _lines[_cursorLine - 1].Length;
+                        _lines[_cursorLine - 1] += _lines[_cursorLine];
+                        _lines.RemoveAt(_cursorLine);
+                        _cursorLine--;
+                        ResetSelection();
+                        NotifyUserChanged();
+                    }
                 }
-                ResetSelection();
-                NotifyUserChanged();
             }
 
             // Delete
             if (InputManager.IsKeyRepeated(Keys.Delete)) {
-                if (HasSelection()) DeleteSelection();
-                else if (_cursorCol < _lines[_cursorLine].Length) {
-                    _lines[_cursorLine] = _lines[_cursorLine].Remove(_cursorCol, 1);
+                if (HasSelection()) {
+                    DeleteSelection();
+                } else if (_cursorCol < _lines[_cursorLine].Length) {
+                    if (CanEditAt(_cursorLine, _cursorCol)) {
+                        _lines[_cursorLine] = _lines[_cursorLine].Remove(_cursorCol, 1);
+                        NotifyUserChanged();
+                    }
                 } else if (_cursorLine < _lines.Count - 1) {
-                    _lines[_cursorLine] += _lines[_cursorLine + 1];
-                    _lines.RemoveAt(_cursorLine + 1);
+                    if (CanEditAt(_cursorLine, _cursorCol)) {
+                        _lines[_cursorLine] += _lines[_cursorLine + 1];
+                        _lines.RemoveAt(_cursorLine + 1);
+                        NotifyUserChanged();
+                    }
                 }
-                NotifyUserChanged();
             }
 
             // Enter
             if (InputManager.IsKeyJustPressed(Keys.Enter)) {
-                if (HasSelection()) DeleteSelection();
-                string remainder = _lines[_cursorLine].Substring(_cursorCol);
-                _lines[_cursorLine] = _lines[_cursorLine].Substring(0, _cursorCol);
-                _lines.Insert(_cursorLine + 1, remainder);
-                _cursorLine++;
-                _cursorCol = 0;
-                ResetSelection();
-                NotifyUserChanged();
+                OnEnterPressed();
             }
 
             // Tab
             if (InputManager.IsKeyJustPressed(Keys.Tab)) {
-                if (HasSelection()) DeleteSelection();
-                _lines[_cursorLine] = _lines[_cursorLine].Insert(_cursorCol, "    ");
-                _cursorCol += 4;
-                ResetSelection();
-                NotifyUserChanged();
+                OnTabPressed();
             }
 
             // Character input
             foreach (var c in InputManager.GetTypedChars()) {
                 if (char.IsControl(c)) continue;
-                if (HasSelection()) DeleteSelection();
-                _lines[_cursorLine] = _lines[_cursorLine].Insert(_cursorCol, c.ToString());
-                _cursorCol++;
-                ResetSelection();
-                NotifyUserChanged();
+                if (CanEditAt(_cursorLine, _cursorCol)) {
+                    if (HasSelection()) DeleteSelection();
+                    _lines[_cursorLine] = _lines[_cursorLine].Insert(_cursorCol, c.ToString());
+                    _cursorCol++;
+                    ResetSelection();
+                    NotifyUserChanged();
+                }
             }
 
             InputManager.IsKeyboardConsumed = true;
         }
     }
 
-    private void SetCursorFromMouse() {
+    protected virtual void SetCursorFromMouse() {
         if (GameContent.FontSystem == null) return;
         var font = GameContent.FontSystem.GetFont(FontSize);
         float lineHeight = font.LineHeight;
@@ -266,7 +289,7 @@ public class TextArea : ValueControl<string> {
         return AbsolutePosition + new Vector2(5 - _scrollOffsetX + cursorX, 5 - _scrollOffset + cursorY);
     }
 
-    public void SelectAll() {
+    public virtual void SelectAll() {
         _selStartLine = 0;
         _selStartCol = 0;
         _cursorLine = _lines.Count - 1;
@@ -351,7 +374,7 @@ public class TextArea : ValueControl<string> {
         return char.IsLetterOrDigit(c) || c == '_';
     }
 
-    private void MoveCursor(int dx, int dy, bool select) {
+    protected virtual void MoveCursor(int dx, int dy, bool select) {
         if (dy != 0) {
             _cursorLine = Math.Clamp(_cursorLine + dy, 0, _lines.Count - 1);
             _cursorCol = Math.Min(_cursorCol, _lines[_cursorLine].Length);
@@ -373,7 +396,7 @@ public class TextArea : ValueControl<string> {
 
     public override bool HasSelection() => _cursorLine != _selStartLine || _cursorCol != _selStartCol;
 
-    private void ResetSelection() {
+    protected virtual void ResetSelection() {
         _selStartLine = _cursorLine;
         _selStartCol = _cursorCol;
     }
@@ -381,22 +404,41 @@ public class TextArea : ValueControl<string> {
     public override void DeleteSelection() {
         GetSelectionRange(out int startLine, out int startCol, out int endLine, out int endCol);
 
+        if (startLine < 0 || startLine >= _lines.Count) return;
+        if (endLine < 0 || endLine >= _lines.Count) return;
+
         if (startLine == endLine) {
-            _lines[startLine] = _lines[startLine].Remove(startCol, endCol - startCol);
+            int lineLen = _lines[startLine].Length;
+            startCol = Math.Clamp(startCol, 0, lineLen);
+            int count = Math.Clamp(endCol - startCol, 0, lineLen - startCol);
+            
+            if (count > 0) {
+                _lines[startLine] = _lines[startLine].Remove(startCol, count);
+            }
         } else {
+            int startLineLen = _lines[startLine].Length;
+            int endLineLen = _lines[endLine].Length;
+            
+            startCol = Math.Clamp(startCol, 0, startLineLen);
+            endCol = Math.Clamp(endCol, 0, endLineLen);
+            
             string before = _lines[startLine].Substring(0, startCol);
             string after = _lines[endLine].Substring(endCol);
             _lines[startLine] = before + after;
-            _lines.RemoveRange(startLine + 1, endLine - startLine);
+            
+            if (endLine > startLine) {
+                _lines.RemoveRange(startLine + 1, endLine - startLine);
+            }
         }
 
         _cursorLine = startLine;
         _cursorCol = startCol;
         ResetSelection();
         NotifyUserChanged();
+        EnsureCursorVisible();
     }
 
-    private void GetSelectionRange(out int startLine, out int startCol, out int endLine, out int endCol) {
+    protected void GetSelectionRange(out int startLine, out int startCol, out int endLine, out int endCol) {
         if (_cursorLine < _selStartLine || (_cursorLine == _selStartLine && _cursorCol < _selStartCol)) {
             startLine = _cursorLine; startCol = _cursorCol;
             endLine = _selStartLine; endCol = _selStartCol;
@@ -406,7 +448,7 @@ public class TextArea : ValueControl<string> {
         }
     }
 
-    private void EnsureCursorVisible() {
+    protected virtual void EnsureCursorVisible() {
         if (GameContent.FontSystem == null) return;
         var font = GameContent.FontSystem.GetFont(FontSize);
         float lineHeight = font.LineHeight;
@@ -422,7 +464,7 @@ public class TextArea : ValueControl<string> {
         ClampScroll();
     }
 
-    private void ClampScroll() {
+    protected virtual void ClampScroll() {
         if (GameContent.FontSystem == null) return;
         var font = GameContent.FontSystem.GetFont(FontSize);
         float totalHeight = _lines.Count * font.LineHeight;
