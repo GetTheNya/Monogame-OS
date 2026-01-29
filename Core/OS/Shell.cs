@@ -681,6 +681,13 @@ public static class Shell {
 
         public static void OpenWindow(Window win, Rectangle? startBounds = null, TheGame.Core.OS.Process owner = null, Window parent = null) {
             if (WindowLayer != null) {
+                // Prevent double-open: if already in WindowLayer, just bring to front
+                if (WindowLayer.Children.Contains(win)) {
+                    Window.ActiveWindow = win;
+                    WindowLayer.BringToFront(win);
+                    return;
+                }
+                
                 // If owner is provided, ensure it's set on the window
                 if (owner != null) {
                     if (win.OwnerProcess == null) win.OwnerProcess = owner;

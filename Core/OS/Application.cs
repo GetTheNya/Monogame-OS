@@ -28,26 +28,58 @@ public abstract class Application {
     public List<Window> Windows => Process?.Windows;
     
     /// <summary>
+    /// If true (default), closing MainWindow terminates the process.
+    /// If false, the app goes to background mode instead.
+    /// </summary>
+    public bool ExitOnMainWindowClose { get; set; } = true;
+    
+    /// <summary>
+    /// Gets or sets the process priority for background throttling.
+    /// </summary>
+    public ProcessPriority Priority {
+        get => Process?.Priority ?? ProcessPriority.Normal;
+        set { if (Process != null) Process.Priority = value; }
+    }
+    
+    // --- Lifecycle Hooks (implement these, don't call base) ---
+    
+    /// <summary>
     /// Called once when the application starts. Use this to create windows and initialize resources.
     /// </summary>
-    public virtual void Initialize(string[] args) { }
+    protected virtual void OnLoad(string[] args) { }
     
     /// <summary>
     /// Called every frame for the application to update its state.
     /// This runs even if all windows are closed, as long as the process is alive.
+    /// Respects ProcessPriority throttling.
     /// </summary>
-    public virtual void Update(GameTime gameTime) { }
+    protected virtual void OnUpdate(GameTime gameTime) { }
     
     /// <summary>
     /// Called by the OS to allow the application to draw global/overlay visuals.
-    /// Usually, windows handle their own drawing, but this hook allows for screen-wide effects.
     /// </summary>
-    public virtual void Draw(SpriteBatch spriteBatch, ShapeBatch shapeBatch) { }
+    protected virtual void OnDraw(SpriteBatch spriteBatch, ShapeBatch shapeBatch) { }
     
     /// <summary>
     /// Called when the application is about to be terminated. Use this for cleanup.
     /// </summary>
-    public virtual void Terminate() { }
+    protected virtual void OnClose() { }
+    
+    // --- Legacy Methods (for backward compatibility) ---
+    
+    [Obsolete("Use OnLoad instead")]
+    public virtual void Initialize(string[] args) => OnLoad(args);
+    
+    [Obsolete("Use OnUpdate instead")]
+    public virtual void Update(GameTime gameTime) => OnUpdate(gameTime);
+    
+    [Obsolete("Use OnDraw instead")]
+    public virtual void Draw(SpriteBatch spriteBatch, ShapeBatch shapeBatch) => OnDraw(spriteBatch, shapeBatch);
+    
+    [Obsolete("Use OnClose instead")]
+    public virtual void Terminate() => OnClose();
+    
+    // --- Window Creation Helpers ---
 
     /// <summary>
     /// Creates and returns a new window associated with this application.
@@ -63,6 +95,24 @@ public abstract class Application {
     public void OpenWindow(Window window, Rectangle? startBounds = null) {
         Shell.UI.OpenWindow(window, startBounds, Process);
     }
+    
+    /// <summary>
+    /// Opens the MainWindow with optional animation from startBounds.
+    /// <para>
+    /// <b>WARNING:</b> Do NOT call this from OnLoad() - ProcessManager automatically 
+    /// opens MainWindow with animation from the launcher (desktop icon, explorer, etc.).
+    /// </para>
+    /// <para>
+    /// Use this only for:
+    /// <list type="bullet">
+    /// <item>Re-showing MainWindow after going to background mode</item>
+    /// <item>Opening MainWindow lazily (not during OnLoad)</item>
+    /// </list>
+    /// </para>
+    /// </summary>
+    public void OpenMainWindow(Rectangle? startBounds = null) {
+        if (MainWindow != null) OpenWindow(MainWindow, startBounds);
+    }
 
     /// <summary>
     /// Shows a modal dialog that blocks input to the application's main window.
@@ -74,6 +124,17 @@ public abstract class Application {
         }
         Shell.Process.ShowModal(Process, dialog, MainWindow, startBounds);
     }
+    
+    /// <summary>
+    /// Creates and shows a modal dialog of the specified type.
+    /// </summary>
+    public void ShowModal<T>(Action<T> configure = null) where T : Window, new() {
+        var dialog = CreateWindow<T>();
+        configure?.Invoke(dialog);
+        OpenModal(dialog);
+    }
+    
+    // --- Process Control ---
 
     /// <summary>
     /// Terminates the application and closes all its windows.

@@ -46,7 +46,66 @@ public abstract class UIElement : IContextMenuProvider {
     public float AbsoluteOpacity => (Parent?.AbsoluteOpacity ?? 1.0f) * Opacity;
     public Action OnRightClickAction { get; set; }
     public Action OnDoubleClickAction { get; set; }
+    
+    /// <summary>
+    /// Optional name for element identification (e.g., "SubmitBtn").
+    /// </summary>
+    public string Name { get; set; }
+    
+    /// <summary>
+    /// Generic tag for storing custom metadata.
+    /// </summary>
     public object Tag { get; set; }
+    
+    /// <summary>
+    /// Finds the first child of type T with optional name match (deep search).
+    /// If name is null, returns first element of type T.
+    /// </summary>
+    public T GetChild<T>(string name = null) where T : UIElement {
+        foreach (var child in Children) {
+            if (child is T typed && (name == null || child.Name == name)) {
+                return typed;
+            }
+            var found = child.GetChild<T>(name);
+            if (found != null) return found;
+        }
+        return null;
+    }
+    
+    /// <summary>
+    /// Finds all children of type T with optional name match (deep search).
+    /// </summary>
+    public List<T> GetChildren<T>(string name = null) where T : UIElement {
+        var results = new List<T>();
+        GetChildrenRecursive(name, results);
+        return results;
+    }
+    
+    private void GetChildrenRecursive<T>(string name, List<T> results) where T : UIElement {
+        foreach (var child in Children) {
+            if (child is T typed && (name == null || child.Name == name)) {
+                results.Add(typed);
+            }
+            child.GetChildrenRecursive(name, results);
+        }
+    }
+    
+    /// <summary>
+    /// Finds element by path (e.g., "Sidebar/Settings/VolumeSlider").
+    /// </summary>
+    public T GetChildByPath<T>(string path) where T : UIElement {
+        if (string.IsNullOrEmpty(path)) return this as T;
+        var parts = path.Split('/');
+        UIElement current = this;
+        
+        foreach (var part in parts) {
+            var found = current.Children.FirstOrDefault(c => c.Name == part);
+            if (found == null) return null;
+            current = found;
+        }
+        
+        return current as T;
+    }
 
     // Tooltip properties
     public string Tooltip { get; set; }

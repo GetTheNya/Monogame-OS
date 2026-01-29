@@ -13,13 +13,12 @@ public class AppSettings {
 
 public class SettingsWindow : Window {
     private AppSettings _settings;
+    private TabControl _tabs;
 
     public static Window CreateWindow() {
         var settings = Shell.AppSettings.Load<AppSettings>();
         return new SettingsWindow(new Vector2(100, 100), new Vector2(600, 500), settings);
     }
-
-    private TabControl _tabs;
 
     public SettingsWindow(Vector2 pos, Vector2 size, AppSettings settings) : base(pos, size) {
         Title = "Settings";
@@ -29,7 +28,9 @@ public class SettingsWindow : Window {
         OnResize += () => {
             if (_tabs != null) _tabs.Size = ClientSize;
         };
-
+    }
+    
+    protected override void OnLoad() {
         SetupUI();
     }
 
@@ -60,3 +61,4 @@ public class SettingsWindow : Window {
         return p;
     }
 }
+

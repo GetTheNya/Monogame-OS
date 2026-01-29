@@ -53,9 +53,7 @@ public class AppCompiler {
     /// <param name="assemblyName">Name for the compiled assembly</param>
     /// <param name="diagnostics">Output compilation diagnostics</param>
     /// <returns>Compiled assembly or null if compilation failed</returns>
-    public Assembly Compile(Dictionary<string, string> sourceFiles, string assemblyName, out List<string> diagnostics) {
-        diagnostics = new List<string>();
-
+    public Assembly Compile(Dictionary<string, string> sourceFiles, string assemblyName, out IEnumerable<Diagnostic> diagnostics) {
         // Parse all source files into syntax trees
         var syntaxTrees = sourceFiles.Select(kvp =>
             CSharpSyntaxTree.ParseText(kvp.Value, path: kvp.Key)
@@ -77,17 +75,30 @@ public class AppCompiler {
         using var ms = new MemoryStream();
         EmitResult result = compilation.Emit(ms);
 
+        diagnostics = result.Diagnostics;
+
         if (!result.Success) {
-            // Compilation failed, collect errors
-            var failures = result.Diagnostics
-                .Where(diagnostic => diagnostic.IsWarningAsError || diagnostic.Severity == DiagnosticSeverity.Error);
-
-            foreach (var diagnostic in failures) {
-                diagnostics.Add($"{diagnostic.Id}: {diagnostic.GetMessage()}");
-            }
-
             return null;
         }
+
+        // if (!result.Success) {
+        //     // Compilation failed, collect errors
+        //     var failures = result.Diagnostics
+        //         .Where(diagnostic => diagnostic.IsWarningAsError || diagnostic.Severity == DiagnosticSeverity.Error);
+
+        //     foreach (var diagnostic in failures) {
+        //         var lineSpan = diagnostic.Location.GetLineSpan();
+        
+        //         int line = lineSpan.StartLinePosition.Line + 1;
+        //         int column = lineSpan.StartLinePosition.Character + 1;
+
+        //         string fileName = lineSpan.Path ?? "Source";
+
+        //         diagnostics.Add($"{fileName}({line},{column}): {diagnostic.Id}: {diagnostic.GetMessage()}");
+        //     }
+
+        //     return null;
+        // }
 
         // Load the compiled assembly
         ms.Seek(0, SeekOrigin.Begin);

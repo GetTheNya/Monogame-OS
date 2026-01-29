@@ -89,21 +89,41 @@ public class Process {
 
     protected internal virtual void Initialize(string[] args) {
         OnStart(args);
-        Application?.Initialize(args);
+        // Call OnLoad directly (not obsolete wrapper)
+        if (Application != null) {
+            var onLoadMethod = Application.GetType().GetMethod("OnLoad", 
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            onLoadMethod?.Invoke(Application, new object[] { args });
+        }
     }
 
     protected internal virtual void Update(GameTime gameTime) {
         OnUpdate(gameTime);
-        Application?.Update(gameTime);
+        // Call OnUpdate directly (not obsolete wrapper)
+        if (Application != null) {
+            var onUpdateMethod = Application.GetType().GetMethod("OnUpdate", 
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            onUpdateMethod?.Invoke(Application, new object[] { gameTime });
+        }
     }
 
     protected internal virtual void Draw(SpriteBatch spriteBatch, ShapeBatch shapeBatch) {
-        Application?.Draw(spriteBatch, shapeBatch);
+        // Call OnDraw directly (not obsolete wrapper)
+        if (Application != null) {
+            var onDrawMethod = Application.GetType().GetMethod("OnDraw", 
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            onDrawMethod?.Invoke(Application, new object[] { spriteBatch, shapeBatch });
+        }
     }
 
     protected internal virtual void Cleanup() {
         OnTerminate();
-        Application?.Terminate();
+        // Call OnClose directly (not obsolete wrapper)
+        if (Application != null) {
+            var onCloseMethod = Application.GetType().GetMethod("OnClose", 
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            onCloseMethod?.Invoke(Application, null);
+        }
     }
     
     // --- Public API ---
@@ -194,16 +214,26 @@ public class Process {
     internal void OnWindowClosed(Window window) {
         DebugLogger.Log($"Process.OnWindowClosed: {AppId} - Removing window '{window.Title}'");
         Windows.Remove(window);
-        if (MainWindow == window) {
+        
+        bool wasMainWindow = MainWindow == window;
+        if (wasMainWindow) {
             MainWindow = Windows.FirstOrDefault(w => w.IsVisible);
             DebugLogger.Log($"Process.OnWindowClosed: {AppId} - MainWindow was closed, new MainWindow: {MainWindow?.Title ?? "null"}");
         }
         
         DebugLogger.Log($"Process.OnWindowClosed: {AppId} - Windows.Count={Windows.Count}, State={State}");
         
+        // Check ExitOnMainWindowClose for Application-based apps
+        if (wasMainWindow && Application != null && !Application.ExitOnMainWindowClose) {
+            // Don't terminate, just go to background
+            if (Windows.Count == 0) {
+                DebugLogger.Log($"Process.OnWindowClosed: {AppId} - Going to background (ExitOnMainWindowClose=false)");
+                State = ProcessState.Background;
+            }
+            return;
+        }
+        
         // Auto-terminate if no windows left
-        // Note: We don't check State because UpdateState() may have set it to Background
-        // during window fade-out animations, but we still want to terminate
         if (Windows.Count == 0) {
             DebugLogger.Log($"Process.OnWindowClosed: {AppId} - Calling Terminate() (no windows left)");
             Terminate();

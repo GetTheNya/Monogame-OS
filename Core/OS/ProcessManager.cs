@@ -34,8 +34,10 @@ public class ProcessManager {
             return existing;
         }
         
-        // Open the window
-        Shell.UI.OpenWindow(window);
+        // Open the window only if not already added to UI (prevents double-open for Application-based apps)
+        if (window.Parent == null) {
+            Shell.UI.OpenWindow(window);
+        }
         
         // Get or create process for this window
         var process = window.OwnerProcess;

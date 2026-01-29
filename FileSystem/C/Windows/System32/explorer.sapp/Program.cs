@@ -42,7 +42,9 @@ public class FileExplorerWindow : Window {
         _currentPath = _settings.LastPath;
 
         OnResize += () => LayoutUI();
-
+    }
+    
+    protected override void OnLoad() {
         SetupUI();
         NavigateTo(_currentPath);
     }

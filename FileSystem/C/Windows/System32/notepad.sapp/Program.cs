@@ -41,15 +41,20 @@ public class NotepadWindow : Window {
         Title = "Untitled - Notepad";
         _settings = settings;
         AppId = "NOTEPAD"; // Required for automatic persistence
+        _filePath = filePath;
 
+        OnResize += () => LayoutUI();
+    }
+    
+    private string _filePath;
+    
+    protected override void OnLoad() {
         SetupUI();
 
         // Load file if provided
-        if (!string.IsNullOrEmpty(filePath) && VirtualFileSystem.Instance.Exists(filePath)) {
-            LoadFile(filePath);
+        if (!string.IsNullOrEmpty(_filePath) && VirtualFileSystem.Instance.Exists(_filePath)) {
+            LoadFile(_filePath);
         }
-
-        OnResize += () => LayoutUI();
     }
 
     private void SetupUI() {

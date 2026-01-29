@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using Microsoft.CodeAnalysis;
 using TheGame.Core.UI;
 
 namespace TheGame.Core.OS;
@@ -59,12 +60,7 @@ public class AppLoader {
             _appPaths[upperAppId] = appFolderPath;
 
             // Gather all .cs source files
-            var sourceFiles = new Dictionary<string, string>();
-            foreach (var file in Directory.GetFiles(hostPath, "*.cs", SearchOption.AllDirectories)) {
-                string relativePath = Path.GetRelativePath(hostPath, file);
-                string sourceCode = File.ReadAllText(file);
-                sourceFiles[relativePath] = sourceCode;
-            }
+            var sourceFiles = GatherSourceFiles(hostPath);
 
             if (sourceFiles.Count == 0) {
                 // No source files - app might be hardcoded, skip silently
@@ -79,10 +75,13 @@ public class AppLoader {
             Assembly assembly = AppCompiler.Instance.Compile(sourceFiles, manifest.AppId, out var diagnostics);
             
             if (assembly == null) {
-                DebugLogger.Log($"Compilation failed for {manifest.AppId}:");
-                foreach (var diag in diagnostics) {
-                    DebugLogger.Log($"  {diag}");
+                DebugLogger.Log($"[JIT Compile] Compilation failed for {manifest.AppId}:");
+                var errors = diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error || d.IsWarningAsError);
+                    
+                foreach (var diag in errors) {
+                    DiagnosticFormatter.LogDiagnostic(diag);
                 }
+                
                 // Don't return false - hot reload is still watching
                 return false;
             }
@@ -270,6 +269,16 @@ public class AppLoader {
         return null;
     }
 
+    private Dictionary<string, string> GatherSourceFiles(string hostPath) {
+        var sourceFiles = new Dictionary<string, string>();
+        foreach (var file in Directory.GetFiles(hostPath, "*.cs", SearchOption.AllDirectories)) {
+            string relativePath = Path.GetRelativePath(hostPath, file);
+            string sourceCode = File.ReadAllText(file);
+            sourceFiles[relativePath] = sourceCode;
+        }
+        return sourceFiles;
+    }
+
     /// <summary>
     /// Reloads an app by recompiling its source and updating the assembly.
     /// Closes all running instances of the app.
@@ -283,7 +292,6 @@ public class AppLoader {
         }
 
         string upperAppId = appId.ToUpper();
-
         if (!_appPaths.TryGetValue(upperAppId, out string appVirtualPath)) {
             diagnostics.Add($"App {appId} is not loaded");
             return false;
@@ -310,23 +318,21 @@ public class AppLoader {
             AppManifest manifest = AppManifest.FromJson(manifestJson);
 
             // Gather all .cs source files
-            var sourceFiles = new Dictionary<string, string>();
-            foreach (var file in Directory.GetFiles(hostPath, "*.cs", SearchOption.AllDirectories)) {
-                string relativePath = Path.GetRelativePath(hostPath, file);
-                string sourceCode = File.ReadAllText(file);
-                sourceFiles[relativePath] = sourceCode;
-            }
-
+            var sourceFiles = GatherSourceFiles(hostPath);
             if (sourceFiles.Count == 0) {
-                diagnostics.Add("No source files found");
+                diagnostics.Add("No source files found in the app directory.");
                 return false;
             }
 
             // Recompile with a unique assembly name to avoid conflicts
             string assemblyName = $"{manifest.AppId}_{DateTime.Now.Ticks}";
-            Assembly assembly = AppCompiler.Instance.Compile(sourceFiles, assemblyName, out diagnostics);
+            Assembly assembly = AppCompiler.Instance.Compile(sourceFiles, assemblyName, out IEnumerable<Diagnostic> compileDiagnostics);
             
             if (assembly == null) {
+                // Format diagnostics nicely for the output list
+                foreach (var diag in compileDiagnostics) {
+                    diagnostics.AddRange(DiagnosticFormatter.Format(diag));
+                }
                 return false;
             }
 
@@ -338,12 +344,12 @@ public class AppLoader {
                 return CreateWindowFromAssembly(assembly, manifest, hostPath, args);
             });
 
-            DebugLogger.Log($"Successfully reloaded app: {manifest.Name} ({upperAppId})");
+            DebugLogger.Log($"[AppLoader] Successfully reloaded app: {manifest.Name} ({upperAppId})");
             return true;
 
         } catch (Exception ex) {
             diagnostics.Add($"Exception during reload: {ex.Message}");
-            DebugLogger.Log($"Error reloading app {appId}: {ex.Message}");
+            DebugLogger.Log($"[AppLoader] Error reloading app {appId}: {ex.Message}");
             return false;
         }
     }
@@ -368,5 +374,51 @@ public class AppLoader {
         
         var processes = ProcessManager.Instance.GetProcessesByApp(appId);
         return processes.SelectMany(p => p.Windows).ToList();
+    }
+}
+
+public static class DiagnosticFormatter {
+    /// <summary>
+    /// Formats a diagnostic into a multi-line "pretty" string array.
+    /// Includes header, source line, and a pointer to the column.
+    /// </summary>
+    public static IEnumerable<string> Format(Diagnostic diag) {
+        var lines = new List<string>();
+        var lineSpan = diag.Location.GetLineSpan();
+        int lineIndex = lineSpan.StartLinePosition.Line;
+        int columnIndex = lineSpan.StartLinePosition.Character;
+
+        // Header format: File(1,1): Severity ID: Message
+        string fileName = lineSpan.Path ?? "Source";
+        string header = $"{fileName}({lineIndex + 1},{columnIndex + 1}): {diag.Severity} {diag.Id}: {diag.GetMessage()}";
+        lines.Add(header);
+
+        // Try to get the actual source code line
+        var sourceText = diag.Location.SourceTree?.GetText();
+        if (sourceText != null && lineIndex >= 0 && lineIndex < sourceText.Lines.Count) {
+            string lineContent = sourceText.Lines[lineIndex].ToString();
+            
+            // Handle tabs by replacing them with spaces so the pointer stays aligned
+            string visualLine = lineContent.Replace("\t", "    ");
+            
+            // Calculate real offset for the pointer considering tab replacement (assuming 4 spaces per tab)
+            int tabsBefore = lineContent.Substring(0, Math.Max(0, Math.Min(columnIndex, lineContent.Length))).Count(c => c == '\t');
+            int visualColumn = columnIndex + (tabsBefore * 3); // +3 spaces for each tab replaced
+
+            int errorLength = diag.Location.SourceSpan.Length;
+            string underlines = errorLength > 1 ? new string('~', errorLength - 1) : "";
+            string pointerWithText = new string(' ', visualColumn) + "^" + underlines + " <--- Error here";
+
+            lines.Add(visualLine);
+            lines.Add(pointerWithText);
+        }
+
+        return lines;
+    }
+
+    public static void LogDiagnostic(Diagnostic diag) {
+        foreach (var line in Format(diag)) {
+            DebugLogger.Log(line);
+        }
     }
 }

@@ -75,11 +75,27 @@ public class Window : UIElement {
 
     // Process ownership
     private Process _ownerProcess;
+    private bool _onLoadCalled;
+    
     public Process OwnerProcess {
         get => _ownerProcess;
         internal set {
+            if (_ownerProcess == value) return;
             _ownerProcess = value;
             OnOwnerProcessSet();
+            // Call OnLoad when OwnerProcess is first set
+            if (_ownerProcess != null && !_onLoadCalled) {
+                _onLoadCalled = true;
+                try {
+                    OnLoad();
+                } catch (Exception ex) {
+                    if (_ownerProcess != null && CrashHandler.IsAppException(ex, _ownerProcess)) {
+                        CrashHandler.HandleAppException(_ownerProcess, ex);
+                    } else {
+                        throw;
+                    }
+                }
+            }
         }
     }
 
@@ -88,6 +104,23 @@ public class Window : UIElement {
     /// Override this to perform setup that requires the process owner (like hotkey registration).
     /// </summary>
     protected virtual void OnOwnerProcessSet() { }
+    
+    /// <summary>
+    /// Called after OwnerProcess is assigned. Build your UI here.
+    /// </summary>
+    protected virtual void OnLoad() { }
+    
+    /// <summary>
+    /// Called every frame after the base Update logic completes.
+    /// No need to call base - the framework handles it automatically.
+    /// </summary>
+    protected virtual void OnUpdate(GameTime gameTime) { }
+    
+    /// <summary>
+    /// Called during Draw, inside the scissor-clipped content area.
+    /// Use this for custom rendering. No need to call base.
+    /// </summary>
+    protected virtual void OnDraw(SpriteBatch spriteBatch, ShapeBatch batch) { }
     
     // Modal support
     public Window ParentWindow { get; set; }
@@ -151,7 +184,14 @@ public class Window : UIElement {
         Snapshot.SetData(data);
     }
 
-    public Window() : this(Vector2.Zero, new Vector2(400, 300)) { }
+    public Window() : this(Vector2.Zero, new Vector2(400, 300)) {
+        // Center on screen by default
+        var viewport = G.GraphicsDevice.Viewport;
+        Position = new Vector2(
+            (viewport.Width - Size.X) / 2,
+            (viewport.Height - Size.Y - 40) / 2  // Account for taskbar
+        );
+    }
 
     public Window(Vector2 position, Vector2 size) {
         Position = position;
@@ -291,6 +331,17 @@ public class Window : UIElement {
         
         try {
             base.Update(gameTime);
+        } catch (Exception ex) {
+            if (OwnerProcess != null && CrashHandler.IsAppException(ex, OwnerProcess)) {
+                CrashHandler.HandleAppException(OwnerProcess, ex);
+            } else {
+                throw;
+            }
+        }
+        
+        // Call user OnUpdate hook after all framework logic
+        try {
+            OnUpdate(gameTime);
         } catch (Exception ex) {
             if (OwnerProcess != null && CrashHandler.IsAppException(ex, OwnerProcess)) {
                 CrashHandler.HandleAppException(OwnerProcess, ex);
@@ -913,7 +964,7 @@ public class Window : UIElement {
             _contentBatch.Begin(null, null);
             spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, _scissorState);
 
-            DrawContent(spriteBatch, _contentBatch);
+            OnDraw(spriteBatch, _contentBatch);
 
             // Set scissor RasterizerState BEFORE End()
             gd.RasterizerState = _scissorState;
@@ -1089,6 +1140,12 @@ public class Window : UIElement {
         }
     }
 
+    /// <summary>
+    /// [OBSOLETE] Use OnDraw instead.
+    /// </summary>
+    [Obsolete("Use OnDraw instead")]
     public virtual void DrawContent(SpriteBatch spriteBatch, ShapeBatch batch) {
+        // For backward compatibility, call OnDraw
+        OnDraw(spriteBatch, batch);
     }
 }
