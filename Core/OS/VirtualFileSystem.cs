@@ -141,6 +141,83 @@ public class VirtualFileSystem {
         return Directory.Exists(hostPath);
     }
 
+    public string NormalizePath(string virtualPath) {
+        if (string.IsNullOrEmpty(virtualPath)) return "C:\\";
+        
+        // Normalize slashes
+        string p = virtualPath.Replace('/', '\\').Trim();
+        if (p.EndsWith("\\") && p.Length > 3) p = p.TrimEnd('\\');
+
+        string[] parts = p.Split('\\', StringSplitOptions.RemoveEmptyEntries);
+        Stack<string> stack = new Stack<string>();
+
+        foreach (var part in parts) {
+            if (part == ".") continue;
+            if (part == "..") {
+                if (stack.Count > 1) stack.Pop();
+                continue;
+            }
+            stack.Push(part);
+        }
+
+        string result = string.Join("\\", stack.Reverse());
+        if (result.Length == 2 && result.EndsWith(":")) result += "\\";
+        if (!result.Contains(":")) result = "C:\\" + result; // Default to C: if drive missing
+
+        return result;
+    }
+
+    public string ResolvePath(string currentDir, string targetPath) {
+        if (string.IsNullOrEmpty(targetPath)) return currentDir;
+        
+        targetPath = targetPath.Replace('/', '\\');
+        
+        string combined;
+        if (targetPath.Contains(':')) {
+            combined = targetPath;
+        } else {
+            combined = Path.Combine(currentDir, targetPath);
+        }
+
+        return NormalizePath(combined);
+    }
+
+    public string GetActualCasing(string virtualPath) {
+        string normalized = NormalizePath(virtualPath);
+        string hostPath = ToHostPath(normalized);
+        if (string.IsNullOrEmpty(hostPath)) return normalized;
+
+        if (Directory.Exists(hostPath) || File.Exists(hostPath)) {
+            // Traverse down from root to get actual casing for each part
+            string drive = normalized.Substring(0, 3); // C:\
+            string rest = normalized.Substring(3);
+            if (string.IsNullOrEmpty(rest)) return drive;
+
+            string currentHost = ToHostPath(drive);
+            string[] parts = rest.Split('\\', StringSplitOptions.RemoveEmptyEntries);
+            List<string> resultParts = new List<string>();
+
+            foreach (var part in parts) {
+                var entry = Directory.GetFileSystemEntries(currentHost)
+                    .FirstOrDefault(e => Path.GetFileName(e).Equals(part, StringComparison.OrdinalIgnoreCase));
+                
+                if (entry != null) {
+                    string actualName = Path.GetFileName(entry);
+                    resultParts.Add(actualName);
+                    currentHost = Path.Combine(currentHost, actualName);
+                } else {
+                    // Fallback to what user typed if not found
+                    resultParts.Add(part);
+                    currentHost = Path.Combine(currentHost, part);
+                }
+            }
+
+            return drive + string.Join("\\", resultParts);
+        }
+
+        return normalized;
+    }
+
     public bool Exists(string virtualPath) {
         string hostPath = ToHostPath(virtualPath);
         return File.Exists(hostPath) || Directory.Exists(hostPath);

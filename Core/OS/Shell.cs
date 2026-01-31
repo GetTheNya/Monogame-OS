@@ -421,6 +421,17 @@ public static class Shell {
         /// Gets all running processes.
         /// </summary>
         public static IEnumerable<OS.Process> GetAll() => ProcessManager.Instance.GetAllProcesses();
+
+        /// <summary>
+        /// Sends a signal (e.g., Ctrl+C) to a process.
+        /// </summary>
+        public static void SendSignal(TheGame.Core.OS.Process process, string signal) {
+            if (process == null) return;
+            if (signal == "SIGINT" || signal == "CTRL+C") {
+                // Trigger the internal signal handler on the process
+                process.TriggerSignalCancel();
+            }
+        }
     }
 
     /// <summary>

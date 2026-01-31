@@ -65,8 +65,19 @@ public class Window : UIElement {
     /// </summary>
     public event Action OnClosed;
 
+    /// <summary>
+    /// Called when a close is requested. Call the provided callback with 'true' to proceed with closing.
+    /// </summary>
+    public event Action<Action<bool>> OnCloseRequested;
+
     public string Title { get; set; } = "Window";
-    public Texture2D Icon { get; set; }
+
+    private Texture2D _icon;
+    public Texture2D Icon { 
+        get => _icon ?? OwnerProcess?.Icon; 
+        set => _icon = value; 
+    }
+    
     public string AppId { get; set; }
     public bool CanResize { get; set; } = true;
     public bool ShowTitleBar { get; set; } = true;
@@ -82,7 +93,6 @@ public class Window : UIElement {
         internal set {
             if (_ownerProcess == value) return;
             _ownerProcess = value;
-            OnOwnerProcessSet();
             // Call OnLoad when OwnerProcess is first set
             if (_ownerProcess != null && !_onLoadCalled) {
                 _onLoadCalled = true;
@@ -98,12 +108,6 @@ public class Window : UIElement {
             }
         }
     }
-
-    /// <summary>
-    /// Called when the OwnerProcess is assigned to the window.
-    /// Override this to perform setup that requires the process owner (like hotkey registration).
-    /// </summary>
-    protected virtual void OnOwnerProcessSet() { }
     
     /// <summary>
     /// Called after OwnerProcess is assigned. Build your UI here.
@@ -501,9 +505,20 @@ public class Window : UIElement {
     }
 
     public void Close() {
+        if (OnCloseRequested != null) {
+            OnCloseRequested.Invoke((canClose) => {
+                if (canClose) ExecuteClose();
+            });
+            return;
+        }
+        ExecuteClose();
+    }
+
+    private void ExecuteClose() {
         // Close child modal windows first
         foreach (var child in ChildWindows.ToList()) {
-            child.Close();
+            child.ExecuteClose(); // Use ExecuteClose directly to bypass their own hooks if we are the parent? 
+            // Actually, child.Close() is better to respect their own hooks.
         }
         ChildWindows.Clear();
         

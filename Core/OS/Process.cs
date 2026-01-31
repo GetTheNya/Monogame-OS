@@ -51,12 +51,33 @@ public class Process {
     /// <summary>The main/primary window of this process (can be null for background).</summary>
     public Window MainWindow { get; set; }
 
+    /// <summary>The icon associated with this process/application.</summary>
+    public Texture2D Icon { get; set; }
+
     /// <summary>Current progress value (-1.0 to 1.0). -1.0 means no progress.</summary>
     public float Progress { get; set; } = -1.0f;
 
     /// <summary>Color of the progress bar.</summary>
     public Color ProgressColor { get; set; } = new Color(0, 200, 0); // Default Green
     
+    /// <summary> Standard I/O streams for this process. </summary>
+    public StandardIO IO { get; } = new StandardIO();
+
+    /// <summary> Environment variables for this process. </summary>
+    public Dictionary<string, string> Environment { get; } = new();
+
+    /// <summary> The return code of the process when it terminates (0 = Success). </summary>
+    public int ExitCode { get; set; } = 0;
+
+    /// <summary> Event triggered when a cancel signal (Ctrl+C) is received. </summary>
+    public event Action OnSignalCancel;
+
+    /// <summary> Triggers the cancel signal internally (from Shell or Terminal). </summary>
+    internal void TriggerSignalCancel() => OnSignalCancel?.Invoke();
+
+    /// <summary> Returns true if this process has a redirected output stream (console). </summary>
+    public bool HasConsole => IO.Out != System.IO.TextWriter.Null;
+
     // Priority-based update timing (only applies when in Background state)
     internal double UpdateAccumulator;
     internal double UpdateInterval => Priority switch {
@@ -190,6 +211,12 @@ public class Process {
         
         Cleanup();
         
+        // Dispose I/O streams
+        IO.Dispose();
+
+        // Clear signal handlers
+        OnSignalCancel = null;
+
         // Remove tray icons owned by this process
         Shell.SystemTray.RemoveIconsForProcess(this);
 

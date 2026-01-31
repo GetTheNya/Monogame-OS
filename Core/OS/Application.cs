@@ -17,6 +17,18 @@ public abstract class Application {
     /// </summary>
     public Process Process { get; internal set; }
     
+    /// <summary> Standard I/O streams for this application's process. </summary>
+    public StandardIO IO => Process?.IO;
+
+    /// <summary> Standard input stream. </summary>
+    public System.IO.TextReader StandardInput => IO?.In ?? System.IO.TextReader.Null;
+
+    /// <summary> Standard output stream. </summary>
+    public System.IO.TextWriter StandardOutput => IO?.Out ?? System.IO.TextWriter.Null;
+
+    /// <summary> Standard error stream. </summary>
+    public System.IO.TextWriter StandardError => IO?.Error ?? System.IO.TextWriter.Null;
+
     /// <summary>
     /// The primary window of the application. May be null for background services.
     /// </summary>
@@ -158,4 +170,22 @@ public abstract class Application {
     public void SetProgress(float value, Color? color = null) {
         if (Process != null) Shell.Taskbar.SetProgress(Process, value, color);
     }
+
+    // --- Standard I/O Helpers ---
+
+    /// <summary> Writes text to standard output. </summary>
+    public void Write(string text) => StandardOutput.Write(text);
+
+    /// <summary> Writes a line of text to standard output. </summary>
+    public void WriteLine(string text = "") => StandardOutput.WriteLine(text);
+
+    /// <summary> Writes a line of text to standard output with a specific color (using ANSI codes). </summary>
+    public void WriteLine(string text, Color color) {
+        // Simple ANSI-like color support will be handled by the TerminalBackend.
+        // For now, we just write the text.
+        StandardOutput.WriteLine(text); 
+    }
+
+    /// <summary> Reads a line from standard input. </summary>
+    public string ReadLine() => StandardInput.ReadLine();
 }

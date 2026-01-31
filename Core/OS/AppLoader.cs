@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using Microsoft.CodeAnalysis;
+using Microsoft.Xna.Framework.Graphics;
 using TheGame.Core.UI;
 
 namespace TheGame.Core.OS;
@@ -90,7 +91,7 @@ public class AppLoader {
 
             // Register app factory with Shell
             Shell.UI.RegisterApp(upperAppId, (args) => {
-                return CreateWindowFromAssembly(assembly, manifest, hostPath, args);
+                return CreateWindowFromAssembly(assembly, manifest, appFolderPath, args);
             });
 
             DebugLogger.Log($"Successfully loaded app: {manifest.Name} ({manifest.AppId})");
@@ -102,7 +103,7 @@ public class AppLoader {
         }
     }
 
-    private Window CreateWindowFromAssembly(Assembly assembly, AppManifest manifest, string hostPath, string[] args) {
+    private Window CreateWindowFromAssembly(Assembly assembly, AppManifest manifest, string appVirtualPath, string[] args) {
         try {
             DebugLogger.Log($"AppLoader: Creating window for {manifest.AppId} using {manifest.EntryClass}.{manifest.EntryMethod}");
             
@@ -133,6 +134,20 @@ public class AppLoader {
                     return null;
                 }
             }
+
+            // Try to load custom icon early
+            Texture2D processIcon = null;
+            string iconName = manifest.Icon ?? "icon.png";
+            string iconVirtualPath = VirtualFileSystem.Instance.ResolvePath(appVirtualPath, iconName);
+            
+            if (VirtualFileSystem.Instance.Exists(iconVirtualPath)) {
+                try {
+                    string iconHostPath = VirtualFileSystem.Instance.ToHostPath(iconVirtualPath);
+                    processIcon = ImageLoader.Load(G.GraphicsDevice, iconHostPath);
+                } catch (Exception ex) {
+                    DebugLogger.Log($"AppLoader: Error loading icon {iconVirtualPath}: {ex.Message}");
+                }
+            }
             
             // Handle Window-returning apps (legacy)
             if (result is Window window) {
@@ -140,22 +155,17 @@ public class AppLoader {
                 
                 // Create a Process to own this window
                 var windowProcess = new Process {
-                    AppId = manifest.AppId.ToUpper()
+                    AppId = manifest.AppId.ToUpper(),
+                    Icon = processIcon
                 };
                 windowProcess.Windows.Add(window);
                 windowProcess.MainWindow = window;
                 window.OwnerProcess = windowProcess;
                 ProcessManager.Instance.RegisterProcess(windowProcess);
                 
-                // Try to load custom icon
-                string iconName = manifest.Icon ?? "icon.png";
-                string iconPath = Path.Combine(hostPath, iconName);
-                if (File.Exists(iconPath)) {
-                    try {
-                        window.Icon = ImageLoader.Load(G.GraphicsDevice, iconPath);
-                    } catch (Exception ex) {
-                        DebugLogger.Log($"AppLoader: Error loading icon {iconPath}: {ex.Message}");
-                    }
+                // Explicitly set window icon if provided
+                if (processIcon != null && window.Icon == null) {
+                    window.Icon = processIcon;
                 }
 
                 DebugLogger.Log($"AppLoader: Successfully created window for {manifest.AppId} (Process: {windowProcess.ProcessId})");
@@ -166,7 +176,8 @@ public class AppLoader {
             if (result is Application app) {
                 app.Process = new Process {
                     AppId = manifest.AppId.ToUpper(),
-                    Application = app
+                    Application = app,
+                    Icon = processIcon
                 };
                 ProcessManager.Instance.RegisterProcess(app.Process);
                 
@@ -183,7 +194,17 @@ public class AppLoader {
                 
                 if (app.MainWindow != null) {
                     app.MainWindow.AppId = manifest.AppId;
-                    app.MainWindow.OwnerProcess = app.Process; // Ensure OnLoad is called NOW
+                    
+                    // Link window and process
+                    if (app.MainWindow.OwnerProcess == null) app.MainWindow.OwnerProcess = app.Process;
+                    if (app.Process.MainWindow == null) app.Process.MainWindow = app.MainWindow;
+                    if (!app.Process.Windows.Contains(app.MainWindow)) app.Process.Windows.Add(app.MainWindow);
+                    
+                    // Explicitly set window icon if provided and no icon is set
+                    if (processIcon != null && app.MainWindow.Icon == null) {
+                        app.MainWindow.Icon = processIcon;
+                    }
+                    
                     DebugLogger.Log($"AppLoader: Application created MainWindow: {app.MainWindow.Title}");
                 }
 
@@ -194,6 +215,7 @@ public class AppLoader {
             // Handle Process-returning apps (true background processes)
             if (result is Process process) {
                 process.AppId = manifest.AppId.ToUpper();
+                process.Icon = processIcon;
                 ProcessManager.Instance.RegisterProcess(process);
                 
                 // Start the process (calls OnStart)
@@ -342,7 +364,7 @@ public class AppLoader {
 
             // Re-register app factory with Shell
             Shell.UI.RegisterApp(upperAppId, (args) => {
-                return CreateWindowFromAssembly(assembly, manifest, hostPath, args);
+                return CreateWindowFromAssembly(assembly, manifest, appVirtualPath, args);
             });
 
             DebugLogger.Log($"[AppLoader] Successfully reloaded app: {manifest.Name} ({upperAppId})");

@@ -95,6 +95,8 @@ public class NotepadWindow : Window {
 
         AddChild(_menuBar);
 
+        _menuBar.RegisterHotkeys(OwnerProcess);
+
         // Text Area
         _textArea = new TextArea(new Vector2(0, MenuBarHeight), new Vector2(ClientSize.X, ClientSize.Y - MenuBarHeight)) {
             Placeholder = "Start typing...",
@@ -107,11 +109,6 @@ public class NotepadWindow : Window {
             }
         };
         AddChild(_textArea);
-    }
-
-    protected override void OnOwnerProcessSet() {
-        base.OnOwnerProcessSet();
-        _menuBar.RegisterHotkeys(OwnerProcess);
     }
 
     private void LayoutUI() {

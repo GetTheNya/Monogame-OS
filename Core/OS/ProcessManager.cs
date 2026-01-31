@@ -16,6 +16,9 @@ public class ProcessManager {
     
     private readonly Dictionary<string, Process> _processes = new();
     
+    /// <summary> Event triggered when a process is unregistered (terminates). </summary>
+    public event Action<Process> OnProcessTerminated;
+
     private ProcessManager() { }
     
     /// <summary>
@@ -215,6 +218,7 @@ public class ProcessManager {
     internal void UnregisterProcess(Process process) {
         if (process == null || string.IsNullOrEmpty(process.ProcessId)) return;
         _processes.Remove(process.ProcessId);
+        OnProcessTerminated?.Invoke(process);
         DebugLogger.Log($"Process unregistered: {process.AppId} ({process.ProcessId})");
     }
 }

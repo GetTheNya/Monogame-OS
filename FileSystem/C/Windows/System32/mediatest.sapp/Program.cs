@@ -141,9 +141,7 @@ public class MediaTestApp : Window {
         AddChild(checkLoadBtn);
     }
 
-    protected override void OnOwnerProcessSet() {
-        base.OnOwnerProcessSet();
-
+    protected override void OnLoad() {
         Shell.Media.RegisterAsPlayer(OwnerProcess);
 
         _appVolume.SetValue(Shell.Media.GetProcessVolume(OwnerProcess), false);
