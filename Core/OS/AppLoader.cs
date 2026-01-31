@@ -183,6 +183,7 @@ public class AppLoader {
                 
                 if (app.MainWindow != null) {
                     app.MainWindow.AppId = manifest.AppId;
+                    app.MainWindow.OwnerProcess = app.Process; // Ensure OnLoad is called NOW
                     DebugLogger.Log($"AppLoader: Application created MainWindow: {app.MainWindow.Title}");
                 }
 

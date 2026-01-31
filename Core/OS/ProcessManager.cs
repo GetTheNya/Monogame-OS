@@ -34,11 +34,6 @@ public class ProcessManager {
             return existing;
         }
         
-        // Open the window only if not already added to UI (prevents double-open for Application-based apps)
-        if (window.Parent == null) {
-            Shell.UI.OpenWindow(window);
-        }
-        
         // Get or create process for this window
         var process = window.OwnerProcess;
         if (process == null) {
@@ -46,8 +41,13 @@ public class ProcessManager {
             process = new Process { AppId = upperAppId };
             process.Windows.Add(window);
             process.MainWindow = window;
-            window.OwnerProcess = process;
+            window.OwnerProcess = process; // This triggers OnLoad()
             RegisterProcess(process);
+        }
+        
+        // Open the window only if not already added to UI (prevents double-open for Application-based apps)
+        if (window.Parent == null) {
+            Shell.UI.OpenWindow(window);
         }
         
         return process;
