@@ -10,10 +10,28 @@ public abstract class TerminalApplication : Application {
     /// <summary>
     /// If true, the application will terminate immediately if it cannot find a terminal to attach to.
     /// Default is false, which allows it to run in background mode.
-    /// </summary>
     public bool RequireTerminal { get; protected set; } = false;
 
-    public override bool IsThreaded => true;
+    public override bool IsAsync => true;
+
+    /// <summary>
+    /// Reads a line from standard input asynchronously.
+    /// </summary>
+    public override async System.Threading.Tasks.Task<string> ReadLineAsync() {
+        if (StandardInput is TerminalReader reader) {
+            return await reader.ReadLineAsync();
+        }
+        return await base.ReadLineAsync();
+    }
+
+    protected override void OnPrepare(string[] args) {
+        base.OnPrepare(args);
+        
+        if (Process != null) {
+            // Register default signal handlers for CLI apps
+            Process.OnSignalCancel += OnCancel;
+        }
+    }
 
     protected override void OnLoad(string[] args) {
         base.OnLoad(args);
@@ -21,11 +39,6 @@ public abstract class TerminalApplication : Application {
         // If this app is launched without a terminal, and it's not explicitly disabled,
         // we might want to request one from the OS in the future.
         // For now, the AppLoader will handle the auto-spawning of terminals for TerminalOnly apps.
-        
-        if (Process != null) {
-            // Register default signal handlers for CLI apps
-            Process.OnSignalCancel += OnCancel;
-        }
     }
 
     /// <summary>

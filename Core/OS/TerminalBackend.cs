@@ -244,6 +244,11 @@ public class TerminalBackend : ITerminal {
     public void SendSignal(string signal) {
         if (_activeProcess != null) {
             DebugLogger.Log($"TerminalBackend: Sending signal {signal} to {_activeProcess.AppId}");
+            
+            if (signal == "SIGINT" || signal == "CTRL+C") {
+                AddLine("^C", Color.Yellow, "SYSTEM");
+            }
+            
             Shell.Process.SendSignal(_activeProcess, signal);
         }
     }
@@ -251,16 +256,23 @@ public class TerminalBackend : ITerminal {
     public void SendInput(string text) {
         if (_activeReader == null) return;
         
-        // Handle special signals like Ctrl+C (can be passed as a special string or handled by UI)
+        // Handle special signals like Ctrl+C
         if (text == "\x03") { // ETX (Ctrl+C)
-            _activeProcess?.Terminate(); // Or trigger OnSignalCancel
-            AddLine("^C", Color.Yellow, "SYSTEM");
+            SendSignal("CTRL+C");
             return;
         }
 
         _activeReader.EnqueueInput(text);
+    }
+
+    public void EchoInput(string text) {
+        // Echo input to the buffer so it's visible to the user
+        // We trim the newline from the text if present because WriteLine adds one
+        string echo = text.EndsWith("\n") ? text.Substring(0, text.Length - 1) : text;
         
-        // Echo input if needed (usually handled by the terminal application)
+        // Use a special color (e.g., LightGray) to distinguish from app output if desired,
+        // or just White for traditional terminal look.
+        WriteLine(echo, Color.White);
     }
 
     public void Clear() {

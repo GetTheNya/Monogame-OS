@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 using System.Collections.Concurrent;
+using System.Threading.Tasks;
 using Microsoft.Xna.Framework;
 
 namespace TheGame.Core.OS;
@@ -61,57 +62,71 @@ public class TerminalWriter : TextWriter {
 
 /// <summary>
 /// A TextReader that reads from a thread-safe queue populated by the terminal UI.
+/// Supports async cooperative reads.
 /// </summary>
 public class TerminalReader : TextReader {
     private readonly ConcurrentQueue<string> _inputQueue = new();
+    private readonly ConcurrentQueue<TaskCompletionSource<string>> _waitingReaders = new();
     private string _currentLine = null;
     private int _charIndex = 0;
-    private readonly System.Threading.ManualResetEventSlim _inputEvent = new(false);
 
     public void EnqueueInput(string text) {
-        _inputQueue.Enqueue(text);
-        _inputEvent.Set();
+        if (_waitingReaders.TryDequeue(out var tcs)) {
+            tcs.TrySetResult(text);
+        } else {
+            _inputQueue.Enqueue(text);
+        }
     }
 
     public void ClearInput() {
         while (_inputQueue.TryDequeue(out _));
-        _inputEvent.Reset();
+        while (_waitingReaders.TryDequeue(out var tcs)) tcs.TrySetCanceled();
     }
 
     public override string ReadLine() {
-        while (true) {
-            if (_inputQueue.TryDequeue(out string line)) {
-                if (line == null) return null; // Signal termination
-                return line;
-            }
-            _inputEvent.Wait();
-            _inputEvent.Reset();
+        if (_inputQueue.TryDequeue(out string line)) {
+            return line;
         }
+        
+        // No more blocking wait here. Threading is removed.
+        return null; 
+    }
+
+    public override async Task<string> ReadLineAsync() {
+        if (_inputQueue.TryDequeue(out string line)) {
+            return line;
+        }
+
+        var tcs = new TaskCompletionSource<string>();
+        _waitingReaders.Enqueue(tcs);
+        return await tcs.Task;
     }
 
     public override int Read() {
-        while (_currentLine == null || _charIndex >= _currentLine.Length) {
-            if (!_inputQueue.TryDequeue(out _currentLine)) {
-                _inputEvent.Wait();
-                _inputEvent.Reset();
-                continue;
-            }
-            if (_currentLine == null) return -1; // Terminated
-            _currentLine += "\n"; // Append newline for Read()
+        if (_currentLine == null || _charIndex >= _currentLine.Length) {
+            string next = ReadLine();
+            if (next == null) return -1;
+            _currentLine = next + "\n";
             _charIndex = 0;
         }
+        return _currentLine[_charIndex++];
+    }
 
+    public async Task<int> ReadAsync() {
+        if (_currentLine == null || _charIndex >= _currentLine.Length) {
+            string next = await ReadLineAsync();
+            if (next == null) return -1;
+            _currentLine = next + "\n";
+            _charIndex = 0;
+        }
         return _currentLine[_charIndex++];
     }
 
     public override int Peek() {
-        while (_currentLine == null || _charIndex >= _currentLine.Length) {
+        if (_currentLine == null || _charIndex >= _currentLine.Length) {
             if (!_inputQueue.TryPeek(out string nextLine)) {
-                _inputEvent.Wait();
-                _inputEvent.Reset();
-                continue;
+                return -1;
             }
-            if (nextLine == null) return -1; // Terminated
             return nextLine.Length > 0 ? nextLine[0] : '\n';
         }
 

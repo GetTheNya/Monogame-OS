@@ -127,6 +127,14 @@ public abstract class UIElement : IContextMenuProvider {
         return Parent?.GetOwnerProcess();
     }
 
+    /// <summary>
+    /// Finds the window that contains this UI element by traversing up the parent tree.
+    /// </summary>
+    public Window GetOwnerWindow() {
+        if (this is Window window) return window;
+        return Parent?.GetOwnerWindow();
+    }
+
     // Allows parents to offset children (e.g. Window title bar)
     public virtual Vector2 GetChildOffset(UIElement child) => Vector2.Zero;
 
@@ -273,8 +281,9 @@ public abstract class UIElement : IContextMenuProvider {
 
         try {
             DrawSelf(spriteBatch, shapeBatch);
-
-            foreach (var child in Children) {
+            
+            var children = Children.ToList();
+            foreach (var child in children) {
                 child.Draw(spriteBatch, shapeBatch);
             }
         } catch (Exception ex) {

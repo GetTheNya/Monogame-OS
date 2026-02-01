@@ -54,10 +54,29 @@ public abstract class Application {
     }
 
     /// <summary>
-    /// If true, the application logic runs on a background thread.
+    /// If true, the application logic is asynchronous and runs on the main thread (cooperatively).
     /// Default is false. TerminalApplication overrides this to true.
     /// </summary>
-    public virtual bool IsThreaded => false;
+    public virtual bool IsAsync => false;
+
+    /// <summary>
+    /// Internal entry point that handles the transition from process start to application logic.
+    /// This ensures that both sync and async paths follow the same initialization steps.
+    /// </summary>
+    internal async System.Threading.Tasks.Task StartAsync(string[] args) {
+        OnPrepare(args);
+        
+        if (IsAsync) {
+            await OnLoadAsync(args);
+        } else {
+            OnLoad(args);
+        }
+    }
+
+    /// <summary>
+    /// Called before OnLoad or OnLoadAsync. Use this for plumbing that must run regardless of the load path.
+    /// </summary>
+    protected virtual void OnPrepare(string[] args) { }
     
     // --- Lifecycle Hooks (implement these, don't call base) ---
     
@@ -65,6 +84,11 @@ public abstract class Application {
     /// Called once when the application starts. Use this to create windows and initialize resources.
     /// </summary>
     protected virtual void OnLoad(string[] args) { }
+
+    /// <summary>
+    /// Async version of OnLoad. Used if IsAsync is true.
+    /// </summary>
+    protected virtual System.Threading.Tasks.Task OnLoadAsync(string[] args) => System.Threading.Tasks.Task.CompletedTask;
     
     /// <summary>
     /// Called every frame for the application to update its state.
@@ -72,6 +96,11 @@ public abstract class Application {
     /// Respects ProcessPriority throttling.
     /// </summary>
     protected virtual void OnUpdate(GameTime gameTime) { }
+
+    /// <summary>
+    /// Async version of OnUpdate. Used if IsAsync is true.
+    /// </summary>
+    protected virtual System.Threading.Tasks.Task OnUpdateAsync(GameTime gameTime) => System.Threading.Tasks.Task.CompletedTask;
     
     /// <summary>
     /// Called by the OS to allow the application to draw global/overlay visuals.
@@ -194,4 +223,7 @@ public abstract class Application {
 
     /// <summary> Reads a line from standard input. </summary>
     public string ReadLine() => StandardInput.ReadLine();
+
+    /// <summary> Reads a line from standard input asynchronously. </summary>
+    public virtual System.Threading.Tasks.Task<string> ReadLineAsync() => StandardInput.ReadLineAsync();
 }

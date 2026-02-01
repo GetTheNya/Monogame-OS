@@ -45,9 +45,9 @@ public class Process {
     /// <summary>Update priority when running in background.</summary>
     public ProcessPriority Priority { get; set; } = ProcessPriority.Normal;
 
-    /// <summary> If true, the process runs its logic on a background thread (useful for console apps). </summary>
-    public bool IsThreaded { get; set; } = false;
-    private System.Threading.Thread _processThread;
+    /// <summary> If true, the process runs asynchronously on the main thread. </summary>
+    public bool IsAsync { get; set; } = false;
+    private System.Threading.Tasks.Task _asyncTask;
     
     /// <summary>All windows owned by this process.</summary>
     public List<Window> Windows { get; } = new();
@@ -113,53 +113,54 @@ public class Process {
     // --- Modern Lifecycle Methods ---
 
     protected internal virtual void Initialize(string[] args) {
-        if (IsThreaded) {
-            _processThread = new System.Threading.Thread(() => {
-                try {
-                    OnStart(args);
-                    if (Application != null) {
-                        var onLoadMethod = Application.GetType().GetMethod("OnLoad", 
-                            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                        onLoadMethod?.Invoke(Application, new object[] { args });
-                    }
-                    
-                    // Most console apps will block on ReadLine inside OnLoad or a helper.
-                    // If they use OnUpdate, we still want to support that in a loop.
-                    while (State != ProcessState.Terminated) {
-                        Update(new GameTime());
-                        System.Threading.Thread.Sleep(1); 
-                    }
-                } catch (Exception ex) {
-                    DebugLogger.Log($"Threaded process {AppId} crashed: {ex.Message}");
-                    if (CrashHandler.IsAppException(ex, this)) {
-                        CrashHandler.HandleAppException(this, ex);
-                    } else {
-                        Terminate();
-                    }
-                }
-            });
-            _processThread.IsBackground = true;
-            _processThread.Start();
+        if (IsAsync) {
+            _asyncTask = RunAsync(args);
             return;
         }
 
-        OnStart(args);
         if (Application != null) {
-            var onLoadMethod = Application.GetType().GetMethod("OnLoad", 
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            onLoadMethod?.Invoke(Application, new object[] { args });
+            // Sync processes still run StartAsync, but it will execute OnLoad internally
+            var task = Application.StartAsync(args);
+            if (!task.IsCompleted) {
+                // This shouldn't happen for IsAsync = false, but if it does, we wait
+                task.GetAwaiter().GetResult();
+            }
+        } else {
+            OnStart(args);
+        }
+    }
+
+    private async System.Threading.Tasks.Task RunAsync(string[] args) {
+        try {
+            if (Application != null) {
+                await Application.StartAsync(args);
+            } else {
+                OnStart(args);
+            }
+
+            // Auto-terminate when logic finishes
+            if (State != ProcessState.Terminated) {
+                Terminate();
+            }
+        } catch (Exception ex) {
+            DebugLogger.Log($"Async process {AppId} crashed: {ex.Message}");
+            if (CrashHandler.IsAppException(ex, this)) {
+                CrashHandler.HandleAppException(this, ex);
+            } else {
+                Terminate();
+            }
         }
     }
 
     protected internal virtual void Update(GameTime gameTime) {
-        // Skip main-thread update if this is a threaded process (it's already running its own loop)
-        if (IsThreaded && System.Threading.Thread.CurrentThread != _processThread) return;
-
+        // Run logic hooks
         OnUpdate(gameTime);
         if (Application != null) {
             var onUpdateMethod = Application.GetType().GetMethod("OnUpdate", 
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             onUpdateMethod?.Invoke(Application, new object[] { gameTime });
+            
+            // Async logic is handled by the OS/UIManager or internal loop in RunAsync
         }
     }
 

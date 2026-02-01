@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using TheGame.Graphics;
 using Microsoft.Xna.Framework.Graphics;
 using System;
+using System.Linq;
 
 namespace TheGame.Core.UI;
 
@@ -90,8 +91,9 @@ public class UIManager {
     public void Draw(SpriteBatch spriteBatch, ShapeBatch shapeBatch) {
         try {
             // We iterate through root children and flush between them to ensure strict layering
-            // otherwise SpriteBatch and ShapeBatch passes will overlap across different layers (e.g. icons on top of windows)
-            foreach (var layer in _root.Children) {
+            // Use ToList() to prevent "Collection was modified" if a child is added/removed during Draw
+            var layers = _root.Children.ToList();
+            foreach (var layer in layers) {
                 if (!layer.IsVisible) continue;
                 
                 layer.Draw(spriteBatch, shapeBatch);

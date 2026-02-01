@@ -11,34 +11,32 @@ public class Program : TerminalApplication {
         return new Program();
     }
 
-    protected override void OnLoad(string[] args) {
-        base.OnLoad(args);
-
+    protected override async System.Threading.Tasks.Task OnLoadAsync(string[] args) {
         if (args != null && args.Length > 0) {
-            RunTests(args);
+            await RunTestsAsync(args);
         } else {
-            RunInteractive();
+            await RunInteractiveAsync();
         }
     }
 
-    private void RunTests(string[] args) {
+    private async System.Threading.Tasks.Task RunTestsAsync(string[] args) {
         WriteLine("Running Console Tests...");
         foreach (var arg in args) {
             if (arg == "--color") TestColors();
-            if (arg == "--signal") TestSignal();
+            if (arg == "--signal") await TestSignalAsync();
         }
         WriteLine("Tests complete. Returing exit code 0.");
         Process.ExitCode = 0;
         Exit();
     }
 
-    private void RunInteractive() {
+    private async System.Threading.Tasks.Task RunInteractiveAsync() {
         WriteLine("--- Console Test Interactive Mode ---", Color.Cyan);
         WriteLine("Type 'exit' to quit, 'color' for color test, 'err' for error test.");
         
         while (true) {
             Write("> ");
-            string rawInput = ReadLine();
+            string rawInput = await ReadLineAsync();
             if (rawInput == null) break; // Terminated
 
             string input = rawInput.Trim().ToLower();
@@ -62,9 +60,9 @@ public class Program : TerminalApplication {
         WriteLine("\u001b[33mYellow Text\u001b[0m");
     }
 
-    private void TestSignal() {
+    private async System.Threading.Tasks.Task TestSignalAsync() {
         WriteLine("Waiting for Ctrl+C... (type something to skip)");
-        ReadLine();
+        await ReadLineAsync();
     }
 
     protected override void OnCancel() {

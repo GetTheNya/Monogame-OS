@@ -49,21 +49,28 @@ public class TerminalControl : TextArea {
     private void SyncLines() {
         bool hadSelection = HasSelection();
         var backendLines = _backend.Lines;
-        _lines = backendLines.Select(l => l.Text).ToList();
         
+        // Build base lines from backend
+        _lines = backendLines.Select(l => l.Text).ToList();
+        if (_lines.Count == 0) _lines.Add("");
+        
+        // Add the active input line
         if (!_backend.IsProcessRunning) {
-            _lines.Add(GetPrompt() + _currentInput);
-        } else {
-            if (_backend.IsLastLineComplete || _lines.Count == 0 || backendLines.Count == 0) {
-                _lines.Add(_currentInput);
+            // Always put the shell prompt on a new line if there's any backend content
+            if (backendLines.Count > 0) {
+                _lines.Add(GetPrompt() + _currentInput);
             } else {
-                string lastBackend = backendLines.Last().Text;
-                _lines[^1] = lastBackend + _currentInput;
+                _lines[0] = GetPrompt() + _currentInput;
             }
+        } else if (_backend.IsLastLineComplete) {
+            _lines.Add(_currentInput);
+        } else {
+            // Append input to the last incomplete backend line
+            _lines[^1] += _currentInput;
         }
         
         _cursorLine = _lines.Count - 1;
-        _cursorCol = Math.Clamp(_cursorCol, 0, _lines[_cursorLine].Length);
+        _cursorCol = _lines[_cursorLine].Length;
         
         if (!hadSelection) ResetSelection();
         _maxWidthDirty = true;
@@ -131,22 +138,23 @@ public class TerminalControl : TextArea {
 
     protected override void OnEnterPressed() {
         string rawInput = ExtractInputFromLine();
-        
+        string cmd = rawInput.Trim();
+
         _cursorLine = _lines.Count - 1;
         _cursorCol = _lines[_cursorLine].Length;
+
+        // Clear input state first to avoid race conditions with termination callbacks
+        _currentInput = "";
+        _stashInput = "";
+        _historyIndex = -1;
 
         if (!_backend.IsProcessRunning) {
             _backend.WriteLine("\u001b[32m" + GetPrompt() + "\u001b[0m" + rawInput);
 
-            string cmd = rawInput.Trim();
             if (!string.IsNullOrEmpty(cmd)) {
                 _commandHistory.Remove(cmd);
                 _commandHistory.Add(cmd);
             }
-            
-            _currentInput = "";
-            _stashInput = "";
-            _historyIndex = -1;
             
             if (!string.IsNullOrEmpty(cmd)) {
                 if (!HandleInternalCommand(cmd)) {
@@ -159,7 +167,6 @@ public class TerminalControl : TextArea {
             
             // Forward input to process
             _backend.SendInput(rawInput + "\n");
-            _currentInput = "";
         }
 
         SyncLines();
@@ -180,6 +187,11 @@ public class TerminalControl : TextArea {
         string[] parts = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0) return false;
         string name = parts[0].ToLower();
+
+        if (name == "exit" || name == "quit") {
+            GetOwnerWindow()?.Close();
+            return true;
+        }
 
         if (name == "cls" || name == "clear") {
             _backend.Clear();
@@ -262,6 +274,9 @@ public class TerminalControl : TextArea {
             if (!_backend.IsProcessRunning) {
                 OnEnterPressed();
             } else {
+                // Echo the current input to the terminal buffer so it remains visible
+                _backend.EchoInput(_currentInput);
+                
                 _backend.SendInput(_currentInput + "\n");
                 _currentInput = "";
                 SyncLines();
@@ -295,13 +310,11 @@ public class TerminalControl : TextArea {
 
         _currentInput = ExtractInputFromLine();
 
-        // Ensure prompt is present if not running a process
+        // Keep _lines[^1] in sync with _currentInput for cursor positioning and base TextArea logic
         if (_lines.Count > 0) {
             if (!_backend.IsProcessRunning) {
                 string prompt = GetPrompt();
-                if (!_lines[^1].StartsWith(prompt)) {
-                    _lines[^1] = prompt + _currentInput;
-                }
+                _lines[^1] = prompt + _currentInput;
             } else {
                 if (_backend.IsLastLineComplete) {
                     _lines[^1] = _currentInput;
@@ -379,18 +392,18 @@ public class TerminalControl : TextArea {
                 }
 
                 // If this is the last line and it's incomplete, draw the current input at the end
-                if (i == backendLines.Count - 1 && !_backend.IsLastLineComplete) {
-                    font.DrawText(batch, _currentInput, new Vector2(segmentX, y), Color.White * AbsoluteOpacity);
+                if (i == backendLines.Count - 1 && !_backend.IsLastLineComplete && _backend.IsProcessRunning) {
+                    font.DrawText(batch, _currentInput, new Vector2(segmentX, y), TextColor * AbsoluteOpacity);
                 }
             } else if (i == backendLines.Count) {
-                // Input line
+                // Input line (only drawn if backend didn't already consume it)
                 if (!_backend.IsProcessRunning) {
                     string prompt = GetPrompt();
                     font.DrawText(batch, prompt, new Vector2(textX, y), Color.Lime * AbsoluteOpacity);
                     float promptW = font.MeasureString(prompt).X;
-                    font.DrawText(batch, _currentInput, new Vector2(textX + promptW, y), Color.White * AbsoluteOpacity);
-                } else {
-                    font.DrawText(batch, _currentInput, new Vector2(textX, y), Color.White * AbsoluteOpacity);
+                    font.DrawText(batch, _currentInput, new Vector2(textX + promptW, y), TextColor * AbsoluteOpacity);
+                } else if (_backend.IsLastLineComplete) {
+                    font.DrawText(batch, _currentInput, new Vector2(textX, y), TextColor * AbsoluteOpacity);
                 }
             }
         }

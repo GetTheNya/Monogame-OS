@@ -182,7 +182,7 @@ public class AppLoader {
                     AppId = manifest.AppId.ToUpper(),
                     Application = app,
                     Icon = processIcon,
-                    IsThreaded = app.IsThreaded
+                    IsAsync = app.IsAsync
                 };
 
                 // Call setup before Initialize
