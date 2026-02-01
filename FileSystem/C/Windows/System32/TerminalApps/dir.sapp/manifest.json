@@ -1,0 +1,7 @@
+{
+  "appId": "DIR",
+  "name": "Dir Utility",
+  "entryClass": "Dir.Program",
+  "entryMethod": "Main",
+  "terminalOnly": true
+}

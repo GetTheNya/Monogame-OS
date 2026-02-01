@@ -29,6 +29,14 @@ public class TerminalControl : TextArea {
     private string _currentDir = "C:\\";
     private string _promptSuffix = "> ";
 
+    // Tab Completion State
+    private List<string> _completionList = null;
+    private int _completionIndex = -1;
+    private int _completionWordStart = -1;
+    private int _completionWordEnd = -1;
+    private string _linePrefixBeforeCompletion = "";
+    private string _lineSuffixAfterCompletion = "";
+
     public class TerminalSettings {
         public List<string> History { get; set; } = new();
     }
@@ -224,6 +232,173 @@ public class TerminalControl : TextArea {
         EnsureCursorVisible();
     }
 
+    protected override void OnTabPressed() {
+        if (_backend.IsProcessRunning) {
+            // Forward Tab to process if desired, or just do nothing
+            // For now, let's keep it simple: no completion during process execution
+            return;
+        }
+
+        bool shift = InputManager.IsKeyDown(Keys.LeftShift) || InputManager.IsKeyDown(Keys.RightShift);
+
+        if (_completionList != null && _completionList.Count > 0) {
+            // Already in completion mode, cycle
+            if (shift) _completionIndex--;
+            else _completionIndex++;
+
+            if (_completionIndex < 0) _completionIndex = _completionList.Count - 1;
+            if (_completionIndex >= _completionList.Count) _completionIndex = 0;
+
+            ApplyCompletion(_completionList[_completionIndex]);
+            return;
+        }
+
+        // Start new completion
+        string line = _lines[^1];
+        int promptLen = GetPrompt().Length;
+        int relativeCursor = _cursorCol;
+        
+        // Find word boundaries relative to terminal input
+        if (relativeCursor < promptLen) return;
+
+        // Extract the full input line (excluding prompt)
+        string fullInput = line.Substring(promptLen);
+        int inputCursor = relativeCursor - promptLen;
+
+        // Find the word we are currently on
+        // We need to be careful about quotes.
+        int wordStart = 0;
+        int wordEnd = inputCursor;
+        bool inQuotes = false;
+
+        // Simple approach: find the start of the current "token"
+        // A token is delimited by spaces UNLESS inside quotes.
+        for (int i = 0; i < inputCursor; i++) {
+            if (fullInput[i] == '"') {
+                inQuotes = !inQuotes;
+                if (inQuotes) wordStart = i; // Mark start of quoted token
+            } else if (fullInput[i] == ' ' && !inQuotes) {
+                wordStart = i + 1;
+            }
+        }
+
+        string wordToComplete = fullInput.Substring(wordStart, inputCursor - wordStart);
+        bool startsWithQuote = wordToComplete.StartsWith("\"");
+        string cleanWord = wordToComplete.Trim('"');
+
+        // Determine if first word (Command) or not (Path)
+        bool isFirstWord = true;
+        for (int i = 0; i < wordStart; i++) {
+            if (fullInput[i] != ' ' && fullInput[i] != '"') {
+                isFirstWord = false;
+                break;
+            }
+        }
+
+        List<string> matches = new();
+        if (isFirstWord) {
+            matches = GetCommandMatches(cleanWord);
+        } else {
+            matches = GetPathMatches(cleanWord);
+        }
+
+        if (matches.Count > 0) {
+            _completionList = matches;
+            _completionIndex = 0;
+            _completionWordStart = wordStart + promptLen;
+            _completionWordEnd = wordEnd + promptLen;
+            _linePrefixBeforeCompletion = line.Substring(0, _completionWordStart);
+            _lineSuffixAfterCompletion = line.Substring(_cursorCol); // Keep everything after the cursor
+
+            ApplyCompletion(_completionList[_completionIndex]);
+        } else {
+            // No match - Audio feedback
+            Shell.Media.PlayOneShot("C:\\Windows\\Media\\beep.wav");
+        }
+    }
+
+    private List<string> GetCommandMatches(string prefix) {
+        var results = new List<string>();
+        var searchPaths = new List<string> {
+            "C:\\Windows\\System32\\TerminalApps",
+            "C:\\Windows\\System32",
+            _currentDir
+        };
+
+        foreach (var path in searchPaths) {
+            if (!VirtualFileSystem.Instance.IsDirectory(path)) continue;
+            
+            var dirs = VirtualFileSystem.Instance.GetDirectories(path);
+            foreach (var d in dirs) {
+                string name = Path.GetFileName(d);
+                if (name.EndsWith(".sapp", StringComparison.OrdinalIgnoreCase)) {
+                    string baseName = name.Substring(0, name.Length - 5);
+                    if (baseName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) {
+                        if (!results.Contains(baseName)) results.Add(baseName);
+                    }
+                }
+            }
+        }
+        
+        return results.OrderBy(x => x).ToList();
+    }
+
+    private List<string> GetPathMatches(string prefix) {
+        string dirPart = "";
+        string search = prefix;
+
+        if (prefix.Contains('\\') || prefix.Contains('/')) {
+            int lastSlash = Math.Max(prefix.LastIndexOf('\\'), prefix.LastIndexOf('/'));
+            dirPart = prefix.Substring(0, lastSlash + 1);
+            search = prefix.Substring(lastSlash + 1);
+        }
+
+        string resolvedDir = VirtualFileSystem.Instance.ResolvePath(_currentDir, dirPart);
+        var folderResults = new List<string>();
+        var fileResults = new List<string>();
+        
+        if (VirtualFileSystem.Instance.IsDirectory(resolvedDir)) {
+            foreach (var d in VirtualFileSystem.Instance.GetDirectories(resolvedDir)) {
+                string name = Path.GetFileName(d);
+                if (name.StartsWith(search, StringComparison.OrdinalIgnoreCase)) {
+                    folderResults.Add(dirPart + name + "\\");
+                }
+            }
+            foreach (var f in VirtualFileSystem.Instance.GetFiles(resolvedDir)) {
+                string name = Path.GetFileName(f);
+                if (name.StartsWith(search, StringComparison.OrdinalIgnoreCase)) {
+                    fileResults.Add(dirPart + name);
+                }
+            }
+        }
+
+        var results = new List<string>();
+        results.AddRange(folderResults.OrderBy(x => x));
+        results.AddRange(fileResults.OrderBy(x => x));
+        return results;
+    }
+
+    private void ApplyCompletion(string match) {
+        // If match has spaces, wrap in quotes
+        string finalMatch = match;
+        if (finalMatch.Contains(" ")) {
+            // Only add quotes if they aren't already there via prefix
+            if (!_linePrefixBeforeCompletion.EndsWith("\"")) {
+                finalMatch = "\"" + finalMatch + "\"";
+            }
+        }
+
+        // Reconstruct input line
+        _currentInput = _linePrefixBeforeCompletion.Substring(GetPrompt().Length) + finalMatch + _lineSuffixAfterCompletion;
+        
+        SyncLines();
+        
+        // Position cursor at the end of the completion
+        _cursorCol = _linePrefixBeforeCompletion.Length + finalMatch.Length;
+        ResetSelection();
+        EnsureCursorVisible();
+    }
+
     private bool HandleInternalCommand(string cmd) {
         string[] parts = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0) return false;
@@ -300,10 +475,20 @@ public class TerminalControl : TextArea {
     protected override void UpdateInput() {
         if (!IsFocused) return;
 
-        // Reset history if typing
+        // Handle Tab FIRST - this prevents it from being caught by the "reset completion" logic below
+        if (InputManager.IsKeyJustPressed(Keys.Tab)) {
+            OnTabPressed();
+            InputManager.IsKeyboardConsumed = true;
+            return;
+        }
+
+        // Reset history and completion if typing or deleting
         var typed = InputManager.GetTypedChars();
         if (typed.Any() || InputManager.IsKeyJustPressed(Keys.Back) || InputManager.IsKeyJustPressed(Keys.Delete)) {
+            
             _historyIndex = -1;
+            _completionList = null; // Reset completion state
+
             if (!CanEditAt(_cursorLine, _cursorCol)) {
                 _cursorLine = _lines.Count - 1;
                 _cursorCol = _lines[_cursorLine].Length;
@@ -311,8 +496,16 @@ public class TerminalControl : TextArea {
             }
         }
 
+        // Completion should reset if we navigate history or move cursor away from the word
+        if (InputManager.IsKeyJustPressed(Keys.Up) || InputManager.IsKeyJustPressed(Keys.Down) ||
+            InputManager.IsKeyJustPressed(Keys.Left) || InputManager.IsKeyJustPressed(Keys.Right) ||
+            InputManager.IsKeyJustPressed(Keys.Home) || InputManager.IsKeyJustPressed(Keys.End)) {
+            _completionList = null;
+        }
+
         // Handle Enter
         if (InputManager.IsKeyJustPressed(Keys.Enter)) {
+            _completionList = null; // Reset completion
             if (!_backend.IsProcessRunning) {
                 OnEnterPressed();
             } else {
