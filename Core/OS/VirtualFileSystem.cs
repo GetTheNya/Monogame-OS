@@ -137,6 +137,18 @@ public class VirtualFileSystem {
         }
     }
 
+    public void CreateFile(string virtualPath) {
+        string hostPath = ToHostPath(virtualPath);
+        if (string.IsNullOrEmpty(hostPath)) return;
+
+        string dir = Path.GetDirectoryName(hostPath);
+        if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+        if (!File.Exists(hostPath)) {
+            File.Create(hostPath).Dispose();
+        }
+    }
+
     public bool IsDirectory(string virtualPath) {
         string hostPath = ToHostPath(virtualPath);
         return Directory.Exists(hostPath);

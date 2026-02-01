@@ -1,0 +1,7 @@
+{
+  "appId": "TOUCH",
+  "name": "Touch Utility",
+  "entryClass": "Touch.Program",
+  "entryMethod": "Main",
+  "terminalOnly": true
+}

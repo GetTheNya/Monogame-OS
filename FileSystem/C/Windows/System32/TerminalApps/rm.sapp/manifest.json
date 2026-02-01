@@ -1,0 +1,7 @@
+{
+  "appId": "RM",
+  "name": "Remove Utility",
+  "entryClass": "Rm.Program",
+  "entryMethod": "Main",
+  "terminalOnly": true
+}

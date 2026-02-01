@@ -1,0 +1,7 @@
+{
+  "appId": "MKDIR",
+  "name": "Mkdir Utility",
+  "entryClass": "Mkdir.Program",
+  "entryMethod": "Main",
+  "terminalOnly": true
+}

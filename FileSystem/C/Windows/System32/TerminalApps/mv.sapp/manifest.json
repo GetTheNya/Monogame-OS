@@ -1,0 +1,7 @@
+{
+  "appId": "MV",
+  "name": "Move Utility",
+  "entryClass": "Mv.Program",
+  "entryMethod": "Main",
+  "terminalOnly": true
+}
