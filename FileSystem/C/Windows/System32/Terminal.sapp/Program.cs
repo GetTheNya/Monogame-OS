@@ -34,6 +34,7 @@ public class TerminalWindow : Window {
     protected override void OnLoad() {
         _terminal = new TerminalControl(Vector2.Zero, ClientSize);
         AddChild(_terminal);
+        _terminal.LoadSettings(OwnerProcess);
 
         Shell.Hotkeys.RegisterLocal(OwnerProcess, Keys.C, HotkeyModifiers.Ctrl, () => {
             DebugLogger.Log("Terminal: Ctrl+C Hotkey triggered");

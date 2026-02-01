@@ -7,23 +7,16 @@ using SettingsApp.Panels;
 
 namespace SettingsApp;
 
-public class AppSettings {
-    // App-specific settings
-}
-
 public class SettingsWindow : Window {
-    private AppSettings _settings;
     private TabControl _tabs;
 
     public static Window CreateWindow() {
-        var settings = Shell.AppSettings.Load<AppSettings>();
-        return new SettingsWindow(new Vector2(100, 100), new Vector2(600, 500), settings);
+        return new SettingsWindow(new Vector2(100, 100), new Vector2(600, 500));
     }
 
-    public SettingsWindow(Vector2 pos, Vector2 size, AppSettings settings) : base(pos, size) {
+    public SettingsWindow(Vector2 pos, Vector2 size) : base(pos, size) {
         Title = "Settings";
         AppId = "SETTINGS";
-        _settings = settings;
         
         OnResize += () => {
             if (_tabs != null) _tabs.Size = ClientSize;

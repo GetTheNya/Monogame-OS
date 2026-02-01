@@ -27,6 +27,10 @@ public class TerminalControl : TextArea {
     private string _currentDir = "C:\\";
     private string _promptSuffix = "> ";
 
+    public class TerminalSettings {
+        public List<string> History { get; set; } = new();
+    }
+
     public TerminalBackend Backend => _backend;
     public string CurrentDirectory => _currentDir;
 
@@ -44,8 +48,16 @@ public class TerminalControl : TextArea {
         _backend.WriteLine("");
         
         WordWrap = true; // Enable word wrap by default for HentOS Terminal
+
         SyncLines();
         ResetSelection();
+    }
+
+    public void LoadSettings(TheGame.Core.OS.Process process) {
+        if (process == null) return;
+        var settings = Shell.AppSettings.Load<TerminalSettings>(process);
+        _commandHistory = settings.History ?? new();
+        _historyIndex = _commandHistory.Count;
     }
 
     private void SyncLines() {
@@ -76,6 +88,8 @@ public class TerminalControl : TextArea {
         
         if (!hadSelection) ResetSelection();
         _maxWidthDirty = true;
+        UpdateVisualLines();
+        EnsureCursorVisible();
     }
 
     private string GetPrompt() => _currentDir + _promptSuffix;
@@ -156,6 +170,12 @@ public class TerminalControl : TextArea {
             if (!string.IsNullOrEmpty(cmd)) {
                 _commandHistory.Remove(cmd);
                 _commandHistory.Add(cmd);
+
+                // Save history
+                var process = GetOwnerProcess();
+                if (process != null) {
+                    Shell.AppSettings.Save(process, new TerminalSettings { History = _commandHistory });
+                }
             }
             
             if (!string.IsNullOrEmpty(cmd)) {
@@ -393,8 +413,9 @@ public class TerminalControl : TextArea {
         var backendLines = _backend.Lines;
         int firstVis = (int)Math.Floor(_scrollOffset / lineHeight);
         int lastVis = (int)Math.Ceiling((_scrollOffset + Size.Y) / lineHeight);
-        firstVis = Math.Clamp(firstVis, 0, _visualLines.Count - 1);
-        lastVis = Math.Clamp(lastVis, 0, _visualLines.Count - 1);
+        int maxVis = Math.Max(0, _visualLines.Count - 1);
+        firstVis = Math.Clamp(firstVis, 0, maxVis);
+        lastVis = Math.Clamp(lastVis, 0, maxVis);
         
         for (int i = firstVis; i <= lastVis; i++) {
             var vl = _visualLines[i];

@@ -21,8 +21,7 @@ public class AppSettings {
 
 public class FileExplorerWindow : Window {
     public static Window CreateWindow() {
-        var settings = Shell.AppSettings.Load<AppSettings>();
-        return new FileExplorerWindow(new Vector2(100, 100), new Vector2(850, 600), settings);
+        return new FileExplorerWindow(new Vector2(100, 100), new Vector2(850, 600));
     }
 
     private string _currentPath = "C:\\";
@@ -35,16 +34,15 @@ public class FileExplorerWindow : Window {
     private const float SidebarWidth = 180f;
     private bool _isComputerMode = false;
 
-    public FileExplorerWindow(Vector2 pos, Vector2 size, AppSettings settings) : base(pos, size) {
+    public FileExplorerWindow(Vector2 pos, Vector2 size) : base(pos, size) {
         Title = "File Explorer";
         AppId = "EXPLORER";
-        _settings = settings;
-        _currentPath = _settings.LastPath;
 
         OnResize += () => LayoutUI();
     }
     
     protected override void OnLoad() {
+        _settings = Shell.AppSettings.Load<AppSettings>(OwnerProcess);
         SetupUI();
         NavigateTo(_currentPath);
     }
@@ -156,7 +154,7 @@ public class FileExplorerWindow : Window {
             _currentPath = path;
             _pathInput.Value = path;
             _settings.LastPath = path;
-            Shell.AppSettings.Save(_settings);
+            Shell.AppSettings.Save(OwnerProcess, _settings);
             RefreshList();
         }
     }

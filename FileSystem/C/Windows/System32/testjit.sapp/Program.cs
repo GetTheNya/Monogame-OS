@@ -15,56 +15,59 @@ public class AppSettings {
 
 public class JitApp : Window {
     public static Window CreateWindow() {
-        var settings = Shell.AppSettings.Load<AppSettings>();
-        return new JitApp(new Vector2(100, 100), new Vector2(400, 300), settings);
+        return new JitApp(new Vector2(100, 100), new Vector2(400, 300));
     }
 
-    private readonly string notifPath = "C:\\Windows\\Media\\notify.wav";
-    private readonly AppSettings _settings;
-    private readonly Label _counterLabel;
-    private readonly Texture2D _icon;
+    private AppSettings _settings;
+    private string notifPath = "C:\\Windows\\Media\\notify.wav";
 
-    public JitApp(Vector2 pos, Vector2 size, AppSettings settings) : base(pos, size) {
+    public JitApp(Vector2 pos, Vector2 size) : base(pos, size) {
         Title = "JIT Test App";
         AppId = "TESTJIT";
-        _settings = settings;
+    }
 
-        _counterLabel = new Label(new Vector2(20, 20), $"Loaded from settings: {settings.Counter}") {
+    protected override void OnLoad() {
+        _settings = Shell.AppSettings.Load<AppSettings>(OwnerProcess);
+        SetupUI();
+    }
+
+    private void SetupUI() {
+        Label counterLabel = new Label(new Vector2(20, 20), $"Loaded from settings: {_settings.Counter}") {
             TextColor = Color.White,
             FontSize = 24
         };
-        AddChild(_counterLabel);
+        AddChild(counterLabel);
 
         var btn = new Button(new Vector2(20, 70), new Vector2(150, 40), "Increment & Save") {
             OnClickAction = () => {
                 _settings.Counter++;
-                _counterLabel.Text = $"Counter: {_settings.Counter}";
-                Shell.AppSettings.Save(_settings);
+                counterLabel.Text = $"Counter: {_settings.Counter}";
+                Shell.AppSettings.Save(OwnerProcess, _settings);
                 Shell.Notifications.Show("Success", "Settings saved!", null, null);
                 Shell.Audio.PlaySound(notifPath);
             }
         };
         AddChild(btn);
 
-        _icon = Shell.Images.LoadAppImage("tray_icon.png");
+        Texture2D icon = Shell.Images.LoadAppImage("tray_icon.png");
 
         string trayIconId = "";
 
-        var trayIcon = new TrayIcon(_icon, "JIT Test App") {
+        var trayIcon = new TrayIcon(icon, "JIT Test App") {
             OnClick = () => {
-                Shell.Notifications.Show("JIT Test App", "Clicked!", _icon, null);
+                Shell.Notifications.Show("JIT Test App", "Clicked!", icon, null);
             }, 
             OnDoubleClick = () => {
-                Shell.Notifications.Show("JIT Test App", "Double clicked!", _icon, null);
+                Shell.Notifications.Show("JIT Test App", "Double clicked!", icon, null);
             },
             OnRightClick = () => {
-                Shell.Notifications.Show("JIT Test App", "Right clicked!", _icon, null);
+                Shell.Notifications.Show("JIT Test App", "Right clicked!", icon, null);
             },
             OnRightDoubleClick = () => {
-                Shell.Notifications.Show("JIT Test App", "Right double clicked!", _icon, null);
+                Shell.Notifications.Show("JIT Test App", "Right double clicked!", icon, null);
             },
             OnMouseWheel = (int delta) => {
-                Shell.Notifications.Show("JIT Test App", "Mouse wheel!" + delta, _icon, null);
+                Shell.Notifications.Show("JIT Test App", "Mouse wheel!" + delta, icon, null);
             }
         };
         trayIconId = Shell.SystemTray.AddIcon(this, trayIcon);

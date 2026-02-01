@@ -8,10 +8,6 @@ using TheGame.Core.OS;
 
 namespace NotepadApp;
 
-public class AppSettings {
-    // App-specific settings only
-}
-
 public class Program {
     static Program() {
         // Register file type associations - AppId is auto-detected
@@ -21,25 +17,22 @@ public class Program {
     }
 
     public static Window CreateWindow(string[] args) {
-        var settings = Shell.AppSettings.Load<AppSettings>();
         string filePath = args != null && args.Length > 0 ? args[0] : null;
-        return new NotepadWindow(new Vector2(100, 100), new Vector2(700, 500), settings, filePath);
+        return new NotepadWindow(new Vector2(100, 100), new Vector2(700, 500), filePath);
     }
 }
 
 public class NotepadWindow : Window {
     public static readonly string[] SupportedExtensions = new[] { ".txt", ".log", ".json", ".cs" };
 
-    private AppSettings _settings;
     private TextArea _textArea;
     private MenuBar _menuBar;
     private string _currentFilePath = null;
     private bool _isModified = false;
     private const float MenuBarHeight = 26f;
 
-    public NotepadWindow(Vector2 pos, Vector2 size, AppSettings settings, string filePath = null) : base(pos, size) {
+    public NotepadWindow(Vector2 pos, Vector2 size, string filePath = null) : base(pos, size) {
         Title = "Untitled - Notepad";
-        _settings = settings;
         AppId = "NOTEPAD"; // Required for automatic persistence
         _filePath = filePath;
 

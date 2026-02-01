@@ -706,8 +706,9 @@ public class TextArea : ValueControl<string> {
         // Draw lines (optimized: only visible lines)
         int firstVis = (int)Math.Floor(_scrollOffset / lineHeight);
         int lastVis = (int)Math.Ceiling((_scrollOffset + Size.Y) / lineHeight);
-        firstVis = Math.Clamp(firstVis, 0, _visualLines.Count - 1);
-        lastVis = Math.Clamp(lastVis, 0, _visualLines.Count - 1);
+        int maxVis = Math.Max(0, _visualLines.Count - 1);
+        firstVis = Math.Clamp(firstVis, 0, maxVis);
+        lastVis = Math.Clamp(lastVis, 0, maxVis);
 
         for (int i = firstVis; i <= lastVis; i++) {
             var vl = _visualLines[i];
