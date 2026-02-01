@@ -16,8 +16,23 @@ namespace TheGame.Core.UI.Controls;
 /// </summary>
 public class TextArea : ValueControl<string> {
     protected List<string> _lines = new() { "" };
+    protected record struct VisualLine(int LogicalLineIndex, int StartIndex, int Length);
+    protected List<VisualLine> _visualLines = new();
+    
     protected int _cursorLine = 0;
     protected int _cursorCol = 0;
+    
+    private bool _wordWrap = false;
+    public bool WordWrap {
+        get => _wordWrap;
+        set {
+            if (_wordWrap == value) return;
+            _wordWrap = value;
+            _maxWidthDirty = true;
+            UpdateVisualLines();
+        }
+    }
+    
     protected int _selStartLine = 0;
     protected int _selStartCol = 0;
     protected float _scrollOffset = 0f;
@@ -66,12 +81,59 @@ public class TextArea : ValueControl<string> {
         _selStartCol = 0;
         _maxWidthDirty = true;
         
+        UpdateVisualLines();
         base.SetValue(newValue, notify);
     }
 
     protected virtual void NotifyUserChanged() {
         _maxWidthDirty = true;
+        UpdateVisualLines();
         base.SetValue(string.Join("\n", _lines), true);
+    }
+
+    protected void UpdateVisualLines() {
+        _visualLines.Clear();
+        if (GameContent.FontSystem == null) {
+            for (int i = 0; i < _lines.Count; i++) _visualLines.Add(new VisualLine(i, 0, _lines[i].Length));
+            return;
+        }
+
+        if (!WordWrap) {
+            for (int i = 0; i < _lines.Count; i++) _visualLines.Add(new VisualLine(i, 0, _lines[i].Length));
+            return;
+        }
+
+        var font = GameContent.FontSystem.GetFont(FontSize);
+        float maxWidth = Size.X - 20; // 5 padding each side + some safety
+        if (maxWidth <= 0) {
+             for (int i = 0; i < _lines.Count; i++) _visualLines.Add(new VisualLine(i, 0, _lines[i].Length));
+             return;
+        }
+
+        for (int i = 0; i < _lines.Count; i++) {
+            string line = _lines[i];
+            if (string.IsNullOrEmpty(line)) {
+                _visualLines.Add(new VisualLine(i, 0, 0));
+                continue;
+            }
+
+            int start = 0;
+            while (start < line.Length) {
+                int count = 1;
+                while (start + count <= line.Length && font.MeasureString(line.Substring(start, count)).X <= maxWidth) {
+                    count++;
+                }
+                
+                // If the first character is already too wide, we force it and move on
+                if (count == 1) {
+                    _visualLines.Add(new VisualLine(i, start, 1));
+                    start += 1;
+                } else {
+                    _visualLines.Add(new VisualLine(i, start, count - 1));
+                    start += count - 1;
+                }
+            }
+        }
     }
     
     // Backwards compatibility alias
@@ -91,6 +153,7 @@ public class TextArea : ValueControl<string> {
     public TextArea(Vector2 position, Vector2 size) : base(position, size, "") {
         BackgroundColor = new Color(30, 30, 30);
         BorderColor = new Color(60, 60, 60);
+        OnResize += () => UpdateVisualLines();
     }
 
     protected override void OnHover() {
@@ -255,7 +318,7 @@ public class TextArea : ValueControl<string> {
     }
 
     protected virtual void SetCursorFromMouse() {
-        if (GameContent.FontSystem == null) return;
+        if (GameContent.FontSystem == null || _visualLines.Count == 0) return;
         var font = GameContent.FontSystem.GetFont(FontSize);
         float lineHeight = font.LineHeight;
 
@@ -263,30 +326,52 @@ public class TextArea : ValueControl<string> {
         local.Y += _scrollOffset;
         local.X += _scrollOffsetX;
 
-        int line = (int)(local.Y / lineHeight);
-        line = Math.Clamp(line, 0, _lines.Count - 1);
+        int visualIdx = (int)(local.Y / lineHeight);
+        visualIdx = Math.Clamp(visualIdx, 0, _visualLines.Count - 1);
 
-        int col = 0;
+        var vl = _visualLines[visualIdx];
+        string lineText = _lines[vl.LogicalLineIndex];
+        string visualPart = lineText.Substring(vl.StartIndex, vl.Length);
+
+        int colInVisual = 0;
         float bestDist = float.MaxValue;
-        string lineText = _lines[line];
-        for (int i = 0; i <= lineText.Length; i++) {
-            float w = i == 0 ? 0 : font.MeasureString(lineText.Substring(0, i)).X;
+        for (int i = 0; i <= visualPart.Length; i++) {
+            float w = i == 0 ? 0 : font.MeasureString(visualPart.Substring(0, i)).X;
             float dist = Math.Abs(local.X - w);
-            if (dist < bestDist) { bestDist = dist; col = i; }
+            if (dist < bestDist) { bestDist = dist; colInVisual = i; }
         }
 
-        _cursorLine = line;
-        _cursorCol = col;
+        _cursorLine = vl.LogicalLineIndex;
+        _cursorCol = vl.StartIndex + colInVisual;
     }
 
     public override Vector2? GetCaretPosition() {
-        if (GameContent.FontSystem == null) return null;
+        if (GameContent.FontSystem == null || _visualLines.Count == 0) return null;
         var font = GameContent.FontSystem.GetFont(FontSize);
         float lineHeight = font.LineHeight;
-        float cursorX = _cursorCol == 0 ? 0 : font.MeasureString(_lines[_cursorLine].Substring(0, _cursorCol)).X;
-        float cursorY = _cursorLine * lineHeight;
+
+        int visualIdx = GetVisualLineIndex(_cursorLine, _cursorCol);
+        var vl = _visualLines[visualIdx];
+        string visualPart = _lines[vl.LogicalLineIndex].Substring(vl.StartIndex, _cursorCol - vl.StartIndex);
+        
+        float cursorX = font.MeasureString(visualPart).X;
+        float cursorY = visualIdx * lineHeight;
         
         return AbsolutePosition + new Vector2(5 - _scrollOffsetX + cursorX, 5 - _scrollOffset + cursorY);
+    }
+
+    protected int GetVisualLineIndex(int logicalLine, int logicalCol) {
+        for (int i = 0; i < _visualLines.Count; i++) {
+            var vl = _visualLines[i];
+            if (vl.LogicalLineIndex == logicalLine) {
+                if (logicalCol >= vl.StartIndex && logicalCol < vl.StartIndex + vl.Length) return i;
+                // Last visual line of a logical line - includes the very end
+                if (logicalCol == vl.StartIndex + vl.Length) {
+                    if (i == _visualLines.Count - 1 || _visualLines[i+1].LogicalLineIndex != logicalLine) return i;
+                }
+            }
+        }
+        return 0;
     }
 
     public virtual void SelectAll() {
@@ -449,38 +534,49 @@ public class TextArea : ValueControl<string> {
     }
 
     protected virtual void EnsureCursorVisible() {
-        if (GameContent.FontSystem == null) return;
+        if (GameContent.FontSystem == null || _visualLines.Count == 0) return;
         var font = GameContent.FontSystem.GetFont(FontSize);
         float lineHeight = font.LineHeight;
-        float cursorY = _cursorLine * lineHeight;
+
+        int visualIdx = GetVisualLineIndex(_cursorLine, _cursorCol);
+        float cursorY = visualIdx * lineHeight;
 
         if (cursorY < _targetScrollOffset) _targetScrollOffset = cursorY;
         if (cursorY + lineHeight > _targetScrollOffset + Size.Y - 10) _targetScrollOffset = cursorY + lineHeight - Size.Y + 10;
 
-        int safeCol = Math.Clamp(_cursorCol, 0, _lines[_cursorLine].Length);
-        float cursorX = safeCol == 0 ? 0 : font.MeasureString(_lines[_cursorLine].Substring(0, safeCol)).X;
-        if (cursorX < _targetScrollOffsetX) _targetScrollOffsetX = cursorX;
-        if (cursorX > _targetScrollOffsetX + Size.X - 20) _targetScrollOffsetX = cursorX - Size.X + 20;
+        if (WordWrap) {
+            _targetScrollOffsetX = 0;
+        } else {
+            int safeCol = Math.Clamp(_cursorCol, 0, _lines[_cursorLine].Length);
+            float cursorX = safeCol == 0 ? 0 : font.MeasureString(_lines[_cursorLine].Substring(0, safeCol)).X;
+            if (cursorX < _targetScrollOffsetX) _targetScrollOffsetX = cursorX;
+            if (cursorX > _targetScrollOffsetX + Size.X - 20) _targetScrollOffsetX = cursorX - Size.X + 20;
+        }
 
         ClampScroll();
     }
 
     protected virtual void ClampScroll() {
-        if (GameContent.FontSystem == null) return;
+        if (GameContent.FontSystem == null || _visualLines.Count == 0) return;
         var font = GameContent.FontSystem.GetFont(FontSize);
-        float totalHeight = _lines.Count * font.LineHeight;
+        float totalHeight = _visualLines.Count * font.LineHeight;
         _targetScrollOffset = Math.Clamp(_targetScrollOffset, 0, Math.Max(0, totalHeight - Size.Y + 10));
 
-        if (_maxWidthDirty) {
-            float maxW = 0;
-            foreach (var l in _lines) {
-                float w = font.MeasureString(l).X;
-                if (w > maxW) maxW = w;
+        if (WordWrap) {
+            _targetScrollOffsetX = 0;
+            _scrollOffsetX = 0;
+        } else {
+            if (_maxWidthDirty) {
+                float maxW = 0;
+                foreach (var l in _lines) {
+                    float w = font.MeasureString(l).X;
+                    if (w > maxW) maxW = w;
+                }
+                _cachedMaxWidth = maxW;
+                _maxWidthDirty = false;
             }
-            _cachedMaxWidth = maxW;
-            _maxWidthDirty = false;
+            _targetScrollOffsetX = Math.Clamp(_targetScrollOffsetX, 0, Math.Max(0, _cachedMaxWidth - Size.X + 20));
         }
-        _targetScrollOffsetX = Math.Clamp(_targetScrollOffsetX, 0, Math.Max(0, _cachedMaxWidth - Size.X + 20));
     }
 
     public override void Update(GameTime gameTime) {
@@ -566,36 +662,59 @@ public class TextArea : ValueControl<string> {
         batch.Begin();
         spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, DepthStencilState.None, rasterizerState);
 
-        float textX = absPos.X + 5 - _scrollOffsetX;
-        float textY = absPos.Y + 5 - _scrollOffset;
+        float textX = absPos.X + 10 - _scrollOffsetX;
+        float textY = absPos.Y + 10 - _scrollOffset;
 
         // Draw selection highlight
         if (HasSelection()) {
             GetSelectionRange(out int sl, out int sc, out int el, out int ec);
-            for (int i = sl; i <= el; i++) {
+            
+            for (int i = 0; i < _visualLines.Count; i++) {
+                var vl = _visualLines[i];
                 float y = textY + i * lineHeight;
                 if (y + lineHeight < absPos.Y || y > absPos.Y + Size.Y) continue;
 
-                int startC = (i == sl) ? sc : 0;
-                int endC = (i == el) ? ec : _lines[i].Length;
+                // Determine if this visual line is within selection range
+                // A visual line is selected if its logical line is in (sl, el)
+                // or if it's the sl/el logical line and its start/end offsets overlap with sc/ec.
+                
+                int visualLogicalLine = vl.LogicalLineIndex;
+                if (visualLogicalLine < sl || visualLogicalLine > el) continue;
 
-                float x1 = startC == 0 ? 0 : font.MeasureString(_lines[i].Substring(0, startC)).X;
-                float x2 = endC == 0 ? 0 : font.MeasureString(_lines[i].Substring(0, endC)).X;
+                int startC = 0;
+                int endC = vl.Length;
+
+                if (visualLogicalLine == sl) {
+                    startC = Math.Max(0, sc - vl.StartIndex);
+                }
+                if (visualLogicalLine == el) {
+                    endC = Math.Min(vl.Length, ec - vl.StartIndex);
+                }
+
+                if (startC >= endC && visualLogicalLine == sl && visualLogicalLine == el) continue;
+                if (startC >= vl.Length) continue;
+                if (endC <= 0) continue;
+
+                string visualText = _lines[vl.LogicalLineIndex].Substring(vl.StartIndex, vl.Length);
+                float x1 = startC <= 0 ? 0 : font.MeasureString(visualText.Substring(0, startC)).X;
+                float x2 = endC >= vl.Length ? font.MeasureString(visualText).X : font.MeasureString(visualText.Substring(0, endC)).X;
 
                 batch.FillRectangle(new Vector2(textX + x1, y), new Vector2(x2 - x1, lineHeight), FocusedBorderColor * 0.3f * AbsoluteOpacity);
             }
         }
 
         // Draw lines (optimized: only visible lines)
-        int firstLine = (int)Math.Floor(_scrollOffset / lineHeight);
-        int lastLine = (int)Math.Ceiling((_scrollOffset + Size.Y) / lineHeight);
-        firstLine = Math.Clamp(firstLine, 0, _lines.Count - 1);
-        lastLine = Math.Clamp(lastLine, 0, _lines.Count - 1);
+        int firstVis = (int)Math.Floor(_scrollOffset / lineHeight);
+        int lastVis = (int)Math.Ceiling((_scrollOffset + Size.Y) / lineHeight);
+        firstVis = Math.Clamp(firstVis, 0, _visualLines.Count - 1);
+        lastVis = Math.Clamp(lastVis, 0, _visualLines.Count - 1);
 
-        for (int i = firstLine; i <= lastLine; i++) {
+        for (int i = firstVis; i <= lastVis; i++) {
+            var vl = _visualLines[i];
             float y = textY + i * lineHeight;
-            if (!string.IsNullOrEmpty(_lines[i])) {
-                font.DrawText(batch, _lines[i], new Vector2(textX, y), TextColor * AbsoluteOpacity);
+            string visualPart = _lines[vl.LogicalLineIndex].Substring(vl.StartIndex, vl.Length);
+            if (!string.IsNullOrEmpty(visualPart)) {
+                font.DrawText(batch, visualPart, new Vector2(textX, y), TextColor * AbsoluteOpacity);
             }
         }
 
@@ -606,8 +725,12 @@ public class TextArea : ValueControl<string> {
 
         // Cursor
         if (_showCursor && IsFocused) {
-            float cursorX = _cursorCol == 0 ? 0 : font.MeasureString(_lines[_cursorLine].Substring(0, _cursorCol)).X;
-            float cursorY = textY + _cursorLine * lineHeight;
+            int visualIdx = GetVisualLineIndex(_cursorLine, _cursorCol);
+            var vl = _visualLines[visualIdx];
+            string visualPart = _lines[vl.LogicalLineIndex].Substring(vl.StartIndex, _cursorCol - vl.StartIndex);
+            
+            float cursorX = font.MeasureString(visualPart).X;
+            float cursorY = textY + visualIdx * lineHeight;
             batch.FillRectangle(new Vector2(textX + cursorX, cursorY), new Vector2(2, lineHeight), FocusedBorderColor * AbsoluteOpacity);
         }
         

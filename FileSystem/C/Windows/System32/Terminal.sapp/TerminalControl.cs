@@ -12,6 +12,7 @@ using TheGame.Core.UI.Controls;
 using TheGame.Core.Input;
 using TheGame.Graphics;
 using TheGame;
+using FontStashSharp;
 
 
 namespace TerminalApp;
@@ -38,10 +39,11 @@ public class TerminalControl : TextArea {
         FontSize = 14;
         DrawBackground = true;
 
-        _backend.WriteLine("Antigravity OS [Version 1.0.462]", Color.Gray);
-        _backend.WriteLine("(c) 2026 Google Deepmind. All rights reserved.", Color.Gray);
+        _backend.WriteLine("HentOS [Version 1.0.462]", Color.Gray);
+        _backend.WriteLine("(C) 2026 Developed by GetTheNya. All rights reserved.", Color.Gray);
         _backend.WriteLine("");
         
+        WordWrap = true; // Enable word wrap by default for HentOS Terminal
         SyncLines();
         ResetSelection();
     }
@@ -334,7 +336,7 @@ public class TerminalControl : TextArea {
         batch.FillRectangle(absPos, Size, BackgroundColor * AbsoluteOpacity, rounded: 3f);
         batch.BorderRectangle(absPos, Size, (IsFocused ? FocusedBorderColor : BorderColor) * AbsoluteOpacity, thickness: 1f, rounded: 3f);
 
-        if (GameContent.FontSystem == null) return;
+        if (GameContent.FontSystem == null || _visualLines.Count == 0) return;
         var font = GameContent.FontSystem.GetFont(FontSize); 
         float lineHeight = font.LineHeight;
 
@@ -358,63 +360,102 @@ public class TerminalControl : TextArea {
         // Selection
         if (HasSelection()) {
             GetSelectionRange(out int sl, out int sc, out int el, out int ec);
-            for (int i = sl; i <= el; i++) {
-                if (i < 0 || i >= _lines.Count) continue;
+            for (int i = 0; i < _visualLines.Count; i++) {
+                var vl = _visualLines[i];
                 float y = textY + i * lineHeight;
                 if (y + lineHeight < absPos.Y || y > absPos.Y + Size.Y) continue;
 
-                int startC = (i == sl) ? sc : 0;
-                int endC = (i == el) ? ec : _lines[i].Length;
+                int visualLogicalLine = vl.LogicalLineIndex;
+                if (visualLogicalLine < sl || visualLogicalLine > el) continue;
 
-                float x1 = (startC <= 0) ? 0 : font.MeasureString(_lines[i].Substring(0, Math.Min(_lines[i].Length, startC))).X;
-                float x2 = (endC <= 0) ? 0 : font.MeasureString(_lines[i].Substring(0, Math.Min(_lines[i].Length, endC))).X;
+                int startC = 0;
+                int endC = vl.Length;
+
+                if (visualLogicalLine == sl) {
+                    startC = Math.Max(0, sc - vl.StartIndex);
+                }
+                if (visualLogicalLine == el) {
+                    endC = Math.Min(vl.Length, ec - vl.StartIndex);
+                }
+
+                if (startC >= endC && visualLogicalLine == sl && visualLogicalLine == el) continue;
+                if (startC >= vl.Length) continue;
+                if (endC <= 0) continue;
+
+                string visualText = _lines[vl.LogicalLineIndex].Substring(vl.StartIndex, vl.Length);
+                float x1 = startC <= 0 ? 0 : font.MeasureString(visualText.Substring(0, startC)).X;
+                float x2 = endC >= vl.Length ? font.MeasureString(visualText).X : font.MeasureString(visualText.Substring(0, endC)).X;
 
                 batch.FillRectangle(new Vector2(textX + x1, y), new Vector2(x2 - x1, lineHeight), FocusedBorderColor * 0.3f * AbsoluteOpacity);
             }
         }
 
         var backendLines = _backend.Lines;
-        int firstLine = (int)Math.Floor(_scrollOffset / lineHeight);
-        int lastLine = (int)Math.Ceiling((_scrollOffset + Size.Y) / lineHeight);
-        firstLine = Math.Clamp(firstLine, 0, _lines.Count - 1);
-        lastLine = Math.Clamp(lastLine, 0, _lines.Count - 1);
+        int firstVis = (int)Math.Floor(_scrollOffset / lineHeight);
+        int lastVis = (int)Math.Ceiling((_scrollOffset + Size.Y) / lineHeight);
+        firstVis = Math.Clamp(firstVis, 0, _visualLines.Count - 1);
+        lastVis = Math.Clamp(lastVis, 0, _visualLines.Count - 1);
         
-        for (int i = firstLine; i <= lastLine; i++) {
+        for (int i = firstVis; i <= lastVis; i++) {
+            var vl = _visualLines[i];
             float y = textY + i * lineHeight;
-            if (i < backendLines.Count) {
-                var bl = backendLines[i];
-                float segmentX = textX;
-                if (bl.Segments != null) {
-                    foreach (var seg in bl.Segments) {
-                        font.DrawText(batch, seg.Text, new Vector2(segmentX, y), seg.Color * AbsoluteOpacity);
-                        segmentX += font.MeasureString(seg.Text).X;
-                    }
-                }
 
-                // If this is the last line and it's incomplete, draw the current input at the end
-                if (i == backendLines.Count - 1 && !_backend.IsLastLineComplete && _backend.IsProcessRunning) {
-                    font.DrawText(batch, _currentInput, new Vector2(segmentX, y), TextColor * AbsoluteOpacity);
+            // Is this line from the backend?
+            if (vl.LogicalLineIndex < backendLines.Count) {
+                var bl = backendLines[vl.LogicalLineIndex];
+                DrawWrappedSegments(batch, font, bl.Segments, vl.StartIndex, vl.Length, textX, y);
+
+                // If this is the last backend line and it's incomplete, we might need to draw input at the end
+                if (vl.LogicalLineIndex == backendLines.Count - 1 && !_backend.IsLastLineComplete && _backend.IsProcessRunning) {
+                     // Determine how much of the logical line is prefix (from backend)
+                     // If the wrap starts AFTER prefix, we draw only input.
+                     // If the wrap covers the transition, we offset.
+                     int prefixLen = bl.Text.Length;
+                     if (vl.StartIndex + vl.Length > prefixLen) {
+                         int inputStartInVisual = Math.Max(0, prefixLen - vl.StartIndex);
+                         int inputLenInVisual = vl.Length - inputStartInVisual;
+                         if (inputLenInVisual > 0) {
+                             string inputPart = _currentInput.Substring(0, Math.Min(_currentInput.Length, inputLenInVisual));
+                             float prefixWidth = font.MeasureString(_lines[vl.LogicalLineIndex].Substring(vl.StartIndex, inputStartInVisual)).X;
+                             font.DrawText(batch, inputPart, new Vector2(textX + prefixWidth, y), TextColor * AbsoluteOpacity);
+                         }
+                     }
                 }
-            } else if (i == backendLines.Count) {
-                // Input line (only drawn if backend didn't already consume it)
+            } else if (vl.LogicalLineIndex == backendLines.Count) {
+                // This is the active input line (Shell prompt or follow-up line after complete backend output)
                 if (!_backend.IsProcessRunning) {
                     string prompt = GetPrompt();
-                    font.DrawText(batch, prompt, new Vector2(textX, y), Color.Lime * AbsoluteOpacity);
-                    float promptW = font.MeasureString(prompt).X;
-                    font.DrawText(batch, _currentInput, new Vector2(textX + promptW, y), TextColor * AbsoluteOpacity);
+                    string fullLine = _lines[vl.LogicalLineIndex];
+                    string visualPart = fullLine.Substring(vl.StartIndex, vl.Length);
+
+                    if (vl.StartIndex < prompt.Length) {
+                        // Includes prompt part
+                        int promptPartLen = Math.Min(vl.Length, prompt.Length - vl.StartIndex);
+                        string promptPart = prompt.Substring(vl.StartIndex, promptPartLen);
+                        font.DrawText(batch, promptPart, new Vector2(textX, y), Color.Lime * AbsoluteOpacity);
+                        
+                        if (vl.Length > promptPartLen) {
+                             string inputPart = visualPart.Substring(promptPartLen);
+                             float pWidth = font.MeasureString(promptPart).X;
+                             font.DrawText(batch, inputPart, new Vector2(textX + pWidth, y), TextColor * AbsoluteOpacity);
+                        }
+                    } else {
+                        // Entirely user input
+                        font.DrawText(batch, visualPart, new Vector2(textX, y), TextColor * AbsoluteOpacity);
+                    }
                 } else if (_backend.IsLastLineComplete) {
-                    font.DrawText(batch, _currentInput, new Vector2(textX, y), TextColor * AbsoluteOpacity);
+                     string visualPart = _lines[vl.LogicalLineIndex].Substring(vl.StartIndex, vl.Length);
+                     font.DrawText(batch, visualPart, new Vector2(textX, y), TextColor * AbsoluteOpacity);
                 }
             }
         }
 
         // Cursor
         if (_showCursor && IsFocused) {
-            float cX = textX;
-            if (_cursorLine >= 0 && _cursorLine < _lines.Count) {
-                cX += font.MeasureString(_lines[_cursorLine].Substring(0, Math.Min(_lines[_cursorLine].Length, _cursorCol))).X;
-            }
-            float cY = textY + _cursorLine * lineHeight;
+            int visIdx = GetVisualLineIndex(_cursorLine, _cursorCol);
+            var vl = _visualLines[visIdx];
+            float cX = textX + font.MeasureString(_lines[vl.LogicalLineIndex].Substring(vl.StartIndex, _cursorCol - vl.StartIndex)).X;
+            float cY = textY + visIdx * lineHeight;
             batch.FillRectangle(new Vector2(cX, cY + 2), new Vector2(8, lineHeight - 4), Color.White * 0.7f * AbsoluteOpacity);
         }
 
@@ -424,5 +465,35 @@ public class TerminalControl : TextArea {
         G.GraphicsDevice.ScissorRectangle = oldScissor;
         spriteBatch.Begin();
         batch.Begin();
+    }
+
+    private void DrawWrappedSegments(ShapeBatch batch, DynamicSpriteFont font, List<TerminalSegment> segments, int start, int length, float x, float y) {
+        if (segments == null) return;
+        
+        int currentOffset = 0;
+        float currentX = x;
+
+        foreach (var seg in segments) {
+            int segEnd = currentOffset + seg.Text.Length;
+            
+            // Check if this segment overlaps with the visual line range [start, start + length]
+            int overlapStart = Math.Max(start, currentOffset);
+            int overlapEnd = Math.Min(start + length, segEnd);
+
+            if (overlapStart < overlapEnd) {
+                int localStart = overlapStart - currentOffset;
+                int localLen = overlapEnd - overlapStart;
+                string part = seg.Text.Substring(localStart, localLen);
+                
+                // We need to know where to start drawing this part relative to the visual line start
+                // (Already handled by currentX incrementing)
+                
+                font.DrawText(batch, part, new Vector2(currentX, y), seg.Color * AbsoluteOpacity);
+                currentX += font.MeasureString(part).X;
+            }
+            
+            currentOffset = segEnd;
+            if (currentOffset >= start + length) break;
+        }
     }
 }

@@ -82,7 +82,7 @@ public class NotepadWindow : Window {
         });
 
         _menuBar.AddMenu("View", m => {
-            m.AddItem("Word Wrap", () => { /* TODO */ });
+            m.AddItem("Word Wrap", () => { _textArea.WordWrap = !_textArea.WordWrap; });
             m.AddItem("Zoom In", () => { _textArea.FontSize += 2; });
             m.AddItem("Zoom Out", () => { if (_textArea.FontSize > 8) _textArea.FontSize -= 2; });
         });
