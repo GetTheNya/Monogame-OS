@@ -46,6 +46,9 @@ public class AppManifest {
     [JsonPropertyName("terminalOnly")]
     public bool TerminalOnly { get; set; } = false;
 
+    [JsonPropertyName("references")]
+    public string[] References { get; set; } = Array.Empty<string>();
+
     public static AppManifest FromJson(string json) {
         return System.Text.Json.JsonSerializer.Deserialize<AppManifest>(json);
     }

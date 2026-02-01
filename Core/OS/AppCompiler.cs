@@ -16,12 +16,12 @@ public class AppCompiler {
     private static AppCompiler _instance;
     public static AppCompiler Instance => _instance ??= new AppCompiler();
 
-    private readonly List<MetadataReference> _references;
+    private readonly List<MetadataReference> _baseReferences;
+    private readonly Dictionary<string, MetadataReference> _optionalReferences;
 
     private AppCompiler() {
-        // Gather required assembly references
-        _references = new List<MetadataReference> {
-            // .NET Core libraries
+        // Base references that EVERY app needs
+        _baseReferences = new List<MetadataReference> {
             MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(Console).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(System.Runtime.AssemblyTargetedPatchBandAttribute).Assembly.Location),
@@ -34,16 +34,55 @@ public class AppCompiler {
             MetadataReference.CreateFromFile(typeof(Microsoft.Xna.Framework.Game).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(Microsoft.Xna.Framework.Graphics.SpriteBatch).Assembly.Location),
 
-            // FontStashSharp
-            MetadataReference.CreateFromFile(typeof(FontStashSharp.FontSystem).Assembly.Location),
-            MetadataReference.CreateFromFile(Assembly.Load("FontStashSharp.MonoGame").Location),
-            
-            // Our assemblies
+            // Our core OS / UI assemblies
             MetadataReference.CreateFromFile(Assembly.GetExecutingAssembly().Location),
-
-            // NAudio
-            MetadataReference.CreateFromFile(typeof(NAudio.Wave.WaveOutEvent).Assembly.Location),
         };
+
+        // Optional references requested via manifest
+        _optionalReferences = new Dictionary<string, MetadataReference>(StringComparer.OrdinalIgnoreCase) {
+            { "Microsoft.CodeAnalysis", MetadataReference.CreateFromFile(typeof(MetadataReference).Assembly.Location) },
+            { "Microsoft.CodeAnalysis.CSharp", MetadataReference.CreateFromFile(typeof(CSharpCompilation).Assembly.Location) },
+            { "NAudio", MetadataReference.CreateFromFile(typeof(NAudio.Wave.WaveOutEvent).Assembly.Location) },
+            { "FontStashSharp", MetadataReference.CreateFromFile(typeof(FontStashSharp.FontSystem).Assembly.Location) },
+            { "FontStashSharp.MonoGame", MetadataReference.CreateFromFile(Assembly.Load("FontStashSharp.MonoGame").Location) }
+        };
+    }
+
+    private List<MetadataReference> GetFullReferences(IEnumerable<string> extraNames) {
+        var refs = new List<MetadataReference>(_baseReferences);
+        if (extraNames != null) {
+            foreach (var name in extraNames) {
+                if (_optionalReferences.TryGetValue(name, out var metaRef)) {
+                    refs.Add(metaRef);
+                }
+            }
+        }
+        return refs;
+    }
+
+    /// <summary>
+    /// Compiles C# source files and returns diagnostics without loading the resulting assembly.
+    /// Useful for compilation checks without memory overhead.
+    /// </summary>
+    public bool Validate(Dictionary<string, string> sourceFiles, string assemblyName, out IEnumerable<Diagnostic> diagnostics, IEnumerable<string> extraReferences = null) {
+        var syntaxTrees = sourceFiles.Select(kvp =>
+            CSharpSyntaxTree.ParseText(kvp.Value, path: kvp.Key)
+        ).ToArray();
+
+        var compilation = CSharpCompilation.Create(
+            assemblyName,
+            syntaxTrees: syntaxTrees,
+            references: GetFullReferences(extraReferences),
+            options: new CSharpCompilationOptions(
+                OutputKind.DynamicallyLinkedLibrary,
+                optimizationLevel: OptimizationLevel.Debug,
+                allowUnsafe: false
+            )
+        );
+        EmitResult result = compilation.Emit(Stream.Null);
+        diagnostics = result.Diagnostics;
+
+        return result.Success;
     }
 
     /// <summary>
@@ -52,8 +91,9 @@ public class AppCompiler {
     /// <param name="sourceFiles">Dictionary of filename -> source code</param>
     /// <param name="assemblyName">Name for the compiled assembly</param>
     /// <param name="diagnostics">Output compilation diagnostics</param>
+    /// <param name="extraReferences">Optional assembly names from manifest</param>
     /// <returns>Compiled assembly or null if compilation failed</returns>
-    public Assembly Compile(Dictionary<string, string> sourceFiles, string assemblyName, out IEnumerable<Diagnostic> diagnostics) {
+    public Assembly Compile(Dictionary<string, string> sourceFiles, string assemblyName, out IEnumerable<Diagnostic> diagnostics, IEnumerable<string> extraReferences = null) {
         // Parse all source files into syntax trees
         var syntaxTrees = sourceFiles.Select(kvp =>
             CSharpSyntaxTree.ParseText(kvp.Value, path: kvp.Key)
@@ -63,7 +103,7 @@ public class AppCompiler {
         var compilation = CSharpCompilation.Create(
             assemblyName,
             syntaxTrees: syntaxTrees,
-            references: _references,
+            references: GetFullReferences(extraReferences),
             options: new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
                 optimizationLevel: OptimizationLevel.Debug,

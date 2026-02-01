@@ -73,7 +73,7 @@ public class AppLoader {
             AppHotReloadManager.Instance.StartWatching(upperAppId, appFolderPath);
 
             // Compile
-            Assembly assembly = AppCompiler.Instance.Compile(sourceFiles, manifest.AppId, out var diagnostics);
+            Assembly assembly = AppCompiler.Instance.Compile(sourceFiles, manifest.AppId, out var diagnostics, manifest.References);
             
             if (assembly == null) {
                 DebugLogger.Log($"[JIT Compile] Compilation failed for {manifest.AppId}:");
@@ -373,7 +373,7 @@ public class AppLoader {
 
             // Recompile with a unique assembly name to avoid conflicts
             string assemblyName = $"{manifest.AppId}_{DateTime.Now.Ticks}";
-            Assembly assembly = AppCompiler.Instance.Compile(sourceFiles, assemblyName, out IEnumerable<Diagnostic> compileDiagnostics);
+            Assembly assembly = AppCompiler.Instance.Compile(sourceFiles, assemblyName, out IEnumerable<Diagnostic> compileDiagnostics, manifest.References);
             
             if (assembly == null) {
                 // Format diagnostics nicely for the output list

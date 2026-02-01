@@ -4,5 +4,8 @@
   "icon": "icon.png",
   "entryClass": "TerminalApp.Program",
   "entryMethod": "CreateWindow",
-  "singleInstance": false
+  "singleInstance": false,
+  "references": [
+    "FontStashSharp"
+  ]
 }

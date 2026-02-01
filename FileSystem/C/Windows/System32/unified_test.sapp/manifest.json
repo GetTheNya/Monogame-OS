@@ -3,5 +3,8 @@
     "name": "Unified API Test",
     "entryClass": "UnifiedTestApp.Program",
     "entryMethod": "Main",
-    "singleInstance": true
+    "singleInstance": true,
+    "references": [
+        "FontStashSharp"
+    ]
 }

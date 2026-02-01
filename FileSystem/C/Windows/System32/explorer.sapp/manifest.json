@@ -9,5 +9,8 @@
   "entryClass": "FileExplorerApp.FileExplorerWindow",
   "entryMethod": "CreateWindow",
   "permissions": [],
-  "dependencies": []
+  "dependencies": [],
+  "references": [
+    "FontStashSharp"
+  ]
 }
