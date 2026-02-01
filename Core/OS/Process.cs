@@ -95,8 +95,14 @@ public class Process {
     /// The application instance associated with this process, if any.
     /// </summary>
     public Application Application { get; internal set; }
+
+    /// <summary>
+    /// Class that provides APIs for application to communicate with OS
+    /// </summary>
+    public SystemAPI SystemAPI { get; private set; }
     
     public Process() {
+        SystemAPI = new SystemAPI(this);
     }
     
     // --- Lifecycle Hooks (Legacy Support) ---

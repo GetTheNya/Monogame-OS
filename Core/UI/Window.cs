@@ -59,7 +59,12 @@ public class Window : UIElement {
     private bool _isBlinking;
     private double _blinkTimer;
     private const double BlinkDuration = 0.6; // Total blink duration in seconds
-    
+
+    /// <summary>
+    /// Class that provides APIs for application to communicate with OS
+    /// </summary>
+    public SystemAPI SystemAPI => OwnerProcess.SystemAPI;
+
     /// <summary>
     /// Called when the window is closed (before removal from parent).
     /// </summary>

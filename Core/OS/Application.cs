@@ -30,6 +30,11 @@ public abstract class Application {
     public System.IO.TextWriter StandardError => IO?.Error ?? System.IO.TextWriter.Null;
 
     /// <summary>
+    /// Class that provides APIs for application to communicate with OS
+    /// </summary>
+    public SystemAPI SystemAPI => Process.SystemAPI;
+
+    /// <summary>
     /// The primary window of the application. May be null for background services.
     /// </summary>
     public Window MainWindow { get; protected set; }

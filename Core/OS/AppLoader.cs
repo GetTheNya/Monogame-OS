@@ -156,7 +156,7 @@ public class AppLoader {
                 // Create a Process to own this window
                 var windowProcess = new Process {
                     AppId = manifest.AppId.ToUpper(),
-                    Icon = processIcon
+                    Icon = processIcon,
                 };
                 windowProcess.Windows.Add(window);
                 windowProcess.MainWindow = window;
