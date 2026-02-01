@@ -590,7 +590,7 @@ public static class Shell {
         string appId = File.GetFileTypeHandler(ext);
         DebugLogger.Log($"File.GetFileTypeHandler({ext}) returned: {appId ?? "null"}");
         if (!string.IsNullOrEmpty(appId)) {
-            var win = UI.CreateAppWindow(appId, virtualPath);
+            var win = UI.CreateAppWindow(appId, new[] { virtualPath });
             if (win != null) {
                 UI.OpenWindow(win, startBounds);
                 return;
@@ -618,7 +618,7 @@ public static class Shell {
     // --- Nested API Classes ---
 
     public static class UI {
-        private static Dictionary<string, Func<string[], Window>> _appRegistry = new();
+        private static Dictionary<string, Func<string[], Action<TheGame.Core.OS.Process>, Window>> _appRegistry = new();
         private static Dictionary<string, FileHandler> _handlers = new();
 
         internal static void InternalInitialize() {
@@ -626,7 +626,7 @@ public static class Shell {
             RegisterHandler(new AppHandler());
         }
 
-        public static void RegisterApp(string appId, Func<string[], Window> factory) {
+        public static void RegisterApp(string appId, Func<string[], Action<TheGame.Core.OS.Process>, Window> factory) {
             _appRegistry[appId.ToUpper()] = factory;
         }
 
@@ -636,46 +636,15 @@ public static class Shell {
             element.TooltipDelay = delay;
         }
 
-        public static Window CreateAppWindow(string appId, params string[] args) {
+        public static Window CreateAppWindow(string appId, string[] args = null, Action<TheGame.Core.OS.Process> setup = null) {
             if (string.IsNullOrEmpty(appId)) return null;
             string upperAppId = appId.ToUpper();
             DebugLogger.Log($"CreateAppWindow: Looking for {appId} (uppercase: {upperAppId})");
             
-            // Check for single instance mode - if app is already running, focus it instead
-            var existingProcess = ProcessManager.Instance.GetProcessesByApp(upperAppId)
-                .FirstOrDefault(p => p.State != ProcessState.Terminated);
-            if (existingProcess != null) {
-                // Check manifest for singleInstance flag
-                string appPath = AppLoader.Instance.GetAppDirectory(upperAppId);
-                if (!string.IsNullOrEmpty(appPath)) {
-                    string manifestPath = System.IO.Path.Combine(
-                        VirtualFileSystem.Instance.ToHostPath(appPath),
-                        "manifest.json"
-                    );
-                    if (System.IO.File.Exists(manifestPath)) {
-                        try {
-                            string json = System.IO.File.ReadAllText(manifestPath);
-                            var manifest = AppManifest.FromJson(json);
-                            if (manifest?.SingleInstance == true) {
-                                DebugLogger.Log($"  SingleInstance: Focusing existing window for {upperAppId}");
-                                if (existingProcess.MainWindow != null) {
-                                    existingProcess.MainWindow.Parent?.BringToFront(existingProcess.MainWindow);
-                                    if (!existingProcess.MainWindow.IsVisible) {
-                                        existingProcess.MainWindow.Restore();
-                                    }
-                                    Window.ActiveWindow = existingProcess.MainWindow;
-                                }
-                                return null; // Don't create new window
-                            }
-                        } catch { }
-                    }
-                }
-            }
-            
-            DebugLogger.Log($"  Registry has {_appRegistry.Count} apps: {string.Join(", ", _appRegistry.Keys)}");
+            // ... (rest of logic)
             if (_appRegistry.TryGetValue(upperAppId, out var factory)) {
                 DebugLogger.Log($"  Found factory for {upperAppId}");
-                return factory(args ?? new string[0]);
+                return factory(args ?? new string[0], setup);
             }
             DebugLogger.Log($"  No factory found for {upperAppId}");
             return null;

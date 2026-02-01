@@ -5,14 +5,20 @@ using TheGame.Core.OS;
 namespace TerminalTest;
 
 public class Program : TerminalApplication {
+    private bool _isInteractive = false;
+
     public static Program Main(string[] args) {
-        var app = new Program();
+        return new Program();
+    }
+
+    protected override void OnLoad(string[] args) {
+        base.OnLoad(args);
+
         if (args != null && args.Length > 0) {
-            app.RunTests(args);
+            RunTests(args);
         } else {
-            app.RunInteractive();
+            RunInteractive();
         }
-        return app;
     }
 
     private void RunTests(string[] args) {
@@ -32,15 +38,20 @@ public class Program : TerminalApplication {
         
         while (true) {
             Write("> ");
-            string input = ReadLine();
-            if (input == null || input == "exit") break;
+            string rawInput = ReadLine();
+            if (rawInput == null) break; // Terminated
+
+            string input = rawInput.Trim().ToLower();
+            
+            if (input == "exit") {
+                Exit();
+                break;
+            }
             
             if (input == "color") TestColors();
             else if (input == "err") StandardError.WriteLine("This is an error message!", Color.Red);
-            else WriteLine($"You said: {input}");
+            else if (!string.IsNullOrWhiteSpace(input)) WriteLine($"You said: {input}");
         }
-        
-        Exit();
     }
 
     private void TestColors() {

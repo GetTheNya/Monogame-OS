@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using TheGame.Core.OS;
+using TheGame.Core;
 using TheGame.Core.UI;
 using TheGame.Core.UI.Controls;
 using TheGame.Core.Input;
@@ -46,23 +47,58 @@ public class TerminalControl : TextArea {
     }
 
     private void SyncLines() {
+        bool hadSelection = HasSelection();
         var backendLines = _backend.Lines;
         _lines = backendLines.Select(l => l.Text).ToList();
-        _lines.Add(GetPrompt() + _currentInput);
+        
+        if (!_backend.IsProcessRunning) {
+            _lines.Add(GetPrompt() + _currentInput);
+        } else {
+            if (_backend.IsLastLineComplete || _lines.Count == 0 || backendLines.Count == 0) {
+                _lines.Add(_currentInput);
+            } else {
+                string lastBackend = backendLines.Last().Text;
+                _lines[^1] = lastBackend + _currentInput;
+            }
+        }
+        
         _cursorLine = _lines.Count - 1;
+        _cursorCol = Math.Clamp(_cursorCol, 0, _lines[_cursorLine].Length);
+        
+        if (!hadSelection) ResetSelection();
         _maxWidthDirty = true;
     }
 
     private string GetPrompt() => _currentDir + _promptSuffix;
 
-    protected override bool CanEditAt(int line, int col) => line == _lines.Count - 1 && col >= GetPrompt().Length;
+    protected override bool CanEditAt(int line, int col) {
+        if (line != _lines.Count - 1) return false;
+        if (!_backend.IsProcessRunning) {
+            return col >= GetPrompt().Length;
+        } else {
+            if (_backend.IsLastLineComplete) return true;
+            var bl = _backend.Lines;
+            if (bl.Count > 0) return col >= bl.Last().Text.Length;
+            return true;
+        }
+    }
 
     protected override void MoveCursor(int dx, int dy, bool select) {
         base.MoveCursor(dx, dy, select);
         if (!select && !CanEditAt(_cursorLine, _cursorCol)) {
             _cursorLine = _lines.Count - 1;
-            int promptLen = GetPrompt().Length;
-            if (_cursorCol < promptLen) _cursorCol = promptLen;
+            _cursorCol = Math.Clamp(_cursorCol, 0, _lines[_cursorLine].Length);
+
+            int minCol = 0;
+            if (!_backend.IsProcessRunning) {
+                minCol = GetPrompt().Length;
+            } else if (!_backend.IsLastLineComplete) {
+                var bl = _backend.Lines;
+                if (bl.Count > 0) minCol = bl.Last().Text.Length;
+            }
+
+            if (_cursorCol < minCol) _cursorCol = minCol;
+            
             EnsureCursorVisible();
             ResetSelection();
         }
@@ -71,9 +107,24 @@ public class TerminalControl : TextArea {
     private string ExtractInputFromLine() {
         if (_lines.Count == 0) return "";
         string lastLine = _lines[^1];
-        string prompt = GetPrompt();
-        if (lastLine.StartsWith(prompt)) {
-            return lastLine.Substring(prompt.Length);
+        
+        if (!_backend.IsProcessRunning) {
+            string prompt = GetPrompt();
+            if (lastLine.StartsWith(prompt)) {
+                return lastLine.Substring(prompt.Length);
+            }
+        } else {
+            if (!_backend.IsLastLineComplete) {
+                var bl = _backend.Lines;
+                if (bl.Count > 0) {
+                    string prompt = bl.Last().Text;
+                    if (lastLine.StartsWith(prompt)) {
+                        return lastLine.Substring(prompt.Length);
+                    }
+                }
+            } else {
+                return lastLine;
+            }
         }
         return _currentInput; 
     }
@@ -84,27 +135,43 @@ public class TerminalControl : TextArea {
         _cursorLine = _lines.Count - 1;
         _cursorCol = _lines[_cursorLine].Length;
 
-        _backend.WriteLine("\u001b[32m" + GetPrompt() + "\u001b[0m" + rawInput);
+        if (!_backend.IsProcessRunning) {
+            _backend.WriteLine("\u001b[32m" + GetPrompt() + "\u001b[0m" + rawInput);
 
-        string cmd = rawInput.Trim();
-        if (!string.IsNullOrEmpty(cmd)) {
-            // Remove existing instances of this command to move it to the end (most recent)
-            _commandHistory.Remove(cmd);
-            _commandHistory.Add(cmd);
-        }
-        
-        _currentInput = "";
-        _stashInput = "";
-        _historyIndex = -1;
-        
-        if (!string.IsNullOrEmpty(cmd)) {
-            if (!HandleInternalCommand(cmd)) {
-                _backend.ExecuteCommand(cmd);
+            string cmd = rawInput.Trim();
+            if (!string.IsNullOrEmpty(cmd)) {
+                _commandHistory.Remove(cmd);
+                _commandHistory.Add(cmd);
             }
+            
+            _currentInput = "";
+            _stashInput = "";
+            _historyIndex = -1;
+            
+            if (!string.IsNullOrEmpty(cmd)) {
+                if (!HandleInternalCommand(cmd)) {
+                    _backend.ExecuteCommand(cmd);
+                }
+            }
+        } else {
+            // Echo input to backend and seal the line
+            _backend.WriteLine(rawInput);
+            
+            // Forward input to process
+            _backend.SendInput(rawInput + "\n");
+            _currentInput = "";
         }
 
         SyncLines();
-        _cursorCol = GetPrompt().Length;
+        if (!_backend.IsProcessRunning) {
+            _cursorCol = GetPrompt().Length;
+        } else {
+            if (_backend.IsLastLineComplete) _cursorCol = 0;
+            else {
+                var bl = _backend.Lines;
+                _cursorCol = bl.Count > 0 ? bl.Last().Text.Length : 0;
+            }
+        }
         ResetSelection();
         EnsureCursorVisible();
     }
@@ -174,51 +241,75 @@ public class TerminalControl : TextArea {
         EnsureCursorVisible();
     }
 
-    protected override void UpdateInput() {
-        if (IsFocused) {
-            if (InputManager.GetTypedChars().Any() || InputManager.IsKeyJustPressed(Keys.Back) || InputManager.IsKeyJustPressed(Keys.Delete)) {
-                _historyIndex = -1; // Reset history index when user types new content
-                if (!CanEditAt(_cursorLine, _cursorCol)) {
-                    _cursorLine = _lines.Count - 1;
-                    _cursorCol = _lines[_cursorLine].Length;
-                    ResetSelection();
-                }
-            }
 
-            if (InputManager.IsKeyJustPressed(Keys.Up)) {
+
+    protected override void UpdateInput() {
+        if (!IsFocused) return;
+
+        // Reset history if typing
+        var typed = InputManager.GetTypedChars();
+        if (typed.Any() || InputManager.IsKeyJustPressed(Keys.Back) || InputManager.IsKeyJustPressed(Keys.Delete)) {
+            _historyIndex = -1;
+            if (!CanEditAt(_cursorLine, _cursorCol)) {
+                _cursorLine = _lines.Count - 1;
+                _cursorCol = _lines[_cursorLine].Length;
+                ResetSelection();
+            }
+        }
+
+        // Handle Enter
+        if (InputManager.IsKeyJustPressed(Keys.Enter)) {
+            if (!_backend.IsProcessRunning) {
+                OnEnterPressed();
+            } else {
+                _backend.SendInput(_currentInput + "\n");
+                _currentInput = "";
+                SyncLines();
+            }
+            return;
+        }
+
+        // Handle history navigation
+        if (!_backend.IsProcessRunning) {
+            if (InputManager.IsKeyRepeated(Keys.Up)) {
                 NavigateHistory(-1);
                 InputManager.IsKeyboardConsumed = true;
                 return;
             }
-            if (InputManager.IsKeyJustPressed(Keys.Down)) {
+            if (InputManager.IsKeyRepeated(Keys.Down)) {
                 NavigateHistory(1);
                 InputManager.IsKeyboardConsumed = true;
                 return;
             }
-
-            if (InputManager.IsKeyJustPressed(Keys.Home)) {
-                _cursorLine = _lines.Count - 1;
-                _cursorCol = GetPrompt().Length;
-                ResetSelection();
-                return;
-            }
-
-            if (InputManager.IsKeyDown(Keys.LeftControl) && InputManager.IsKeyJustPressed(Keys.C)) {
-                if (_backend.IsProcessRunning) {
-                    _backend.SendSignal("CTRL+C");
-                    return; 
-                }
-            }
         }
 
+        if (InputManager.IsKeyJustPressed(Keys.Home)) {
+            _cursorLine = _lines.Count - 1;
+            _cursorCol = GetPrompt().Length;
+            ResetSelection();
+            return;
+        }
+
+        // Let TextArea handle standard cursor moves and typing
         base.UpdateInput();
-        
+
         _currentInput = ExtractInputFromLine();
 
+        // Ensure prompt is present if not running a process
         if (_lines.Count > 0) {
-            string prompt = GetPrompt();
-            if (!_lines[^1].StartsWith(prompt)) {
-                _lines[^1] = prompt + _currentInput;
+            if (!_backend.IsProcessRunning) {
+                string prompt = GetPrompt();
+                if (!_lines[^1].StartsWith(prompt)) {
+                    _lines[^1] = prompt + _currentInput;
+                }
+            } else {
+                if (_backend.IsLastLineComplete) {
+                    _lines[^1] = _currentInput;
+                } else {
+                    var bl = _backend.Lines;
+                    string prefix = bl.Count > 0 ? bl.Last().Text : "";
+                    _lines[^1] = prefix + _currentInput;
+                }
             }
         }
     }
@@ -286,12 +377,21 @@ public class TerminalControl : TextArea {
                         segmentX += font.MeasureString(seg.Text).X;
                     }
                 }
+
+                // If this is the last line and it's incomplete, draw the current input at the end
+                if (i == backendLines.Count - 1 && !_backend.IsLastLineComplete) {
+                    font.DrawText(batch, _currentInput, new Vector2(segmentX, y), Color.White * AbsoluteOpacity);
+                }
             } else if (i == backendLines.Count) {
-                // Prompt
-                string prompt = GetPrompt();
-                font.DrawText(batch, prompt, new Vector2(textX, y), Color.Lime * AbsoluteOpacity);
-                float promptW = font.MeasureString(prompt).X;
-                font.DrawText(batch, _currentInput, new Vector2(textX + promptW, y), Color.White * AbsoluteOpacity);
+                // Input line
+                if (!_backend.IsProcessRunning) {
+                    string prompt = GetPrompt();
+                    font.DrawText(batch, prompt, new Vector2(textX, y), Color.Lime * AbsoluteOpacity);
+                    float promptW = font.MeasureString(prompt).X;
+                    font.DrawText(batch, _currentInput, new Vector2(textX + promptW, y), Color.White * AbsoluteOpacity);
+                } else {
+                    font.DrawText(batch, _currentInput, new Vector2(textX, y), Color.White * AbsoluteOpacity);
+                }
             }
         }
 

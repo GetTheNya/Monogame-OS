@@ -90,8 +90,8 @@ public class AppLoader {
             _compiledApps[upperAppId] = assembly;
 
             // Register app factory with Shell
-            Shell.UI.RegisterApp(upperAppId, (args) => {
-                return CreateWindowFromAssembly(assembly, manifest, appFolderPath, args);
+            Shell.UI.RegisterApp(upperAppId, (args, setup) => {
+                return CreateWindowFromAssembly(assembly, manifest, appFolderPath, args, setup);
             });
 
             DebugLogger.Log($"Successfully loaded app: {manifest.Name} ({manifest.AppId})");
@@ -103,7 +103,7 @@ public class AppLoader {
         }
     }
 
-    private Window CreateWindowFromAssembly(Assembly assembly, AppManifest manifest, string appVirtualPath, string[] args) {
+    private Window CreateWindowFromAssembly(Assembly assembly, AppManifest manifest, string appVirtualPath, string[] args, Action<Process> setup = null) {
         try {
             DebugLogger.Log($"AppLoader: Creating window for {manifest.AppId} using {manifest.EntryClass}.{manifest.EntryMethod}");
             
@@ -161,6 +161,10 @@ public class AppLoader {
                 windowProcess.Windows.Add(window);
                 windowProcess.MainWindow = window;
                 window.OwnerProcess = windowProcess;
+                
+                // Call setup before RegisterProcess
+                setup?.Invoke(windowProcess);
+                
                 ProcessManager.Instance.RegisterProcess(windowProcess);
                 
                 // Explicitly set window icon if provided
@@ -177,8 +181,13 @@ public class AppLoader {
                 app.Process = new Process {
                     AppId = manifest.AppId.ToUpper(),
                     Application = app,
-                    Icon = processIcon
+                    Icon = processIcon,
+                    IsThreaded = app.IsThreaded
                 };
+
+                // Call setup before Initialize
+                setup?.Invoke(app.Process);
+
                 ProcessManager.Instance.RegisterProcess(app.Process);
                 
                 // Initialize the app (calls Application.Initialize)
@@ -216,6 +225,10 @@ public class AppLoader {
             if (result is Process process) {
                 process.AppId = manifest.AppId.ToUpper();
                 process.Icon = processIcon;
+
+                // Call setup before Initialize
+                setup?.Invoke(process);
+
                 ProcessManager.Instance.RegisterProcess(process);
                 
                 // Start the process (calls OnStart)
@@ -281,6 +294,17 @@ public class AppLoader {
     public string GetAppDirectory(string appId) {
         if (string.IsNullOrEmpty(appId)) return null;
         if (_appPaths.TryGetValue(appId.ToUpper(), out var path)) return path;
+        return null;
+    }
+
+    public string GetAppIdFromPath(string virtualPath) {
+        if (string.IsNullOrEmpty(virtualPath)) return null;
+        string normalized = virtualPath.Replace("/", "\\").TrimEnd('\\').ToUpper();
+        
+        foreach (var kvp in _appPaths) {
+            string appPath = kvp.Value.Replace("/", "\\").TrimEnd('\\').ToUpper();
+            if (appPath == normalized) return kvp.Key;
+        }
         return null;
     }
 
@@ -363,8 +387,8 @@ public class AppLoader {
             _compiledApps[upperAppId] = assembly;
 
             // Re-register app factory with Shell
-            Shell.UI.RegisterApp(upperAppId, (args) => {
-                return CreateWindowFromAssembly(assembly, manifest, appVirtualPath, args);
+            Shell.UI.RegisterApp(upperAppId, (args, setup) => {
+                return CreateWindowFromAssembly(assembly, manifest, appVirtualPath, args, setup);
             });
 
             DebugLogger.Log($"[AppLoader] Successfully reloaded app: {manifest.Name} ({upperAppId})");

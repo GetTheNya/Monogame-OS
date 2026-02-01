@@ -32,6 +32,7 @@ public static class HotkeyManager {
 
     public static void RegisterLocal(Process process, Hotkey hotkey, Action action, bool callInBackground = false, bool rewriteSystemHotkey = false) {
         if (process == null) return;
+        DebugLogger.Log($"registered for {process.AppId}");
         _localHotkeys.Add(new HotkeyEntry { 
             Owner = process, 
             Hotkey = hotkey, 

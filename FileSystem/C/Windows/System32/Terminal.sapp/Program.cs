@@ -4,6 +4,7 @@ using Microsoft.Xna.Framework.Input;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using TheGame.Core;
 using TheGame.Core.OS;
 using TheGame.Core.UI;
 using TheGame.Core.UI.Controls;
@@ -28,13 +29,19 @@ public class TerminalWindow : Window {
     public TerminalWindow(Vector2 position, Vector2 size) : base(position, size) {
         ShowInTaskbar = true;
         Title = "Terminal";
-        Console.WriteLine("Window Constructed");
     }
 
     protected override void OnLoad() {
-        Console.WriteLine("Called OnLoad");
         _terminal = new TerminalControl(Vector2.Zero, ClientSize);
         AddChild(_terminal);
+
+        Shell.Hotkeys.RegisterLocal(OwnerProcess, Keys.C, HotkeyModifiers.Ctrl, () => {
+            DebugLogger.Log("Terminal: Ctrl+C Hotkey triggered");
+            if (_terminal.Backend.IsProcessRunning) {
+                DebugLogger.Log("Terminal: Ctrl+C Hotkey sended");
+                _terminal.Backend.SendSignal("CTRL+C");
+            }
+        }, rewriteSystemHotkey:true);
         
         OnResize += () => {
             _terminal.Size = ClientSize;
@@ -58,7 +65,6 @@ public class TerminalWindow : Window {
     }
 
     protected override void OnUpdate(GameTime gameTime) {
-        Console.WriteLine("Called OnUpdate");
         string dir = _terminal.CurrentDirectory;
         Title = $"Terminal - {dir}";
     }

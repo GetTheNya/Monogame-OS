@@ -16,11 +16,17 @@ public interface ITerminal {
     /// <summary> Event triggered when the line buffer changes. </summary>
     event Action OnBufferChanged;
 
+    /// <summary> Returns true if the last line in the buffer was terminated by a newline. </summary>
+    bool IsLastLineComplete { get; }
+
     /// <summary> Attaches a process to this terminal, redirecting its standard I/O. </summary>
     void AttachProcess(Process process);
 
     /// <summary> Sends input text to the currently active process in this terminal. </summary>
     void SendInput(string text);
+
+    /// <summary> Writes a line to the terminal buffer. </summary>
+    void WriteLine(string text, Microsoft.Xna.Framework.Color? color = null);
 
     /// <summary> Clears the terminal buffer. </summary>
     void Clear();

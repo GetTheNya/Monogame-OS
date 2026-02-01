@@ -24,13 +24,13 @@ public class ProcessManager {
     /// <summary>
     /// Starts a new process for the given app.
     /// </summary>
-    public Process StartProcess(string appId, string[] args = null) {
+    public Process StartProcess(string appId, string[] args = null, Action<Process> setup = null) {
         if (string.IsNullOrEmpty(appId)) return null;
         
         string upperAppId = appId.ToUpper();
         
         // Create new process via AppLoader (single instance check is done in CreateAppWindow)
-        var window = Shell.UI.CreateAppWindow(upperAppId, args ?? Array.Empty<string>());
+        var window = Shell.UI.CreateAppWindow(upperAppId, args ?? Array.Empty<string>(), setup);
         if (window == null) {
             // Might be single instance - check if process exists
             var existing = GetProcessesByApp(upperAppId).FirstOrDefault(p => p.State != ProcessState.Terminated);

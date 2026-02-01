@@ -13,6 +13,8 @@ public abstract class TerminalApplication : Application {
     /// </summary>
     public bool RequireTerminal { get; protected set; } = false;
 
+    public override bool IsThreaded => true;
+
     protected override void OnLoad(string[] args) {
         base.OnLoad(args);
 

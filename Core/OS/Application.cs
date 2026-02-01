@@ -52,6 +52,12 @@ public abstract class Application {
         get => Process?.Priority ?? ProcessPriority.Normal;
         set { if (Process != null) Process.Priority = value; }
     }
+
+    /// <summary>
+    /// If true, the application logic runs on a background thread.
+    /// Default is false. TerminalApplication overrides this to true.
+    /// </summary>
+    public virtual bool IsThreaded => false;
     
     // --- Lifecycle Hooks (implement these, don't call base) ---
     
@@ -181,10 +187,10 @@ public abstract class Application {
 
     /// <summary> Writes a line of text to standard output with a specific color (using ANSI codes). </summary>
     public void WriteLine(string text, Color color) {
-        // Simple ANSI-like color support will be handled by the TerminalBackend.
-        // For now, we just write the text.
-        StandardOutput.WriteLine(text); 
+        StandardOutput.WriteLine(AnsiCodes.Wrap(text, color));
     }
+
+
 
     /// <summary> Reads a line from standard input. </summary>
     public string ReadLine() => StandardInput.ReadLine();

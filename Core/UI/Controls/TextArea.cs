@@ -457,7 +457,8 @@ public class TextArea : ValueControl<string> {
         if (cursorY < _targetScrollOffset) _targetScrollOffset = cursorY;
         if (cursorY + lineHeight > _targetScrollOffset + Size.Y - 10) _targetScrollOffset = cursorY + lineHeight - Size.Y + 10;
 
-        float cursorX = _cursorCol == 0 ? 0 : font.MeasureString(_lines[_cursorLine].Substring(0, _cursorCol)).X;
+        int safeCol = Math.Clamp(_cursorCol, 0, _lines[_cursorLine].Length);
+        float cursorX = safeCol == 0 ? 0 : font.MeasureString(_lines[_cursorLine].Substring(0, safeCol)).X;
         if (cursorX < _targetScrollOffsetX) _targetScrollOffsetX = cursorX;
         if (cursorX > _targetScrollOffsetX + Size.X - 20) _targetScrollOffsetX = cursorX - Size.X + 20;
 

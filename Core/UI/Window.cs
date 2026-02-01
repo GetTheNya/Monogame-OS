@@ -514,6 +514,10 @@ public class Window : UIElement {
         ExecuteClose();
     }
 
+    public void Terminate(){
+        ExecuteClose();
+    }
+
     private void ExecuteClose() {
         // Close child modal windows first
         foreach (var child in ChildWindows.ToList()) {

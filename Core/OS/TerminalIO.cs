@@ -28,17 +28,28 @@ public class TerminalWriter : TextWriter {
             FlushLine();
         } else if (value != '\r') {
             _currentLine.Append(value);
+            // Auto-flush partial lines if they look like prompts (end with space or colon or >)
+            if (value == ' ' || value == ':' || value == '>') {
+                Flush();
+            }
         }
     }
 
+    public override void Write(string value) {
+        if (string.IsNullOrEmpty(value)) return;
+        base.Write(value);
+        if (!value.EndsWith("\n")) Flush();
+    }
+
     private void FlushLine() {
-        _onWrite?.Invoke(_currentLine.ToString(), _defaultColor, _source);
+        _onWrite?.Invoke(_currentLine.ToString() + "\n", _defaultColor, _source);
         _currentLine.Clear();
     }
 
     public override void Flush() {
         if (_currentLine.Length > 0) {
-            FlushLine();
+            _onWrite?.Invoke(_currentLine.ToString(), _defaultColor, _source);
+            _currentLine.Clear();
         }
     }
 
@@ -55,23 +66,37 @@ public class TerminalReader : TextReader {
     private readonly ConcurrentQueue<string> _inputQueue = new();
     private string _currentLine = null;
     private int _charIndex = 0;
+    private readonly System.Threading.ManualResetEventSlim _inputEvent = new(false);
 
     public void EnqueueInput(string text) {
         _inputQueue.Enqueue(text);
+        _inputEvent.Set();
+    }
+
+    public void ClearInput() {
+        while (_inputQueue.TryDequeue(out _));
+        _inputEvent.Reset();
     }
 
     public override string ReadLine() {
-        if (_inputQueue.TryDequeue(out string line)) {
-            return line;
+        while (true) {
+            if (_inputQueue.TryDequeue(out string line)) {
+                if (line == null) return null; // Signal termination
+                return line;
+            }
+            _inputEvent.Wait();
+            _inputEvent.Reset();
         }
-        return null;
     }
 
     public override int Read() {
-        if (_currentLine == null || _charIndex >= _currentLine.Length) {
+        while (_currentLine == null || _charIndex >= _currentLine.Length) {
             if (!_inputQueue.TryDequeue(out _currentLine)) {
-                return -1;
+                _inputEvent.Wait();
+                _inputEvent.Reset();
+                continue;
             }
+            if (_currentLine == null) return -1; // Terminated
             _currentLine += "\n"; // Append newline for Read()
             _charIndex = 0;
         }
@@ -80,10 +105,13 @@ public class TerminalReader : TextReader {
     }
 
     public override int Peek() {
-        if (_currentLine == null || _charIndex >= _currentLine.Length) {
+        while (_currentLine == null || _charIndex >= _currentLine.Length) {
             if (!_inputQueue.TryPeek(out string nextLine)) {
-                return -1;
+                _inputEvent.Wait();
+                _inputEvent.Reset();
+                continue;
             }
+            if (nextLine == null) return -1; // Terminated
             return nextLine.Length > 0 ? nextLine[0] : '\n';
         }
 

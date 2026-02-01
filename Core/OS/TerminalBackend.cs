@@ -23,6 +23,8 @@ public class TerminalBackend : ITerminal {
     }
     private Queue<PendingCommand> _commandQueue = new();
     private int _lastExitCode = 0;
+    private static readonly Color _ansiResetColor = new Color(0, 0, 0, 0); // Special marker for "default"
+    private Color _currentAnsiColor = _ansiResetColor;
 
     public IReadOnlyList<TerminalLine> Lines {
         get {
@@ -43,6 +45,7 @@ public class TerminalBackend : ITerminal {
     public void AttachProcess(Process process) {
         if (process == null) return;
         
+        ResetColor(); // Reset color for new process
         DetachActiveProcess();
 
         _activeProcess = process;
@@ -107,9 +110,6 @@ public class TerminalBackend : ITerminal {
         }
 
         // Start the process
-        // Note: TerminalBackend needs a way to start processes.
-        // Usually, the terminal app calls Shell.Process.Start or similar.
-        // We'll add a delegate or use Shell.Process directly if we assume it's available.
         StartProcess(pending.Command);
     }
 
@@ -120,21 +120,69 @@ public class TerminalBackend : ITerminal {
     }
 
     private void StartProcess(string commandLine) {
-        // Simple command line parser: "app arg1 arg2"
-        string[] parts = commandLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var parts = Regex.Matches(commandLine, @"[\""].+?[\""]|[^ ]+")
+                         .Select(m => m.Value.Trim('"'))
+                         .ToArray();
+
         if (parts.Length == 0) return;
 
-        string appId = parts[0];
+        string command = parts[0];
         string[] args = parts.Skip(1).ToArray();
 
-        var process = Shell.Process.Manager.StartProcess(appId, args);
-        if (process != null) {
-            AttachProcess(process);
+        string appId = ResolveAppId(command);
+
+        if (appId != null) {
+            // Start process and attach I/O BEFORE it initializes
+            // Use a local capture to handle quick-exiting processes (race condition fix)
+            Process startedProcess = null;
+            var process = ProcessManager.Instance.StartProcess(appId, args, (p) => {
+                startedProcess = p;
+                AttachProcess(p);
+            });
+            
+            var finalProcess = process ?? startedProcess;
+
+            if (finalProcess == null) {
+                 AddLine($"{command} failed to start\n", Color.Red, "SYSTEM");
+                 _lastExitCode = 1;
+                 RunNextCommand();
+            }
         } else {
-            AddLine($"{appId} is not recognized as an internal or external command", Color.Red, "SYSTEM");
+            AddLine($"{command} is not recognized as an internal or external command\n", Color.Red, "SYSTEM");
             _lastExitCode = 1;
             RunNextCommand();
         }
+    }
+
+    private string ResolveAppId(string command) {
+        // 1. Try as exact AppId
+        if (AppLoader.Instance.GetAppDirectory(command.ToUpper()) != null) return command.ToUpper();
+        
+        // 2. Try by directory path
+        string fromPath = AppLoader.Instance.GetAppIdFromPath(command);
+        if (fromPath != null) return fromPath;
+
+        // 3. Try by local name with .sapp
+        if (!command.EndsWith(".sapp", StringComparison.OrdinalIgnoreCase)) {
+            string withSapp = AppLoader.Instance.GetAppIdFromPath(command + ".sapp");
+            if (withSapp != null) return withSapp;
+        }
+
+        // 4. Try in System32
+        string system32Root = "C:\\Windows\\System32\\";
+        string sys32Path = system32Root + command;
+        string fromSys32 = AppLoader.Instance.GetAppIdFromPath(sys32Path);
+        if (fromSys32 != null) return fromSys32;
+        
+        if (!command.EndsWith(".sapp", StringComparison.OrdinalIgnoreCase)) {
+            string sys32Sapp = AppLoader.Instance.GetAppIdFromPath(sys32Path + ".sapp");
+            if (sys32Sapp != null) return sys32Sapp;
+        }
+
+        // 5. Check if it's just a raw AppId that hasn't been mapped to a path yet (unlikely but safe)
+        if (ProcessManager.Instance.GetProcessByAppId(command.ToUpper()) != null) return command.ToUpper();
+
+        return null;
     }
 
     private List<PendingCommand> ParseCommands(string input) {
@@ -195,6 +243,7 @@ public class TerminalBackend : ITerminal {
 
     public void SendSignal(string signal) {
         if (_activeProcess != null) {
+            DebugLogger.Log($"TerminalBackend: Sending signal {signal} to {_activeProcess.AppId}");
             Shell.Process.SendSignal(_activeProcess, signal);
         }
     }
@@ -217,31 +266,48 @@ public class TerminalBackend : ITerminal {
     public void Clear() {
         lock (_lineLock) {
             _lines.Clear();
+            _currentAnsiColor = Color.White;
         }
         OnBufferChanged?.Invoke();
     }
 
+    public void ResetColor() {
+        _currentAnsiColor = _ansiResetColor;
+    }
+
+    private bool _isLastLineComplete = true;
+    public bool IsLastLineComplete => _isLastLineComplete;
+
     public void WriteLine(string text, Color? color = null) {
-        AddLine(text, color ?? Color.White, "SYSTEM");
+        AddLine((text ?? "") + "\n", color ?? Color.White, "SYSTEM");
     }
 
     private void AddLine(string text, Color defaultColor, string source) {
         if (text == null) return;
         
-        string[] rawLines = text.Split('\n');
-        
         lock (_lineLock) {
+            string[] rawLines = text.Split('\n');
+            bool endsWithNewline = text.EndsWith("\n");
+            
             for (int i = 0; i < rawLines.Length; i++) {
-                string l = rawLines[i].Replace("\r", "");
-                var segments = ProcessAnsiColors(l, defaultColor);
-                
-                // Special case: if this is NOT the first fragment of a split Write, 
-                // and the backend supported partial lines, we would append.
-                // But for now, we'll keep it simple: each Write call is at least one line.
-                // UNLESS the last line didn't end with \n? 
-                // Actually, the current TerminalBackend always treats AddLine as "starting" lines.
-                
-                _lines.Add(new TerminalLine(segments, source));
+                // Skip the trailing empty string produced by Split('\n') when text ends with \n
+                if (i == rawLines.Length - 1 && rawLines[i] == "" && endsWithNewline) break;
+
+                string lineContent = rawLines[i].Replace("\r", "");
+                var segments = ProcessAnsiColors(lineContent, defaultColor);
+
+                if (!_isLastLineComplete && _lines.Count > 0) {
+                    // Append to last line
+                    var lastLine = _lines[^1];
+                    if (lastLine.Segments == null) lastLine.Segments = new List<TerminalSegment>();
+                    lastLine.Segments.AddRange(segments);
+                    _lines[^1] = lastLine;
+                } else {
+                    // New line
+                    _lines.Add(new TerminalLine(segments, source));
+                }
+
+                _isLastLineComplete = (i < rawLines.Length - 1) || endsWithNewline;
             }
 
             // Trim buffer
@@ -256,35 +322,47 @@ public class TerminalBackend : ITerminal {
     private List<TerminalSegment> ProcessAnsiColors(string text, Color defaultColor) {
         var results = new List<TerminalSegment>();
         
-        // Very basic ANSI color support (\u001b[XXm)
-        // Regex to find ANSI escape codes
-        var regex = new Regex(@"\u001b\[(\d+)m");
+        var regex = new Regex("\x1b\\[[0-9;]*m");
         var matches = regex.Matches(text);
         
         if (matches.Count == 0) {
-            results.Add(new TerminalSegment(text, defaultColor));
+            Color colorToUse = (_currentAnsiColor == _ansiResetColor) ? defaultColor : _currentAnsiColor;
+            results.Add(new TerminalSegment(text, colorToUse));
             return results;
         }
 
         int lastIndex = 0;
-        Color currentColor = defaultColor;
-
         foreach (Match match in matches) {
-            // Add text before the match
+            // Add text before the match using current state
             if (match.Index > lastIndex) {
-                results.Add(new TerminalSegment(text.Substring(lastIndex, match.Index - lastIndex), currentColor));
+                string snippet = text.Substring(lastIndex, match.Index - lastIndex);
+                if (!string.IsNullOrEmpty(snippet)) {
+                    Color colorToUse = (_currentAnsiColor == _ansiResetColor) ? defaultColor : _currentAnsiColor;
+                    results.Add(new TerminalSegment(snippet, colorToUse));
+                }
             }
 
-            // Update color
-            int code = int.Parse(match.Groups[1].Value);
-            currentColor = GetAnsiColor(code, defaultColor);
+            // Update color state
+            string codeContent = match.Value.TrimStart('\x1b', '[').TrimEnd('m');
+            if (string.IsNullOrEmpty(codeContent) || codeContent == "0") {
+                _currentAnsiColor = _ansiResetColor;
+            } else {
+                var parts = codeContent.Split(';');
+                foreach (var part in parts) {
+                    if (int.TryParse(part, out int code)) {
+                        if (code == 0) _currentAnsiColor = _ansiResetColor;
+                        else _currentAnsiColor = GetAnsiColor(code, _currentAnsiColor);
+                    }
+                }
+            }
             
             lastIndex = match.Index + match.Length;
         }
 
         // Add remaining text
         if (lastIndex < text.Length) {
-            results.Add(new TerminalSegment(text.Substring(lastIndex), currentColor));
+            Color colorToUse = (_currentAnsiColor == _ansiResetColor) ? defaultColor : _currentAnsiColor;
+            results.Add(new TerminalSegment(text.Substring(lastIndex), colorToUse));
         }
 
         return results;

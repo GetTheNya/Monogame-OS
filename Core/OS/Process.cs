@@ -44,6 +44,10 @@ public class Process {
     
     /// <summary>Update priority when running in background.</summary>
     public ProcessPriority Priority { get; set; } = ProcessPriority.Normal;
+
+    /// <summary> If true, the process runs its logic on a background thread (useful for console apps). </summary>
+    public bool IsThreaded { get; set; } = false;
+    private System.Threading.Thread _processThread;
     
     /// <summary>All windows owned by this process.</summary>
     public List<Window> Windows { get; } = new();
@@ -109,8 +113,37 @@ public class Process {
     // --- Modern Lifecycle Methods ---
 
     protected internal virtual void Initialize(string[] args) {
+        if (IsThreaded) {
+            _processThread = new System.Threading.Thread(() => {
+                try {
+                    OnStart(args);
+                    if (Application != null) {
+                        var onLoadMethod = Application.GetType().GetMethod("OnLoad", 
+                            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                        onLoadMethod?.Invoke(Application, new object[] { args });
+                    }
+                    
+                    // Most console apps will block on ReadLine inside OnLoad or a helper.
+                    // If they use OnUpdate, we still want to support that in a loop.
+                    while (State != ProcessState.Terminated) {
+                        Update(new GameTime());
+                        System.Threading.Thread.Sleep(1); 
+                    }
+                } catch (Exception ex) {
+                    DebugLogger.Log($"Threaded process {AppId} crashed: {ex.Message}");
+                    if (CrashHandler.IsAppException(ex, this)) {
+                        CrashHandler.HandleAppException(this, ex);
+                    } else {
+                        Terminate();
+                    }
+                }
+            });
+            _processThread.IsBackground = true;
+            _processThread.Start();
+            return;
+        }
+
         OnStart(args);
-        // Call OnLoad directly (not obsolete wrapper)
         if (Application != null) {
             var onLoadMethod = Application.GetType().GetMethod("OnLoad", 
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
@@ -119,8 +152,10 @@ public class Process {
     }
 
     protected internal virtual void Update(GameTime gameTime) {
+        // Skip main-thread update if this is a threaded process (it's already running its own loop)
+        if (IsThreaded && System.Threading.Thread.CurrentThread != _processThread) return;
+
         OnUpdate(gameTime);
-        // Call OnUpdate directly (not obsolete wrapper)
         if (Application != null) {
             var onUpdateMethod = Application.GetType().GetMethod("OnUpdate", 
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
@@ -209,6 +244,11 @@ public class Process {
     public void Terminate() {
         if (State == ProcessState.Terminated) return;
         
+        State = ProcessState.Terminated;
+
+        // Wake up any blocking ReadLine
+        if (IO.In is TerminalReader tr) tr.EnqueueInput(null); 
+
         Cleanup();
         
         // Dispose I/O streams
@@ -227,7 +267,7 @@ public class Process {
         Shell.Hotkeys.UnregisterLocal(this);
         
         foreach (var window in Windows.ToList()) {
-            window.Close();
+            window.Terminate();
         }
         Windows.Clear();
         
