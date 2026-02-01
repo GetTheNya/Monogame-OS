@@ -154,6 +154,7 @@ public class TextArea : ValueControl<string> {
         BackgroundColor = new Color(30, 30, 30);
         BorderColor = new Color(60, 60, 60);
         OnResize += () => UpdateVisualLines();
+        UpdateVisualLines();
     }
 
     protected override void OnHover() {
@@ -330,8 +331,12 @@ public class TextArea : ValueControl<string> {
         visualIdx = Math.Clamp(visualIdx, 0, _visualLines.Count - 1);
 
         var vl = _visualLines[visualIdx];
+        if (vl.LogicalLineIndex < 0 || vl.LogicalLineIndex >= _lines.Count) return;
+        
         string lineText = _lines[vl.LogicalLineIndex];
-        string visualPart = lineText.Substring(vl.StartIndex, vl.Length);
+        int start = Math.Clamp(vl.StartIndex, 0, lineText.Length);
+        int length = Math.Clamp(vl.Length, 0, lineText.Length - start);
+        string visualPart = lineText.Substring(start, length);
 
         int colInVisual = 0;
         float bestDist = float.MaxValue;
@@ -351,8 +356,14 @@ public class TextArea : ValueControl<string> {
         float lineHeight = font.LineHeight;
 
         int visualIdx = GetVisualLineIndex(_cursorLine, _cursorCol);
+        if (visualIdx < 0 || visualIdx >= _visualLines.Count) return null;
         var vl = _visualLines[visualIdx];
-        string visualPart = _lines[vl.LogicalLineIndex].Substring(vl.StartIndex, _cursorCol - vl.StartIndex);
+        
+        if (vl.LogicalLineIndex < 0 || vl.LogicalLineIndex >= _lines.Count) return null;
+        string lineText = _lines[vl.LogicalLineIndex];
+        int start = Math.Clamp(vl.StartIndex, 0, lineText.Length);
+        int col = Math.Clamp(_cursorCol, start, start + vl.Length);
+        string visualPart = lineText.Substring(start, col - start);
         
         float cursorX = font.MeasureString(visualPart).X;
         float cursorY = visualIdx * lineHeight;
@@ -711,9 +722,19 @@ public class TextArea : ValueControl<string> {
         lastVis = Math.Clamp(lastVis, 0, maxVis);
 
         for (int i = firstVis; i <= lastVis; i++) {
+            if (i < 0 || i >= _visualLines.Count) continue;
             var vl = _visualLines[i];
             float y = textY + i * lineHeight;
-            string visualPart = _lines[vl.LogicalLineIndex].Substring(vl.StartIndex, vl.Length);
+            
+            // Safety check for logical line index
+            if (vl.LogicalLineIndex < 0 || vl.LogicalLineIndex >= _lines.Count) continue;
+            
+            string lineText = _lines[vl.LogicalLineIndex];
+            // Safety check for substring range
+            int start = Math.Clamp(vl.StartIndex, 0, lineText.Length);
+            int length = Math.Clamp(vl.Length, 0, lineText.Length - start);
+            
+            string visualPart = lineText.Substring(start, length);
             if (!string.IsNullOrEmpty(visualPart)) {
                 font.DrawText(batch, visualPart, new Vector2(textX, y), TextColor * AbsoluteOpacity);
             }
@@ -727,12 +748,19 @@ public class TextArea : ValueControl<string> {
         // Cursor
         if (_showCursor && IsFocused) {
             int visualIdx = GetVisualLineIndex(_cursorLine, _cursorCol);
-            var vl = _visualLines[visualIdx];
-            string visualPart = _lines[vl.LogicalLineIndex].Substring(vl.StartIndex, _cursorCol - vl.StartIndex);
-            
-            float cursorX = font.MeasureString(visualPart).X;
-            float cursorY = textY + visualIdx * lineHeight;
-            batch.FillRectangle(new Vector2(textX + cursorX, cursorY), new Vector2(2, lineHeight), FocusedBorderColor * AbsoluteOpacity);
+            if (visualIdx >= 0 && visualIdx < _visualLines.Count) {
+                var vl = _visualLines[visualIdx];
+                if (vl.LogicalLineIndex >= 0 && vl.LogicalLineIndex < _lines.Count) {
+                    string lineText = _lines[vl.LogicalLineIndex];
+                    int start = Math.Clamp(vl.StartIndex, 0, lineText.Length);
+                    int col = Math.Clamp(_cursorCol, start, start + vl.Length);
+                    string visualPart = lineText.Substring(start, col - start);
+                    
+                    float cursorX = font.MeasureString(visualPart).X;
+                    float cursorY = textY + visualIdx * lineHeight;
+                    batch.FillRectangle(new Vector2(textX + cursorX, cursorY), new Vector2(2, lineHeight), FocusedBorderColor * AbsoluteOpacity);
+                }
+            }
         }
         
         batch.End();
