@@ -153,7 +153,8 @@ public class TerminalBackend : ITerminal {
                 TextReader nextIn = null;
 
                 if (!string.IsNullOrEmpty(cmdCall.RedirectionPath)) {
-                    currentOut = new VfsWriter(cmdCall.RedirectionPath, cmdCall.AppendRedirection);
+                    string resolved = VirtualFileSystem.Instance.ResolvePath(this.WorkingDirectory, cmdCall.RedirectionPath);
+                    currentOut = new VfsWriter(resolved, cmdCall.AppendRedirection);
                 } else if (!isLast) {
                     var bridge = new PipeBridge();
                     currentOut = bridge.Writer;
@@ -257,18 +258,12 @@ public class TerminalBackend : ITerminal {
     }
 
     private List<PipelineJob> ParseCommands(string input) {
-        // 1. Split by sequential/logical operators: &&, ||, ;
-        // We'll treat ; and & as sequential for now as per current code.
-        var tokens = Regex.Split(input, @"(&&|\|\||;)");
-        return CorrectParseAssociations(tokens);
-    }
-
-    private List<PipelineJob> CorrectParseAssociations(string[] tokens) {
         var results = new List<PipelineJob>();
-        string nextOp = "";
+        var tokens = SplitRespectingQuotes(input, new[] { "&&", "||", ";" });
         
-        for (int i = 0; i < tokens.Length; i++) {
-            string t = tokens[i].Trim();
+        string nextOp = "";
+        foreach (var token in tokens) {
+            string t = token.Trim();
             if (string.IsNullOrEmpty(t)) continue;
 
             if (t == "&&" || t == "||" || t == ";") {
@@ -286,31 +281,75 @@ public class TerminalBackend : ITerminal {
 
     private List<CommandCall> ParsePipeline(string input) {
         var results = new List<CommandCall>();
-        // Split by pipe
-        var parts = Regex.Split(input, @"(?<![<>])\|(?![<>])"); // Simple pipe split
+        var parts = SplitRespectingQuotes(input, new[] { "|" });
         
         foreach (var part in parts) {
             string cmd = part.Trim();
-            if (string.IsNullOrEmpty(cmd)) continue;
+            if (string.IsNullOrEmpty(cmd) || cmd == "|") continue;
 
             var call = new CommandCall { CommandLine = cmd };
             
-            // Handle redirection
-            if (cmd.Contains(">>")) {
-                int idx = cmd.IndexOf(">>");
-                call.CommandLine = cmd.Substring(0, idx).Trim();
-                call.RedirectionPath = cmd.Substring(idx + 2).Trim();
-                call.AppendRedirection = true;
-            } else if (cmd.Contains(">")) {
-                int idx = cmd.IndexOf(">");
-                call.CommandLine = cmd.Substring(0, idx).Trim();
-                call.RedirectionPath = cmd.Substring(idx + 1).Trim();
-                call.AppendRedirection = false;
+            // Handle redirection respecting quotes
+            var redirInfo = ParseRedirectionRespectingQuotes(cmd);
+            if (redirInfo != null) {
+                call.CommandLine = redirInfo.Value.CommandLine;
+                call.RedirectionPath = redirInfo.Value.Path;
+                call.AppendRedirection = redirInfo.Value.Append;
             }
             
             results.Add(call);
         }
         return results;
+    }
+
+    private List<string> SplitRespectingQuotes(string input, string[] operators) {
+        var results = new List<string>();
+        bool inQuotes = false;
+        int lastIdx = 0;
+
+        for (int i = 0; i < input.Length; i++) {
+            if (input[i] == '"') {
+                inQuotes = !inQuotes;
+                continue;
+            }
+
+            if (!inQuotes) {
+                foreach (var op in operators.OrderByDescending(o => o.Length)) {
+                    if (i + op.Length <= input.Length && input.Substring(i, op.Length) == op) {
+                        results.Add(input.Substring(lastIdx, i - lastIdx));
+                        results.Add(op);
+                        i += op.Length - 1;
+                        lastIdx = i + 1;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (lastIdx < input.Length) {
+            results.Add(input.Substring(lastIdx));
+        }
+
+        return results;
+    }
+
+    private (string CommandLine, string Path, bool Append)? ParseRedirectionRespectingQuotes(string cmd) {
+        bool inQuotes = false;
+        for (int i = 0; i < cmd.Length; i++) {
+            if (cmd[i] == '"') {
+                inQuotes = !inQuotes;
+                continue;
+            }
+
+            if (!inQuotes) {
+                if (i + 1 < cmd.Length && cmd.Substring(i, 2) == ">>") {
+                    return (cmd.Substring(0, i).Trim(), cmd.Substring(i + 2).Trim().Trim('"'), true);
+                } else if (cmd[i] == '>') {
+                    return (cmd.Substring(0, i).Trim(), cmd.Substring(i + 1).Trim().Trim('"'), false);
+                }
+            }
+        }
+        return null;
     }
 
     public bool IsProcessRunning => _activePipeline.Count > 0;
@@ -369,6 +408,16 @@ public class TerminalBackend : ITerminal {
 
     public void ResetColor() {
         _currentAnsiColor = _ansiResetColor;
+    }
+
+    public void Write(string text, Color? color = null) {
+        AddLine(text ?? "", color ?? Color.White, "SYSTEM");
+    }
+
+    public void EnsureNewline() {
+        if (!_isLastLineComplete && _lines.Count > 0) {
+            AddLine("\n", Color.White, "SYSTEM");
+        }
     }
 
     private bool _isLastLineComplete = true;

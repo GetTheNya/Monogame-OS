@@ -87,19 +87,23 @@ public class TerminalReader : TextReader {
     }
 
     public override string ReadLine() {
-        // Use the async version and block on it. 
-        // This is safe because Run() is called on a background thread.
         return ReadLineAsync().GetAwaiter().GetResult();
     }
 
     public override async Task<string> ReadLineAsync() {
         if (_inputQueue.TryDequeue(out string line)) {
-            return line;
+            return CleanLine(line);
         }
 
         var tcs = new TaskCompletionSource<string>();
         _waitingReaders.Enqueue(tcs);
-        return await tcs.Task;
+        string result = await tcs.Task;
+        return CleanLine(result);
+    }
+
+    private string CleanLine(string line) {
+        if (line == null) return null;
+        return line.TrimEnd('\r', '\n');
     }
 
     public override int Read() {

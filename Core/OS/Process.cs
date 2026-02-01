@@ -259,30 +259,34 @@ public class Process {
         // Wake up any blocking ReadLine
         if (IO.In is TerminalReader tr) tr.EnqueueInput(null); 
 
-        Cleanup();
-        
-        // Dispose I/O streams
-        IO.Dispose();
+        try {
+            Cleanup();
+            
+            // Dispose I/O streams
+            IO.Dispose();
+        } catch (Exception ex) {
+            DebugLogger.Log($"Error during process cleanup: {ex.Message}");
+        } finally {
+            // Clear signal handlers
+            OnSignalCancel = null;
 
-        // Clear signal handlers
-        OnSignalCancel = null;
+            // Remove tray icons owned by this process
+            Shell.SystemTray.RemoveIconsForProcess(this);
 
-        // Remove tray icons owned by this process
-        Shell.SystemTray.RemoveIconsForProcess(this);
-
-        // Remove media owned by this process
-        AudioManager.Instance.CleanupProcess(this);
-        
-        // Remove local hotkeys for this process
-        Shell.Hotkeys.UnregisterLocal(this);
-        
-        foreach (var window in Windows.ToList()) {
-            window.Terminate();
+            // Remove media owned by this process
+            AudioManager.Instance.CleanupProcess(this);
+            
+            // Remove local hotkeys for this process
+            Shell.Hotkeys.UnregisterLocal(this);
+            
+            foreach (var window in Windows.ToList()) {
+                window.Terminate();
+            }
+            Windows.Clear();
+            
+            State = ProcessState.Terminated;
+            ProcessManager.Instance.UnregisterProcess(this);
         }
-        Windows.Clear();
-        
-        State = ProcessState.Terminated;
-        ProcessManager.Instance.UnregisterProcess(this);
     }
     
     /// <summary>

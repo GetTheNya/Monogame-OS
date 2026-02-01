@@ -15,7 +15,7 @@ public class Program : TerminalApplication {
             foreach (var file in args) {
                 string resolved = VirtualFileSystem.Instance.ResolvePath(Process.WorkingDirectory, file);
                 if (VirtualFileSystem.Instance.Exists(resolved)) {
-                    WriteLine(VirtualFileSystem.Instance.ReadAllText(resolved));
+                    Write(VirtualFileSystem.Instance.ReadAllText(resolved));
                 } else {
                     WriteLine($"cat: {file}: No such file or directory", Color.Red);
                     Process.ExitCode = 1;

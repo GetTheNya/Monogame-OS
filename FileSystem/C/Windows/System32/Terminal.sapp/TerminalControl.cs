@@ -183,6 +183,7 @@ public class TerminalControl : TextArea {
         _historyIndex = -1;
 
         if (!_backend.IsProcessRunning) {
+            _backend.EnsureNewline();
             _backend.WriteLine("\u001b[32m" + GetPrompt() + "\u001b[0m" + rawInput);
 
             if (!string.IsNullOrEmpty(cmd)) {
