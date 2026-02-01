@@ -1,0 +1,7 @@
+{
+  "appId": "GREP",
+  "name": "Grep Utility",
+  "entryClass": "Grep.Program",
+  "entryMethod": "Main",
+  "terminalOnly": true
+}

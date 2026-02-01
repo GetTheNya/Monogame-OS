@@ -1,0 +1,7 @@
+{
+  "appId": "CAT",
+  "name": "Cat Utility",
+  "entryClass": "Cat.Program",
+  "entryMethod": "Main",
+  "terminalOnly": true
+}

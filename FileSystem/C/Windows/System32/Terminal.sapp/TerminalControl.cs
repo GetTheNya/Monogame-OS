@@ -252,6 +252,7 @@ public class TerminalControl : TextArea {
                 string resolved = VirtualFileSystem.Instance.ResolvePath(_currentDir, target);
                 if (VirtualFileSystem.Instance.IsDirectory(resolved)) {
                     _currentDir = VirtualFileSystem.Instance.GetActualCasing(resolved);
+                    _backend.WorkingDirectory = _currentDir;
                 } else {
                     _backend.WriteLine($"The system cannot find the path specified: {target}", Color.Red);
                 }

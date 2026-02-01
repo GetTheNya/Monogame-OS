@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Xna.Framework;
 using System.Text.RegularExpressions;
+using System.IO;
 
 namespace TheGame.Core.OS;
 
@@ -16,12 +17,21 @@ public class TerminalBackend : ITerminal {
     
     private Process _activeProcess;
     private TerminalReader _activeReader;
+    public string WorkingDirectory { get; set; } = "C:\\";
     
-    private struct PendingCommand {
-        public string Command;
-        public string Operator; // "&", "&&", "||", or ""
+    private class CommandCall {
+        public string CommandLine;
+        public string RedirectionPath;
+        public bool AppendRedirection;
     }
-    private Queue<PendingCommand> _commandQueue = new();
+
+    private class PipelineJob {
+        public List<CommandCall> Commands = new();
+        public string Operator; // "", "&&", "||", or ";"
+    }
+
+    private Queue<PipelineJob> _commandQueue = new();
+    private List<Process> _activePipeline = new();
     private int _lastExitCode = 0;
     private static readonly Color _ansiResetColor = new Color(0, 0, 0, 0); // Special marker for "default"
     private Color _currentAnsiColor = _ansiResetColor;
@@ -40,37 +50,42 @@ public class TerminalBackend : ITerminal {
 
     public TerminalBackend(int bufferHeight = 1000) {
         _bufferHeight = bufferHeight;
+        _activeReader = new TerminalReader();
     }
 
     public void AttachProcess(Process process) {
         if (process == null) return;
-        
-        ResetColor(); // Reset color for new process
-        DetachActiveProcess();
-
-        _activeProcess = process;
-        _activeReader = new TerminalReader();
-        
-        // Setup Standard I/O
-        process.IO.In = _activeReader;
-        process.IO.Out = new TerminalWriter(AddLine, Color.White, "STDOUT");
-        process.IO.Error = new TerminalWriter(AddLine, Color.Red, "STDERR");
-        
-        ProcessManager.Instance.OnProcessTerminated += OnProcessTerminated;
-    }
-
-    private void DetachActiveProcess() {
-        if (_activeProcess != null) {
-            ProcessManager.Instance.OnProcessTerminated -= OnProcessTerminated;
-            _activeProcess = null;
+        lock (_activePipeline) {
+            if (!_activePipeline.Contains(process)) {
+                _activePipeline.Add(process);
+                _activeProcess = process;
+                ProcessManager.Instance.OnProcessTerminated += OnProcessTerminated;
+            }
         }
     }
 
+    private void DetachActiveProcess() {
+        // No longer using single active process tracking in the same way, 
+        // but we still want to clean up if needed.
+        _activeProcess = null;
+    }
+
     private void OnProcessTerminated(Process process) {
-        if (process == _activeProcess) {
-            _lastExitCode = process.ExitCode;
-            DetachActiveProcess();
-            RunNextCommand();
+        lock (_activePipeline) {
+            if (_activePipeline.Contains(process)) {
+                _activePipeline.Remove(process);
+                
+                // The exit code of the pipeline is usually the exit code of the LAST process
+                // (though some shells have pipefail option)
+                // We'll just take the exit code of any terminating process for now, 
+                // but RunNextCommand only triggers when the WHOLE pipeline is empty.
+                _lastExitCode = process.ExitCode;
+
+                if (_activePipeline.Count == 0) {
+                    _activeProcess = null;
+                    RunNextCommand();
+                }
+            }
         }
     }
 
@@ -94,23 +109,23 @@ public class TerminalBackend : ITerminal {
             return;
         }
 
-        var pending = _commandQueue.Dequeue();
+        var job = _commandQueue.Dequeue();
         
         // Check conditional operators
-        if (pending.Operator == "&&" && _lastExitCode != 0) {
+        if (job.Operator == "&&" && _lastExitCode != 0) {
             // Skip this command and all subsequent conditional ones
             ClearRemainingConditionalCommands();
             RunNextCommand();
             return;
         }
-        if (pending.Operator == "||" && _lastExitCode == 0) {
+        if (job.Operator == "||" && _lastExitCode == 0) {
             // Skip
             RunNextCommand();
             return;
         }
 
-        // Start the process
-        StartProcess(pending.Command);
+        // Start the pipeline
+        StartPipeline(job);
     }
 
     private void ClearRemainingConditionalCommands() {
@@ -119,12 +134,57 @@ public class TerminalBackend : ITerminal {
         }
     }
 
-    private void StartProcess(string commandLine) {
-        var parts = Regex.Matches(commandLine, @"[\""].+?[\""]|[^ ]+")
+    private void StartPipeline(PipelineJob job) {
+        if (job.Commands.Count == 0) {
+            RunNextCommand();
+            return;
+        }
+
+        lock (_activePipeline) {
+            _activePipeline.Clear();
+            
+            TextReader lastIn = _activeReader;
+
+            for (int i = 0; i < job.Commands.Count; i++) {
+                var cmdCall = job.Commands[i];
+                bool isLast = (i == job.Commands.Count - 1);
+                
+                TextWriter currentOut = null;
+                TextReader nextIn = null;
+
+                if (!string.IsNullOrEmpty(cmdCall.RedirectionPath)) {
+                    currentOut = new VfsWriter(cmdCall.RedirectionPath, cmdCall.AppendRedirection);
+                } else if (!isLast) {
+                    var bridge = new PipeBridge();
+                    currentOut = bridge.Writer;
+                    nextIn = bridge.Reader;
+                } else {
+                    currentOut = new TerminalWriter(AddLine, Color.White, "STDOUT");
+                }
+
+                var proc = StartProcess(cmdCall.CommandLine, lastIn, currentOut);
+                if (proc != null) {
+                    _activePipeline.Add(proc);
+                }
+                
+                lastIn = nextIn;
+            }
+
+            if (_activePipeline.Count > 0) {
+                _activeProcess = _activePipeline.Last(); // For legacy tracking, use the last one
+            } else {
+                RunNextCommand();
+            }
+        }
+    }
+
+    private Process StartProcess(string commandLine, TextReader inputOverride = null, TextWriter outputOverride = null) {
+        var matches = Regex.Matches(commandLine, @"[\""].+?[\""]|[^ ]+");
+        var parts = matches.Cast<Match>()
                          .Select(m => m.Value.Trim('"'))
                          .ToArray();
 
-        if (parts.Length == 0) return;
+        if (parts.Length == 0) return null;
 
         string command = parts[0];
         string[] args = parts.Skip(1).ToArray();
@@ -132,12 +192,17 @@ public class TerminalBackend : ITerminal {
         string appId = ResolveAppId(command);
 
         if (appId != null) {
-            // Start process and attach I/O BEFORE it initializes
-            // Use a local capture to handle quick-exiting processes (race condition fix)
             Process startedProcess = null;
             var process = ProcessManager.Instance.StartProcess(appId, args, (p) => {
                 startedProcess = p;
-                AttachProcess(p);
+                
+                ResetColor();
+                p.WorkingDirectory = this.WorkingDirectory;
+                p.IO.In = inputOverride ?? _activeReader;
+                p.IO.Out = outputOverride ?? new TerminalWriter(AddLine, Color.White, "STDOUT");
+                p.IO.Error = new TerminalWriter(AddLine, Color.Red, "STDERR");
+                
+                ProcessManager.Instance.OnProcessTerminated += OnProcessTerminated;
             });
             
             var finalProcess = process ?? startedProcess;
@@ -145,12 +210,12 @@ public class TerminalBackend : ITerminal {
             if (finalProcess == null) {
                  AddLine($"{command} failed to start\n", Color.Red, "SYSTEM");
                  _lastExitCode = 1;
-                 RunNextCommand();
             }
+            return finalProcess;
         } else {
             AddLine($"{command} is not recognized as an internal or external command\n", Color.Red, "SYSTEM");
             _lastExitCode = 1;
-            RunNextCommand();
+            return null;
         }
     }
 
@@ -168,7 +233,13 @@ public class TerminalBackend : ITerminal {
             if (withSapp != null) return withSapp;
         }
 
-        // 4. Try in System32
+		// 4. Try in System32\TerminalApps
+        string system32TerminalRoot = "C:\\Windows\\System32\\TerminalApps\\";
+        string sys32TerminalPath = system32TerminalRoot + command;
+        string fromSys32Terminal = AppLoader.Instance.GetAppIdFromPath(sys32TerminalPath);
+        if (fromSys32Terminal != null) return fromSys32Terminal;
+
+        // 5. Try in System32
         string system32Root = "C:\\Windows\\System32\\";
         string sys32Path = system32Root + command;
         string fromSys32 = AppLoader.Instance.GetAppIdFromPath(sys32Path);
@@ -179,77 +250,90 @@ public class TerminalBackend : ITerminal {
             if (sys32Sapp != null) return sys32Sapp;
         }
 
-        // 5. Check if it's just a raw AppId that hasn't been mapped to a path yet (unlikely but safe)
+        // 6. Check if it's just a raw AppId that hasn't been mapped to a path yet (unlikely but safe)
         if (ProcessManager.Instance.GetProcessByAppId(command.ToUpper()) != null) return command.ToUpper();
 
         return null;
     }
 
-    private List<PendingCommand> ParseCommands(string input) {
-        var results = new List<PendingCommand>();
-        
-        // Very basic parsing for &, &&, ||
-        // A real parser would handle quotes, but let's keep it simple for now as requested.
-        string[] tokens = Regex.Split(input, @"(&&|\|\||&)");
-        
-        string lastOp = "";
-        foreach (var token in tokens) {
-            string t = token.Trim();
-            if (t == "&&" || t == "||" || t == "&") {
-                lastOp = t;
-            } else if (!string.IsNullOrWhiteSpace(t)) {
-                results.Add(new PendingCommand { Command = t, Operator = lastOp });
-                lastOp = "&"; // Default following operator is sequential if not specified (wait, no)
-                // Actually, the operator applies to the NEXT command.
-                // Example: "A && B" -> A runs first, then B runs if A succeeds.
-                // So "&&" belongs to B.
-            }
-        }
-
-        // Wait, the logic above is slightly flawed. 
-        // "A && B || C"
-        // Tokens: "A", "&&", "B", "||", "C"
-        // Correct associations:
-        // A: ""
-        // B: "&&"
-        // C: "||"
-        
+    private List<PipelineJob> ParseCommands(string input) {
+        // 1. Split by sequential/logical operators: &&, ||, ;
+        // We'll treat ; and & as sequential for now as per current code.
+        var tokens = Regex.Split(input, @"(&&|\|\||;)");
         return CorrectParseAssociations(tokens);
     }
 
-    private List<PendingCommand> CorrectParseAssociations(string[] tokens) {
-        var results = new List<PendingCommand>();
+    private List<PipelineJob> CorrectParseAssociations(string[] tokens) {
+        var results = new List<PipelineJob>();
         string nextOp = "";
         
         for (int i = 0; i < tokens.Length; i++) {
             string t = tokens[i].Trim();
             if (string.IsNullOrEmpty(t)) continue;
 
-            if (t == "&&" || t == "||" || t == "&") {
+            if (t == "&&" || t == "||" || t == ";") {
                 nextOp = t;
             } else {
-                results.Add(new PendingCommand { Command = t, Operator = nextOp });
-                nextOp = ""; // Reset for next group
+                results.Add(new PipelineJob { 
+                    Commands = ParsePipeline(t), 
+                    Operator = nextOp 
+                });
+                nextOp = ""; 
             }
         }
         return results;
     }
 
-    public bool IsProcessRunning => _activeProcess != null;
+    private List<CommandCall> ParsePipeline(string input) {
+        var results = new List<CommandCall>();
+        // Split by pipe
+        var parts = Regex.Split(input, @"(?<![<>])\|(?![<>])"); // Simple pipe split
+        
+        foreach (var part in parts) {
+            string cmd = part.Trim();
+            if (string.IsNullOrEmpty(cmd)) continue;
+
+            var call = new CommandCall { CommandLine = cmd };
+            
+            // Handle redirection
+            if (cmd.Contains(">>")) {
+                int idx = cmd.IndexOf(">>");
+                call.CommandLine = cmd.Substring(0, idx).Trim();
+                call.RedirectionPath = cmd.Substring(idx + 2).Trim();
+                call.AppendRedirection = true;
+            } else if (cmd.Contains(">")) {
+                int idx = cmd.IndexOf(">");
+                call.CommandLine = cmd.Substring(0, idx).Trim();
+                call.RedirectionPath = cmd.Substring(idx + 1).Trim();
+                call.AppendRedirection = false;
+            }
+            
+            results.Add(call);
+        }
+        return results;
+    }
+
+    public bool IsProcessRunning => _activePipeline.Count > 0;
 
     public void TerminateActiveProcess() {
-        _activeProcess?.Terminate();
+        lock (_activePipeline) {
+            foreach (var p in _activePipeline.ToList()) {
+                p.Terminate();
+            }
+        }
     }
 
     public void SendSignal(string signal) {
-        if (_activeProcess != null) {
-            DebugLogger.Log($"TerminalBackend: Sending signal {signal} to {_activeProcess.AppId}");
-            
-            if (signal == "SIGINT" || signal == "CTRL+C") {
-                AddLine("^C", Color.Yellow, "SYSTEM");
+        lock (_activePipeline) {
+            if (_activePipeline.Count > 0) {
+                DebugLogger.Log($"TerminalBackend: Sending signal {signal} to pipeline");
+                if (signal == "SIGINT" || signal == "CTRL+C") {
+                    AddLine("^C", Color.Yellow, "SYSTEM");
+                }
+                foreach (var p in _activePipeline.ToList()) {
+                    Shell.Process.SendSignal(p, signal);
+                }
             }
-            
-            Shell.Process.SendSignal(_activeProcess, signal);
         }
     }
 

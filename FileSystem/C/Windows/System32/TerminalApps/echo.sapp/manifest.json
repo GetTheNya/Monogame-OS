@@ -1,0 +1,7 @@
+{
+  "appId": "ECHO",
+  "name": "Echo Utility",
+  "entryClass": "Echo.Program",
+  "entryMethod": "Main",
+  "terminalOnly": true
+}

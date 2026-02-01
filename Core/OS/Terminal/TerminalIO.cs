@@ -18,6 +18,8 @@ public class TerminalWriter : TextWriter {
 
     public override Encoding Encoding => Encoding.UTF8;
 
+    public Action OnDispose { get; set; }
+
     public TerminalWriter(Action<string, Color, string> onWrite, Color defaultColor, string source) {
         _onWrite = onWrite;
         _defaultColor = defaultColor;
@@ -56,6 +58,7 @@ public class TerminalWriter : TextWriter {
 
     protected override void Dispose(bool disposing) {
         Flush();
+        OnDispose?.Invoke();
         base.Dispose(disposing);
     }
 }
@@ -180,6 +183,8 @@ public class PipeBridge {
     public TextReader Reader => _reader;
 
     public PipeBridge() {
-        Writer = new TerminalWriter((text, color, source) => _reader.EnqueueInput(text), Color.White, "PIPE");
+        var tw = new TerminalWriter((text, color, source) => _reader.EnqueueInput(text), Color.White, "PIPE");
+        tw.OnDispose = () => _reader.EnqueueInput(null);
+        Writer = tw;
     }
 }

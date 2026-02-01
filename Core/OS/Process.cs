@@ -70,6 +70,9 @@ public class Process {
     /// <summary> Environment variables for this process. </summary>
     public Dictionary<string, string> Environment { get; } = new();
 
+    /// <summary> The current working directory of this process. </summary>
+    public string WorkingDirectory { get; set; } = "C:\\";
+
     /// <summary> The return code of the process when it terminates (0 = Success). </summary>
     public int ExitCode { get; set; } = 0;
 

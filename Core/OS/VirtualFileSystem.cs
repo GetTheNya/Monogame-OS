@@ -47,6 +47,7 @@ public class VirtualFileSystem {
 
         // Load all apps from System32 using AppLoader
         AppLoader.Instance.LoadAppsFromDirectory("C:\\Windows\\System32\\");
+		AppLoader.Instance.LoadAppsFromDirectory("C:\\Windows\\System32\\TerminalApps\\");
     }
 
     private void EnsureFile(string path, string content) {
