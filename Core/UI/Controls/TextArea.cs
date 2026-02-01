@@ -89,6 +89,7 @@ public class TextArea : ValueControl<string> {
         _maxWidthDirty = true;
         UpdateVisualLines();
         base.SetValue(string.Join("\n", _lines), true);
+        EnsureCursorVisible();
     }
 
     protected void UpdateVisualLines() {
@@ -153,7 +154,10 @@ public class TextArea : ValueControl<string> {
     public TextArea(Vector2 position, Vector2 size) : base(position, size, "") {
         BackgroundColor = new Color(30, 30, 30);
         BorderColor = new Color(60, 60, 60);
-        OnResize += () => UpdateVisualLines();
+        OnResize += () => {
+            UpdateVisualLines();
+            EnsureCursorVisible();
+        };
         UpdateVisualLines();
     }
 
@@ -440,7 +444,6 @@ public class TextArea : ValueControl<string> {
 
         ResetSelection();
         NotifyUserChanged();
-        EnsureCursorVisible();
     }
 
     private void SelectWordAtCursor() {
@@ -531,7 +534,6 @@ public class TextArea : ValueControl<string> {
         _cursorCol = startCol;
         ResetSelection();
         NotifyUserChanged();
-        EnsureCursorVisible();
     }
 
     protected void GetSelectionRange(out int startLine, out int startCol, out int endLine, out int endCol) {
@@ -553,7 +555,7 @@ public class TextArea : ValueControl<string> {
         float cursorY = visualIdx * lineHeight;
 
         if (cursorY < _targetScrollOffset) _targetScrollOffset = cursorY;
-        if (cursorY + lineHeight > _targetScrollOffset + Size.Y - 10) _targetScrollOffset = cursorY + lineHeight - Size.Y + 10;
+        if (cursorY + lineHeight > _targetScrollOffset + Size.Y - 20) _targetScrollOffset = cursorY + lineHeight - Size.Y + 20;
 
         if (WordWrap) {
             _targetScrollOffsetX = 0;
@@ -571,7 +573,7 @@ public class TextArea : ValueControl<string> {
         if (GameContent.FontSystem == null || _visualLines.Count == 0) return;
         var font = GameContent.FontSystem.GetFont(FontSize);
         float totalHeight = _visualLines.Count * font.LineHeight;
-        _targetScrollOffset = Math.Clamp(_targetScrollOffset, 0, Math.Max(0, totalHeight - Size.Y + 10));
+        _targetScrollOffset = Math.Clamp(_targetScrollOffset, 0, Math.Max(0, totalHeight - Size.Y + 20));
 
         if (WordWrap) {
             _targetScrollOffsetX = 0;
