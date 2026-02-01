@@ -19,6 +19,8 @@ namespace TerminalApp;
 
 public class TerminalControl : TextArea {
     private TerminalBackend _backend;
+    private bool _needsSync = false;
+    private readonly object _syncLock = new();
     private string _currentInput = "";
     private string _stashInput = "";
     private List<string> _commandHistory = new();
@@ -36,7 +38,7 @@ public class TerminalControl : TextArea {
 
     public TerminalControl(Vector2 position, Vector2 size) : base(position, size) {
         _backend = new TerminalBackend();
-        _backend.OnBufferChanged += SyncLines;
+        _backend.OnBufferChanged += () => { lock (_syncLock) { _needsSync = true; } };
         
         BackgroundColor = Color.Black * 0.8f;
         TextColor = Color.LightGray;
@@ -51,6 +53,22 @@ public class TerminalControl : TextArea {
 
         SyncLines();
         ResetSelection();
+    }
+
+    public override void Update(GameTime gameTime) {
+        base.Update(gameTime);
+        
+        bool sync = false;
+        lock (_syncLock) {
+            if (_needsSync) {
+                sync = true;
+                _needsSync = false;
+            }
+        }
+        
+        if (sync) {
+            SyncLines();
+        }
     }
 
     public void LoadSettings(TheGame.Core.OS.Process process) {
@@ -418,7 +436,12 @@ public class TerminalControl : TextArea {
         lastVis = Math.Clamp(lastVis, 0, maxVis);
         
         for (int i = firstVis; i <= lastVis; i++) {
+            if (i < 0 || i >= _visualLines.Count) continue;
             var vl = _visualLines[i];
+            
+            // Safety check for logical line index
+            if (vl.LogicalLineIndex < 0 || vl.LogicalLineIndex >= _lines.Count) continue;
+
             float y = textY + i * lineHeight;
 
             // Is this line from the backend?
@@ -465,8 +488,10 @@ public class TerminalControl : TextArea {
                         font.DrawText(batch, visualPart, new Vector2(textX, y), TextColor * AbsoluteOpacity);
                     }
                 } else if (_backend.IsLastLineComplete) {
-                     string visualPart = _lines[vl.LogicalLineIndex].Substring(vl.StartIndex, vl.Length);
-                     font.DrawText(batch, visualPart, new Vector2(textX, y), TextColor * AbsoluteOpacity);
+                     if (vl.LogicalLineIndex >= 0 && vl.LogicalLineIndex < _lines.Count) {
+                         string visualPart = _lines[vl.LogicalLineIndex].Substring(vl.StartIndex, vl.Length);
+                         font.DrawText(batch, visualPart, new Vector2(textX, y), TextColor * AbsoluteOpacity);
+                     }
                 }
             }
         }
@@ -474,10 +499,19 @@ public class TerminalControl : TextArea {
         // Cursor
         if (_showCursor && IsFocused) {
             int visIdx = GetVisualLineIndex(_cursorLine, _cursorCol);
-            var vl = _visualLines[visIdx];
-            float cX = textX + font.MeasureString(_lines[vl.LogicalLineIndex].Substring(vl.StartIndex, _cursorCol - vl.StartIndex)).X;
-            float cY = textY + visIdx * lineHeight;
-            batch.FillRectangle(new Vector2(cX, cY + 2), new Vector2(8, lineHeight - 4), Color.White * 0.7f * AbsoluteOpacity);
+            if (visIdx >= 0 && visIdx < _visualLines.Count) {
+                var vl = _visualLines[visIdx];
+                if (vl.LogicalLineIndex >= 0 && vl.LogicalLineIndex < _lines.Count) {
+                    string lineText = _lines[vl.LogicalLineIndex];
+                    int start = Math.Clamp(vl.StartIndex, 0, lineText.Length);
+                    int col = Math.Clamp(_cursorCol, start, start + vl.Length);
+                    string visualPart = lineText.Substring(start, col - start);
+                    
+                    float cursorX = font.MeasureString(visualPart).X;
+                    float cursorY = textY + visIdx * lineHeight;
+                    batch.FillRectangle(new Vector2(textX + cursorX, cursorY + 2), new Vector2(8, lineHeight - 4), Color.White * 0.7f * AbsoluteOpacity);
+                }
+            }
         }
 
         spriteBatch.End();

@@ -69,4 +69,9 @@ public class TerminalWindow : Window {
         string dir = _terminal.CurrentDirectory;
         Title = $"Terminal - {dir}";
     }
+
+    public override void Terminate() {
+        //Terminate opened process
+        base.Terminate();
+    }
 }

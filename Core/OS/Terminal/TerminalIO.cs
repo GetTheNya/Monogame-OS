@@ -84,12 +84,9 @@ public class TerminalReader : TextReader {
     }
 
     public override string ReadLine() {
-        if (_inputQueue.TryDequeue(out string line)) {
-            return line;
-        }
-        
-        // No more blocking wait here. Threading is removed.
-        return null; 
+        // Use the async version and block on it. 
+        // This is safe because Run() is called on a background thread.
+        return ReadLineAsync().GetAwaiter().GetResult();
     }
 
     public override async Task<string> ReadLineAsync() {

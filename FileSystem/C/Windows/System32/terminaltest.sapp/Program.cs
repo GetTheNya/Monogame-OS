@@ -5,45 +5,42 @@ using TheGame.Core.OS;
 namespace TerminalTest;
 
 public class Program : TerminalApplication {
-    private bool _isInteractive = false;
-
     public static Program Main(string[] args) {
         return new Program();
     }
 
-    protected override async System.Threading.Tasks.Task OnLoadAsync(string[] args) {
+    protected override void Run(string[] args) {
         if (args != null && args.Length > 0) {
-            await RunTestsAsync(args);
+            RunTests(args);
         } else {
-            await RunInteractiveAsync();
+            RunInteractive();
         }
     }
 
-    private async System.Threading.Tasks.Task RunTestsAsync(string[] args) {
+    private void RunTests(string[] args) {
         WriteLine("Running Console Tests...");
         foreach (var arg in args) {
             if (arg == "--color") TestColors();
-            if (arg == "--signal") await TestSignalAsync();
+            if (arg == "--signal") TestSignal();
         }
         WriteLine("Tests complete. Returing exit code 0.");
         Process.ExitCode = 0;
-        Exit();
+        // No need to call Exit() here, TerminalApplication will call it after Run finishes
     }
 
-    private async System.Threading.Tasks.Task RunInteractiveAsync() {
+    private void RunInteractive() {
         WriteLine("--- Console Test Interactive Mode ---", Color.Cyan);
         WriteLine("Type 'exit' to quit, 'color' for color test, 'err' for error test.");
         
         while (true) {
             Write("> ");
-            string rawInput = await ReadLineAsync();
+            string rawInput = ReadLine();
             if (rawInput == null) break; // Terminated
 
             string input = rawInput.Trim().ToLower();
             
             if (input == "exit") {
-                Exit();
-                break;
+                break; // Exit the loop, Run finishes, app terminates
             }
             
             if (input == "color") TestColors();
@@ -60,9 +57,9 @@ public class Program : TerminalApplication {
         WriteLine("\u001b[33mYellow Text\u001b[0m");
     }
 
-    private async System.Threading.Tasks.Task TestSignalAsync() {
+    private void TestSignal() {
         WriteLine("Waiting for Ctrl+C... (type something to skip)");
-        await ReadLineAsync();
+        ReadLine();
     }
 
     protected override void OnCancel() {

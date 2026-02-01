@@ -519,7 +519,7 @@ public class Window : UIElement {
         ExecuteClose();
     }
 
-    public void Terminate(){
+    public virtual void Terminate() {
         ExecuteClose();
     }
 
