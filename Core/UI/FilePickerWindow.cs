@@ -146,7 +146,7 @@ public class FilePickerWindow : Window {
     }
 
     private void RefreshList() {
-        _fileListPanel.Children.Clear();
+        _fileListPanel.ClearChildren();
         _pathLabel.Text = _currentPath;
         
         float y = 0;

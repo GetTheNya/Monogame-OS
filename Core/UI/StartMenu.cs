@@ -95,7 +95,7 @@ public class StartMenu : Panel {
 
     public void RefreshItems() {
         EnsureDefaultShortcuts();
-        _scrollPanel.Children.Clear();
+        _scrollPanel.ClearChildren();
         
         string startMenuPath = "C:\\Users\\Admin\\Start Menu\\";
         if (!Core.OS.VirtualFileSystem.Instance.Exists(startMenuPath)) {

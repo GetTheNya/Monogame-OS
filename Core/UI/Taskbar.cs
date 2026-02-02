@@ -148,8 +148,8 @@ public class Taskbar : Panel {
 
                     // Swap Buttons in Children (keep in sync)
                     var btnOffset = _windowListPanel.Children[_dragSourceIndex];
-                    _windowListPanel.Children.RemoveAt(_dragSourceIndex);
-                    _windowListPanel.Children.Insert(targetIndex, btnOffset);
+                    _windowListPanel.RemoveChildAt(_dragSourceIndex);
+                    _windowListPanel.InsertChild(targetIndex, btnOffset);
 
                     // Update logical index
                     _dragSourceIndex = targetIndex;

@@ -92,7 +92,7 @@ public class UIManager {
         try {
             // We iterate through root children and flush between them to ensure strict layering
             // Use ToList() to prevent "Collection was modified" if a child is added/removed during Draw
-            var layers = _root.Children.ToList();
+            var layers = _root.Children;
             foreach (var layer in layers) {
                 if (!layer.IsVisible) continue;
                 

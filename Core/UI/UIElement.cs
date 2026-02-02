@@ -12,7 +12,11 @@ namespace TheGame.Core.UI;
 
 public abstract class UIElement : IContextMenuProvider {
     public UIElement Parent { get; set; }
-    public List<UIElement> Children { get; private set; } = new();
+    private readonly List<UIElement> _childrenInternal = new();
+    private UIElement[] _childrenSnapshot = Array.Empty<UIElement>();
+    private readonly object _childrenLock = new();
+
+    public IReadOnlyList<UIElement> Children => _childrenSnapshot;
 
     private Vector2 _position;
     public Vector2 Position {
@@ -62,7 +66,8 @@ public abstract class UIElement : IContextMenuProvider {
     /// If name is null, returns first element of type T.
     /// </summary>
     public T GetChild<T>(string name = null) where T : UIElement {
-        foreach (var child in Children) {
+        var snapshot = _childrenSnapshot;
+        foreach (var child in snapshot) {
             if (child is T typed && (name == null || child.Name == name)) {
                 return typed;
             }
@@ -82,7 +87,8 @@ public abstract class UIElement : IContextMenuProvider {
     }
     
     private void GetChildrenRecursive<T>(string name, List<T> results) where T : UIElement {
-        foreach (var child in Children) {
+        var snapshot = _childrenSnapshot;
+        foreach (var child in snapshot) {
             if (child is T typed && (name == null || child.Name == name)) {
                 results.Add(typed);
             }
@@ -99,7 +105,8 @@ public abstract class UIElement : IContextMenuProvider {
         UIElement current = this;
         
         foreach (var part in parts) {
-            var found = current.Children.FirstOrDefault(c => c.Name == part);
+            var snapshot = current._childrenSnapshot;
+            var found = snapshot.FirstOrDefault(c => c.Name == part);
             if (found == null) return null;
             current = found;
         }
@@ -184,8 +191,9 @@ public abstract class UIElement : IContextMenuProvider {
         if (!IsVisible || !Bounds.Contains(pos)) return null;
 
         // Check children first (top-most in Z-order are at the end of the list)
-        for (int i = Children.Count - 1; i >= 0; i--) {
-            var found = Children[i].GetElementAt(pos);
+        var snapshot = _childrenSnapshot;
+        for (int i = snapshot.Length - 1; i >= 0; i--) {
+            var found = snapshot[i].GetElementAt(pos);
             if (found != null) return found;
         }
 
@@ -202,11 +210,10 @@ public abstract class UIElement : IContextMenuProvider {
         if (!IsActive || !IsVisible) return;
 
         try {
+            var snapshot = _childrenSnapshot;
             // Iterate in reverse using index to avoid allocation and handle removal
-            for (int i = Children.Count - 1; i >= 0; i--) {
-                if (i < Children.Count) { // Check bounds in case child was removed
-                    Children[i].Update(gameTime);
-                }
+            for (int i = snapshot.Length - 1; i >= 0; i--) {
+                snapshot[i].Update(gameTime);
             }
 
             UpdateInput();
@@ -282,8 +289,8 @@ public abstract class UIElement : IContextMenuProvider {
         try {
             DrawSelf(spriteBatch, shapeBatch);
             
-            var children = Children.ToList();
-            foreach (var child in children) {
+            var snapshot = _childrenSnapshot;
+            foreach (var child in snapshot) {
                 child.Draw(spriteBatch, shapeBatch);
             }
         } catch (Exception ex) {
@@ -303,25 +310,56 @@ public abstract class UIElement : IContextMenuProvider {
     }
 
     public virtual void AddChild(UIElement child) {
-        child.Parent = this;
-        Children.Add(child);
+        lock (_childrenLock) {
+            child.Parent = this;
+            _childrenInternal.Add(child);
+            _childrenSnapshot = _childrenInternal.ToArray();
+        }
     }
 
     public void RemoveChild(UIElement child) {
-        if (Children.Remove(child)) {
-            child.Parent = null;
+        lock (_childrenLock) {
+            if (_childrenInternal.Remove(child)) {
+                child.Parent = null;
+                _childrenSnapshot = _childrenInternal.ToArray();
+            }
+        }
+    }
+
+    public void RemoveChildAt(int index) {
+        lock (_childrenLock) {
+            if (index >= 0 && index < _childrenInternal.Count) {
+                var child = _childrenInternal[index];
+                child.Parent = null;
+                _childrenInternal.RemoveAt(index);
+                _childrenSnapshot = _childrenInternal.ToArray();
+            }
+        }
+    }
+
+    public void InsertChild(int index, UIElement child) {
+        lock (_childrenLock) {
+            child.Parent = this;
+            _childrenInternal.Insert(index, child);
+            _childrenSnapshot = _childrenInternal.ToArray();
         }
     }
 
     public void ClearChildren() {
-        foreach (var child in Children) child.Parent = null;
-        Children.Clear();
+        lock (_childrenLock) {
+            foreach (var child in _childrenInternal) child.Parent = null;
+            _childrenInternal.Clear();
+            _childrenSnapshot = Array.Empty<UIElement>();
+        }
     }
 
     public void BringToFront(UIElement child) {
-        if (Children.Remove(child)) {
-            Children.Add(child);
-            child.Parent = this; // Should already be this, but safe to set
+        lock (_childrenLock) {
+            if (_childrenInternal.Remove(child)) {
+                _childrenInternal.Add(child);
+                child.Parent = this; 
+                _childrenSnapshot = _childrenInternal.ToArray();
+            }
         }
     }
 
@@ -329,9 +367,9 @@ public abstract class UIElement : IContextMenuProvider {
     /// Recursively closes any open popups or overlays in this element or its children.
     /// </summary>
     public virtual void ClosePopups() {
-        // Use a for loop to avoid modification issues during iteration
-        for (int i = 0; i < Children.Count; i++) {
-            Children[i].ClosePopups();
+        var snapshot = _childrenSnapshot;
+        for (int i = 0; i < snapshot.Length; i++) {
+            snapshot[i].ClosePopups();
         }
     }
 

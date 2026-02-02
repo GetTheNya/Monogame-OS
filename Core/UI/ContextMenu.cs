@@ -76,7 +76,7 @@ public class ContextMenu : Panel {
         IsVisible = true;
         Opacity = 0f;
         
-        Children.Clear();
+        ClearChildren();
 
         float yOffset = ItemPadding;
         foreach (var item in items) {
@@ -150,7 +150,7 @@ public class ContextMenu : Panel {
                     // We don't remove overlay here - ContextMenu should manage its own overlay if it added one
                 }
                 _openedSubMenu = null;
-                Children.Clear();
+                ClearChildren();
             });
     }
 
