@@ -32,7 +32,7 @@ public class AppManifest {
     public string EntryClass { get; set; }
 
     [JsonPropertyName("entryMethod")]
-    public string EntryMethod { get; set; } = "CreateWindow";
+    public string EntryMethod { get; set; } = "Main";
 
     [JsonPropertyName("permissions")]
     public string[] Permissions { get; set; } = Array.Empty<string>();

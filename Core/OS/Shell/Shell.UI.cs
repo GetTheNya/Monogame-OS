@@ -8,7 +8,7 @@ namespace TheGame.Core.OS;
 
 public static partial class Shell {
     public static class UI {
-        private static Dictionary<string, Func<string[], Action<TheGame.Core.OS.Process>, Window>> _appRegistry = new();
+        private static Dictionary<string, Func<string[], Action<TheGame.Core.OS.Process>, WindowBase>> _appRegistry = new();
         private static Dictionary<string, FileHandler> _handlers = new();
 
         internal static void InternalInitialize() {
@@ -16,7 +16,7 @@ public static partial class Shell {
             RegisterHandler(new AppHandler());
         }
 
-        public static void RegisterApp(string appId, Func<string[], Action<TheGame.Core.OS.Process>, Window> factory) {
+        public static void RegisterApp(string appId, Func<string[], Action<TheGame.Core.OS.Process>, WindowBase> factory) {
             _appRegistry[appId.ToUpper()] = factory;
         }
 
@@ -26,7 +26,7 @@ public static partial class Shell {
             element.TooltipDelay = delay;
         }
 
-        public static Window CreateAppWindow(string appId, string[] args = null, Action<TheGame.Core.OS.Process> setup = null) {
+        public static WindowBase CreateAppWindow(string appId, string[] args = null, Action<TheGame.Core.OS.Process> setup = null) {
             if (string.IsNullOrEmpty(appId)) return null;
             string upperAppId = appId.ToUpper();
             DebugLogger.Log($"CreateAppWindow: Looking for {appId} (uppercase: {upperAppId})");
@@ -50,11 +50,11 @@ public static partial class Shell {
             return handler;
         }
 
-        public static void OpenWindow(Window win, Rectangle? startBounds = null, TheGame.Core.OS.Process owner = null, Window parent = null) {
+        public static void OpenWindow(WindowBase win, Rectangle? startBounds = null, TheGame.Core.OS.Process owner = null, WindowBase parent = null) {
             if (WindowLayer != null) {
                 // Prevent double-open: if already in WindowLayer, just bring to front
                 if (WindowLayer.Children.Contains(win)) {
-                    Window.ActiveWindow = win;
+                    WindowBase.ActiveWindow = win;
                     WindowLayer.BringToFront(win);
                     return;
                 }
@@ -70,7 +70,7 @@ public static partial class Shell {
                     // 1. Explicitly requested parent
                     // 2. Window's existing ParentWindow
                     // 3. Current ActiveWindow (fallback - still allowed but less ideal)
-                    var finalParent = parent ?? win.ParentWindow ?? Window.ActiveWindow;
+                    var finalParent = parent ?? win.ParentWindow ?? WindowBase.ActiveWindow;
 
                     if (finalParent != null && finalParent != win) {
                         win.ParentWindow = finalParent;
@@ -89,42 +89,42 @@ public static partial class Shell {
                 }
 
                 ApplyWindowLayout(win);
-                if (startBounds.HasValue) win.AnimateOpen(startBounds.Value);
+                if (startBounds.HasValue && win is Window osWin) osWin.AnimateOpen(startBounds.Value);
 
                 WindowLayer.AddChild(win);
-                Window.ActiveWindow = win;
+                WindowBase.ActiveWindow = win;
                 WindowLayer.BringToFront(win);
 
-                win.OnMove += () => win.LayoutDirty = true;
-                win.OnResize += () => win.LayoutDirty = true;
+                win.OnMove += () => { if (win is Window w) w.LayoutDirty = true; };
+                win.OnResize += () => { if (win is Window w) w.LayoutDirty = true; };
             }
         }
 
-        public static void SaveWindowLayout(Window win) {
+        public static void SaveWindowLayout(WindowBase win) {
             if (string.IsNullOrEmpty(win.AppId) || !win.IsVisible || win.Opacity < 0.5f) return;
 
             var layout = new WindowLayout {
-                IsMaximized = win.IsMaximized,
-                X = win.IsMaximized ? win.RestoreBounds.X : win.Position.X,
-                Y = win.IsMaximized ? win.RestoreBounds.Y : win.Position.Y,
-                Width = win.IsMaximized ? win.RestoreBounds.Width : win.Size.X,
-                Height = win.IsMaximized ? win.RestoreBounds.Height : win.Size.Y
+                IsMaximized = win is Window w && w.IsMaximized,
+                X = (win is Window w2 && w2.IsMaximized) ? w2.RestoreBounds.X : win.Position.X,
+                Y = (win is Window w3 && w3.IsMaximized) ? w3.RestoreBounds.Y : win.Position.Y,
+                Width = (win is Window w4 && w4.IsMaximized) ? w4.RestoreBounds.Width : win.Size.X,
+                Height = (win is Window w5 && w5.IsMaximized) ? w5.RestoreBounds.Height : win.Size.Y
             };
 
             Registry.SetSetting("WindowLayout", layout, win.AppId);
         }
 
-        public static void ApplyWindowLayout(Window win) {
+        public static void ApplyWindowLayout(WindowBase win) {
             if (string.IsNullOrEmpty(win.AppId)) return;
 
             var layout = Registry.GetSetting<WindowLayout>("WindowLayout", null, win.AppId);
             if (layout != null) {
                 win.Position = new Vector2(layout.X, layout.Y);
                 win.Size = new Vector2(layout.Width, layout.Height);
-                if (layout.IsMaximized) {
+                if (layout.IsMaximized && win is Window w) {
                     // Apply maximized state after adding to layer or instantly
                     var viewport = G.GraphicsDevice.Viewport;
-                    win.SetMaximized(true, new Rectangle(0, 0, viewport.Width, viewport.Height - 40));
+                    w.SetMaximized(true, new Rectangle(0, 0, viewport.Width, viewport.Height - 40));
                 }
             }
         }

@@ -75,9 +75,10 @@ public class TaskbarWindowPicker : Panel {
             var capturedWindow = window;
             btn.OnClickAction = () => {
                 if (!capturedWindow.IsVisible || capturedWindow.Opacity < 0.5f) {
-                    capturedWindow.Restore();
+                    if (capturedWindow is Window w) w.Restore();
+                    else capturedWindow.IsVisible = true; // Fallback for naked WindowBase
                 } else {
-                    Window.ActiveWindow = capturedWindow;
+                    WindowBase.ActiveWindow = capturedWindow;
                     capturedWindow.Parent?.BringToFront(capturedWindow);
                 }
                 Hide();

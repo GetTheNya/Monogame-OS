@@ -37,12 +37,12 @@ public abstract class Application {
     /// <summary>
     /// The primary window of the application. May be null for background services.
     /// </summary>
-    public Window MainWindow { get; protected set; }
+    public WindowBase MainWindow { get; protected set; }
     
     /// <summary>
     /// Gets a list of all windows currently owned by this application.
     /// </summary>
-    public List<Window> Windows => Process?.Windows;
+    public List<WindowBase> Windows => Process?.Windows;
     
     /// <summary>
     /// If true (default), closing MainWindow terminates the process.
@@ -136,7 +136,7 @@ public abstract class Application {
     /// <summary>
     /// Creates and returns a new window associated with this application.
     /// </summary>
-    protected T CreateWindow<T>() where T : Window, new() {
+    protected T CreateWindow<T>() where T : WindowBase, new() {
         if (Process == null) throw new InvalidOperationException("Application has not been initialized with a Process.");
         return Shell.Process.CreateWindow<T>(Process);
     }
@@ -144,7 +144,7 @@ public abstract class Application {
     /// <summary>
     /// Opens a window and registers it with the UI layer.
     /// </summary>
-    public void OpenWindow(Window window, Rectangle? startBounds = null) {
+    public void OpenWindow(WindowBase window, Rectangle? startBounds = null) {
         Shell.UI.OpenWindow(window, startBounds, Process);
     }
     
@@ -169,7 +169,7 @@ public abstract class Application {
     /// <summary>
     /// Shows a modal dialog that blocks input to the application's main window.
     /// </summary>
-    public void OpenModal(Window dialog, Rectangle? startBounds = null) {
+    public void OpenModal(WindowBase dialog, Rectangle? startBounds = null) {
         if (Process == null) {
             Shell.UI.OpenWindow(dialog, startBounds);
             return;
@@ -180,7 +180,7 @@ public abstract class Application {
     /// <summary>
     /// Creates and shows a modal dialog of the specified type.
     /// </summary>
-    public void ShowModal<T>(Action<T> configure = null) where T : Window, new() {
+    public void ShowModal<T>(Action<T> configure = null) where T : WindowBase, new() {
         var dialog = CreateWindow<T>();
         configure?.Invoke(dialog);
         OpenModal(dialog);

@@ -1,0 +1,10 @@
+{
+    "appId": "BORDERLESS_TEST",
+    "name": "Borderless Test",
+    "version": "1.0.0",
+    "description": "Tests the BorderlessWindow class and transparency",
+    "entryClass": "BorderlessTestApp.Program",
+    "entryMethod" : "Main",
+    "main": "Program.cs",
+    "icon": "icon.png"
+}

@@ -50,10 +50,10 @@ public class Process {
     private System.Threading.Tasks.Task _asyncTask;
     
     /// <summary>All windows owned by this process.</summary>
-    public List<Window> Windows { get; } = new();
+    public List<WindowBase> Windows { get; } = new();
     
     /// <summary>The main/primary window of this process (can be null for background).</summary>
-    public Window MainWindow { get; set; }
+    public WindowBase MainWindow { get; set; }
 
     /// <summary>The icon associated with this process/application.</summary>
     public Texture2D Icon { get; set; }
@@ -197,7 +197,7 @@ public class Process {
     /// <summary>
     /// Creates and returns a new window owned by this process.
     /// </summary>
-    public T CreateWindow<T>() where T : Window, new() {
+    public T CreateWindow<T>() where T : WindowBase, new() {
         var window = new T();
         window.OwnerProcess = this;
         Windows.Add(window);
@@ -208,11 +208,11 @@ public class Process {
     /// <summary>
     /// Creates a window of the given type and returns it.
     /// </summary>
-    public Window CreateWindow(Type windowType) {
-        if (!typeof(Window).IsAssignableFrom(windowType)) {
-            throw new ArgumentException($"Type {windowType.Name} is not a Window");
+    public WindowBase CreateWindow(Type windowType) {
+        if (!typeof(WindowBase).IsAssignableFrom(windowType)) {
+            throw new ArgumentException($"Type {windowType.Name} is not a WindowBase");
         }
-        var window = (Window)Activator.CreateInstance(windowType);
+        var window = (WindowBase)Activator.CreateInstance(windowType);
         window.OwnerProcess = this;
         Windows.Add(window);
         if (MainWindow == null) MainWindow = window;
@@ -222,7 +222,7 @@ public class Process {
     /// <summary>
     /// Shows a modal dialog that blocks input to its parent window.
     /// </summary>
-    public void ShowModal(Window dialog, Window parent = null, Rectangle? startBounds = null) {
+    public void ShowModal(WindowBase dialog, WindowBase parent = null, Rectangle? startBounds = null) {
         parent ??= MainWindow;
         if (parent == null) {
             Shell.UI.OpenWindow(dialog, startBounds);
@@ -292,7 +292,7 @@ public class Process {
     /// <summary>
     /// Called when a window owned by this process is closed.
     /// </summary>
-    internal void OnWindowClosed(Window window) {
+    internal void OnWindowClosed(WindowBase window) {
         DebugLogger.Log($"Process.OnWindowClosed: {AppId} - Removing window '{window.Title}'");
         Windows.Remove(window);
         

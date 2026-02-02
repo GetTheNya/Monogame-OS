@@ -153,12 +153,12 @@ public class MainWindow : Window {
 }
 
 public class WindowRow : Panel {
-    private Window _window;
+    private WindowBase _window;
     private Icon _icon;
     private Label _label;
     private Button _focusBtn;
 
-    public WindowRow(Window window, Vector2 pos, float width) : base(pos, new Vector2(width, 28)) {
+    public WindowRow(WindowBase window, Vector2 pos, float width) : base(pos, new Vector2(width, 28)) {
         _window = window;
 
         BackgroundColor = new Color(30, 30, 30, 150);

@@ -103,7 +103,7 @@ public class AppLoader {
         }
     }
 
-    private Window CreateWindowFromAssembly(Assembly assembly, AppManifest manifest, string appVirtualPath, string[] args, Action<Process> setup = null) {
+    private WindowBase CreateWindowFromAssembly(Assembly assembly, AppManifest manifest, string appVirtualPath, string[] args, Action<Process> setup = null) {
         try {
             DebugLogger.Log($"AppLoader: Creating window for {manifest.AppId} using {manifest.EntryClass}.{manifest.EntryMethod}");
             
@@ -150,7 +150,7 @@ public class AppLoader {
             }
             
             // Handle Window-returning apps (legacy)
-            if (result is Window window) {
+            if (result is WindowBase window) {
                 window.AppId = manifest.AppId; // Set the AppId from manifest
                 
                 // Create a Process to own this window
@@ -416,8 +416,8 @@ public class AppLoader {
     /// <summary>
     /// Get all running windows of an app (uses ProcessManager).
     /// </summary>
-    public List<Window> GetRunningInstances(string appId) {
-        if (string.IsNullOrEmpty(appId)) return new List<Window>();
+    public List<WindowBase> GetRunningInstances(string appId) {
+        if (string.IsNullOrEmpty(appId)) return new List<WindowBase>();
         
         var processes = ProcessManager.Instance.GetProcessesByApp(appId);
         return processes.SelectMany(p => p.Windows).ToList();

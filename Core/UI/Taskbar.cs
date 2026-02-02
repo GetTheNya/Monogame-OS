@@ -285,10 +285,10 @@ public class Taskbar : Panel {
         _systemTray.Position = new Vector2(Size.X - trayWidth, 0);
         _systemTray.Size = new Vector2(trayWidth, Size.Y);
 
-        var currentWindows = _windowLayer.Children.OfType<Window>().ToList();
+        var currentWindows = _windowLayer.Children.OfType<WindowBase>().ToList();
         var taskbarWindows = currentWindows.Where(w => w.ShowInTaskbar).ToList();
         var processesWithTaskbarWindows = taskbarWindows.Select(w => w.OwnerProcess).Where(p => p != null).Distinct().ToList();
-
+        
         // 1. Handle New Processes (Incremental Add)
         foreach (var proc in processesWithTaskbarWindows) {
             if (!_trackedProcesses.Contains(proc)) {
@@ -359,7 +359,7 @@ public class Taskbar : Panel {
                     }
                     
                     var procWindows = taskbarWindows.Where(w => w.OwnerProcess == proc).ToList();
-                    bool isActive = procWindows.Any(w => w == Window.ActiveWindow);
+                    bool isActive = procWindows.Any(w => w == WindowBase.ActiveWindow);
                     bool isAnyVisible = procWindows.Any(w => w.IsVisible && w.Opacity > 0.5f);
 
                     // Use MainWindow title and icon if available
@@ -420,7 +420,7 @@ public class Taskbar : Panel {
 
         btn.OnClickAction = () => {
             // Get all taskbar windows for this process
-            var currentWindows = _windowLayer.Children.OfType<TheGame.Core.UI.Window>().ToList();
+            var currentWindows = _windowLayer.Children.OfType<WindowBase>().ToList();
             var procWindows = currentWindows.Where(w => w.ShowInTaskbar && w.OwnerProcess == proc).ToList();
             
             if (procWindows.Count == 0) return;
@@ -429,12 +429,14 @@ public class Taskbar : Panel {
                 var win = procWindows[0];
                 Vector2 center = btn.AbsolutePosition + (btn.Size / 2f);
                 if (!win.IsVisible || win.Opacity < 0.5f) {
-                    win.Restore(center);
+                    if (win is Window w) w.Restore(center);
+                    else win.IsVisible = true;
                 } else {
-                    if (TheGame.Core.UI.Window.ActiveWindow == win) {
-                        win.Minimize(center);
+                    if (WindowBase.ActiveWindow == win) {
+                        if (win is Window w) w.Minimize(center);
+                        else win.IsVisible = false;
                     } else {
-                        Window.ActiveWindow = win;
+                        WindowBase.ActiveWindow = win;
                         win.Parent?.BringToFront(win);
                     }
                 }

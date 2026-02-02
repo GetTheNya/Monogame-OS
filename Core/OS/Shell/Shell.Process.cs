@@ -25,7 +25,7 @@ public static partial class Shell {
         /// <summary>
         /// Creates a new window of the specified type owned by the specified process.
         /// </summary>
-        public static T CreateWindow<T>(TheGame.Core.OS.Process owner) where T : Window, new() {
+        public static T CreateWindow<T>(TheGame.Core.OS.Process owner) where T : WindowBase, new() {
             if (owner == null) {
                 DebugLogger.Log("Shell.Process.CreateWindow: No process context provided");
                 return null;
@@ -36,7 +36,7 @@ public static partial class Shell {
         /// <summary>
         /// Shows a modal dialog that blocks input to the current window.
         /// </summary>
-        public static void ShowModal(TheGame.Core.OS.Process owner, Window dialog, Window parent = null, Rectangle? startBounds = null) {
+        public static void ShowModal(TheGame.Core.OS.Process owner, WindowBase dialog, WindowBase parent = null, Rectangle? startBounds = null) {
             if (owner == null) {
                 UI.OpenWindow(dialog, startBounds);
                 return;

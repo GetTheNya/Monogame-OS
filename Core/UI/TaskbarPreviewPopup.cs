@@ -96,13 +96,13 @@ public class TaskbarPreviewPopup : Panel {
         });
     }
  
-    public void Rebuild(TheGame.Core.UI.Window exclude = null) {
+    public void Rebuild(WindowBase exclude = null) {
         ClearChildren();
         _previews.Clear();
 
         if (_process == null) return;
 
-        var currentWindows = OS.Shell.WindowLayer.Children.OfType<TheGame.Core.UI.Window>().ToList();
+        var currentWindows = OS.Shell.WindowLayer.Children.OfType<WindowBase>().ToList();
         var procWindows = currentWindows.Where(w => w.ShowInTaskbar && w.OwnerProcess == _process && w != exclude).ToList();
 
         if (procWindows.Count == 0) {
@@ -111,13 +111,14 @@ public class TaskbarPreviewPopup : Panel {
         }
 
         float currentX = Padding;
-        foreach (var window in procWindows) {
-            var item = new WindowPreviewItem(new Vector2(currentX, Padding), new Vector2(PreviewMaxWidth, PreviewMaxHeight + TitleHeight), (TheGame.Core.UI.Window)window);
+        foreach (var win in procWindows) {
+            var item = new WindowPreviewItem(new Vector2(currentX, Padding), new Vector2(PreviewMaxWidth, PreviewMaxHeight + TitleHeight), win);
             item.OnClickAction = () => {
-                if (!window.IsVisible || window.Opacity < 0.5f) {
-                    window.Restore();
+                if (!win.IsVisible || win.Opacity < 0.5f) {
+                    if (win is Window w) w.Restore();
+                    else win.IsVisible = true;
                 } else {
-                    window.HandleFocus();
+                    win.HandleFocus();
                 }
                 Hide(force: true);
             };
@@ -152,11 +153,11 @@ public class TaskbarPreviewPopup : Panel {
     }
 
     private class WindowPreviewItem : UIControl {
-        private TheGame.Core.UI.Window _window;
+        private WindowBase _window;
         private Button _closeButton;
         public Action OnClickAction { get; set; }
 
-        public WindowPreviewItem(Vector2 position, Vector2 size, TheGame.Core.UI.Window window) : base(position, size) {
+        public WindowPreviewItem(Vector2 position, Vector2 size, WindowBase window) : base(position, size) {
             _window = window;
             BackgroundColor = Color.Transparent;
             HoverColor = new Color(50, 50, 50, 100);

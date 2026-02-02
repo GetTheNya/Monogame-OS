@@ -4,6 +4,7 @@ using System.Linq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TheGame.Graphics;
+using TheGame.Core.UI;
 
 namespace TheGame.Core.OS;
 
@@ -42,9 +43,11 @@ public class ProcessManager {
         if (process == null) {
             // Legacy window without process - create wrapper
             process = new Process { AppId = upperAppId };
-            process.Windows.Add(window);
-            process.MainWindow = window;
-            window.OwnerProcess = process; // This triggers OnLoad()
+            if (window is WindowBase wb) {
+                process.Windows.Add(wb);
+                process.MainWindow = wb;
+                wb.OwnerProcess = process; // This triggers OnLoad()
+            }
             RegisterProcess(process);
         }
         
