@@ -8,6 +8,7 @@ public class Panel : UIElement {
     public Color BackgroundColor { get; set; } = new Color(40, 40, 40);
     public Color BorderColor { get; set; } = Color.Gray;
     public float BorderThickness { get; set; } = 1f;
+    public float CornerRadius { get; set; } = 0f;
 
     public Panel(Vector2 position, Vector2 size) {
         Position = position;
@@ -16,11 +17,12 @@ public class Panel : UIElement {
 
     protected override void DrawSelf(SpriteBatch spriteBatch, ShapeBatch batch) {
         var absPos = AbsolutePosition;
+        float opacity = AbsoluteOpacity;
         
         if (BackgroundColor != Color.Transparent)
-            batch.FillRectangle(absPos, Size, BackgroundColor * AbsoluteOpacity);
+            batch.FillRectangle(absPos, Size, BackgroundColor * opacity, rounded: CornerRadius);
             
         if (BorderColor != Color.Transparent && BorderThickness > 0)
-            batch.BorderRectangle(absPos, Size, BorderColor * AbsoluteOpacity, thickness: BorderThickness);
+            batch.BorderRectangle(absPos, Size, BorderColor * opacity, thickness: BorderThickness, rounded: CornerRadius);
     }
 }
