@@ -37,7 +37,7 @@ public class Process {
     public string ProcessId { get; } = Guid.NewGuid().ToString();
     
     /// <summary>The app identifier (e.g., "EXPLORER", "NOTEPAD").</summary>
-    public string AppId { get; internal set; }
+    public string AppId { get; set; }
     
     /// <summary>Current state of the process.</summary>
     public ProcessState State { get; set; } = ProcessState.Starting;
@@ -97,7 +97,7 @@ public class Process {
     /// <summary>
     /// The application instance associated with this process, if any.
     /// </summary>
-    public Application Application { get; internal set; }
+    public Application Application { get; set; }
 
     /// <summary>
     /// Class that provides APIs for application to communicate with OS
@@ -121,7 +121,7 @@ public class Process {
 
     // --- Modern Lifecycle Methods ---
 
-    protected internal virtual void Initialize(string[] args) {
+    public virtual void Initialize(string[] args) {
         if (IsAsync) {
             _asyncTask = RunAsync(args);
             return;
@@ -182,7 +182,7 @@ public class Process {
         }
     }
 
-    protected internal virtual void Cleanup() {
+    public virtual void Cleanup() {
         OnTerminate();
         // Call OnClose directly (not obsolete wrapper)
         if (Application != null) {

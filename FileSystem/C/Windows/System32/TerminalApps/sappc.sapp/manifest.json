@@ -1,0 +1,11 @@
+{
+  "appId": "SAPPC",
+  "name": "SAPP Compiler",
+  "entryClass": "Compiler.Program",
+  "entryMethod": "Main",
+  "terminalOnly": true,
+  "references": [
+    "Microsoft.CodeAnalysis",
+    "Microsoft.CodeAnalysis.CSharp"
+  ]
+}

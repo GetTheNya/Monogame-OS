@@ -208,14 +208,14 @@ public class ProcessManager {
     /// <summary>
     /// Registers a process with the manager.
     /// </summary>
-    internal void RegisterProcess(Process process) {
+    public void RegisterProcess(Process process) {
         if (process == null || string.IsNullOrEmpty(process.ProcessId)) return;
         _processes[process.ProcessId] = process;
         process.State = ProcessState.Running;
         DebugLogger.Log($"Process registered: {process.AppId} ({process.ProcessId})");
     }
     
-    internal void UnregisterProcess(Process process) {
+    public void UnregisterProcess(Process process) {
         if (process == null || string.IsNullOrEmpty(process.ProcessId)) return;
         _processes.Remove(process.ProcessId);
         OnProcessTerminated?.Invoke(process);

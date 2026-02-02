@@ -361,7 +361,8 @@ public class TerminalControl : TextArea {
             foreach (var d in VirtualFileSystem.Instance.GetDirectories(resolvedDir)) {
                 string name = Path.GetFileName(d);
                 if (name.StartsWith(search, StringComparison.OrdinalIgnoreCase)) {
-                    folderResults.Add(dirPart + name + "\\");
+                    string suffix = name.EndsWith(".sapp", StringComparison.OrdinalIgnoreCase) ? "" : "\\";
+                    folderResults.Add(dirPart + name + suffix);
                 }
             }
             foreach (var f in VirtualFileSystem.Instance.GetFiles(resolvedDir)) {

@@ -15,7 +15,7 @@ public abstract class Application {
     /// <summary>
     /// The underlying OS process managing this application.
     /// </summary>
-    public Process Process { get; internal set; }
+    public Process Process { get; set; }
     
     /// <summary> Standard I/O streams for this application's process. </summary>
     public StandardIO IO => Process?.IO;
