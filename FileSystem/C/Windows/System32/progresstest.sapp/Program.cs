@@ -14,8 +14,9 @@ public class Program : Window {
     private float _progress = 0f;
     private Button _startButton;
     private bool _running = false;
+    private ProgressBar _progressBar;
 
-    public Program() : base(new Vector2(100, 100), new Vector2(300, 200)) {
+    public Program() : base(new Vector2(100, 100), new Vector2(300, 250)) {
         InitUI();
     }
 
@@ -23,7 +24,14 @@ public class Program : Window {
         var panel = new Panel(Vector2.Zero, Size);
         AddChild(panel);
 
-        _startButton = new Button(new Vector2(10, 10), new Vector2(280, 40), "Start Progress") {
+        _progressBar = new ProgressBar(new Vector2(10, 10), new Vector2(280, 40)) {
+            TextFormat = "Downloading: {0}%",
+            FillPadding = 3f,
+            ProgressColor = Color.LightBlue
+        };
+        panel.AddChild(_progressBar);
+
+        _startButton = new Button(new Vector2(10, 60), new Vector2(280, 40), "Start Progress") {
             OnClickAction = () => {
                 _running = !_running;
                 _startButton.Text = _running ? "Pause Progress" : "Resume Progress";
@@ -31,21 +39,24 @@ public class Program : Window {
         };
         panel.AddChild(_startButton);
 
-        var resetButton = new Button(new Vector2(10, 60), new Vector2(280, 40), "Reset Progress") {
+        var resetButton = new Button(new Vector2(10, 110), new Vector2(280, 40), "Reset Progress") {
             OnClickAction = () => {
                 _progress = 0f;
                 _running = false;
                 _startButton.Text = "Start Progress";
+                _progressBar.Value = 0f;
                 Shell.Taskbar.SetProgress(OwnerProcess, -1.0f);
             }
         };
         panel.AddChild(resetButton);
 
-        var colorButton = new Button(new Vector2(10, 110), new Vector2(280, 40), "Toggle Color") {
+        var colorButton = new Button(new Vector2(10, 160), new Vector2(280, 40), "Toggle Color") {
             OnClickAction = () => {
-                if (OwnerProcess.ProgressColor == Color.Green) OwnerProcess.ProgressColor = Color.Yellow;
-                else if (OwnerProcess.ProgressColor == Color.Yellow) OwnerProcess.ProgressColor = Color.Red;
-                else OwnerProcess.ProgressColor = Color.Green;
+                if (_progressBar.ProgressColor == Color.LightBlue) _progressBar.ProgressColor = Color.LimeGreen;
+                else if (_progressBar.ProgressColor == Color.LimeGreen) _progressBar.ProgressColor = Color.Orange;
+                else _progressBar.ProgressColor = Color.LightBlue;
+
+                OwnerProcess.ProgressColor = _progressBar.ProgressColor;
             }
         };
         panel.AddChild(colorButton);
@@ -58,6 +69,7 @@ public class Program : Window {
             _progress += (float)gameTime.ElapsedGameTime.TotalSeconds * 0.1f;
             if (_progress > 1.0f) _progress = 1.0f;
             
+            _progressBar.Value = _progress;
             Shell.Taskbar.SetProgress(OwnerProcess, _progress);
         }
     }
