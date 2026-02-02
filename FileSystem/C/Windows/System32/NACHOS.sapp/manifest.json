@@ -1,0 +1,11 @@
+{
+  "appId": "NACHOS",
+  "name": "NACHOS IDE",
+  "icon": "icon.png",
+  "entryPoint": "Program.cs",
+  "entryClass": "NACHOS.Program",
+  "entryMethod": "Main",
+  "references": [
+    "FontStashSharp.MonoGame"
+  ]
+}

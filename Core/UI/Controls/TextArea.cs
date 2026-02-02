@@ -16,7 +16,7 @@ namespace TheGame.Core.UI.Controls;
 /// </summary>
 public class TextArea : ValueControl<string> {
     protected List<string> _lines = new() { "" };
-    protected record struct VisualLine(int LogicalLineIndex, int StartIndex, int Length);
+    public record struct VisualLine(int LogicalLineIndex, int StartIndex, int Length);
     protected List<VisualLine> _visualLines = new();
     
     protected int _cursorLine = 0;

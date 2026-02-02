@@ -11,6 +11,7 @@ using TheGame.Core.UI.Controls;
 using TheGame.Core.Input;
 using TheGame.Graphics;
 using TheGame;
+using TheGame.Core.OS.Terminal;
 
 namespace TerminalApp;
 

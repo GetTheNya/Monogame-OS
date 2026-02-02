@@ -15,7 +15,7 @@ using TheGame;
 using FontStashSharp;
 
 
-namespace TerminalApp;
+namespace TheGame.Core.OS.Terminal;
 
 public class TerminalControl : TextArea {
     private TerminalBackend _backend;

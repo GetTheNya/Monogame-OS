@@ -13,7 +13,8 @@ namespace TheGame.Core.UI;
 
 public enum FilePickerMode {
     Open,
-    Save
+    Save,
+    ChooseDirectory
 }
 
 public class FilePickerWindow : Window {
@@ -124,7 +125,10 @@ public class FilePickerWindow : Window {
         };
         _bottomPanel.AddChild(_fileNameInput);
 
-        string actionText = _mode == FilePickerMode.Save ? "Save" : "Open";
+        string actionText = "Open";
+        if (_mode == FilePickerMode.Save) actionText = "Save";
+        else if (_mode == FilePickerMode.ChooseDirectory) actionText = "Choose";
+
         _actionButton = new Button(new Vector2(ClientSize.X - 160, 10), new Vector2(70, 30), actionText) {
             OnClickAction = TrySubmit
         };
@@ -183,37 +187,36 @@ public class FilePickerWindow : Window {
             }
 
             // Files with filtering
-            var files = VirtualFileSystem.Instance.GetFiles(_currentPath);
-            foreach (var file in files) {
-                string fileName = Path.GetFileName(file);
-                if (string.IsNullOrEmpty(fileName)) continue;
+            if (_mode != FilePickerMode.ChooseDirectory) {
+                var files = VirtualFileSystem.Instance.GetFiles(_currentPath);
+                foreach (var file in files) {
+                    string fileName = Path.GetFileName(file);
+                    if (string.IsNullOrEmpty(fileName)) continue;
 
-                // Hide system/metadata files
-                if (fileName.StartsWith("$", StringComparison.OrdinalIgnoreCase)) continue;
-                
-                // Filter by extension if specified
-                if (_fileExtensions != null && _fileExtensions.Length > 0) {
-                    string ext = Path.GetExtension(file).ToLower();
-                    if (!_fileExtensions.Contains(ext)) continue;
-                }
-                
-                var btn = new Button(new Vector2(5, y), new Vector2(itemWidth, itemHeight), fileName) {
-                    BackgroundColor = Color.Transparent,
-                    BorderColor = Color.Transparent,
-                    HoverColor = new Color(60, 60, 60),
-                    TextAlign = TheGame.Core.UI.Controls.TextAlign.Left,
-                    Icon = Shell.GetIcon(file)
-                };
-
-                btn.OnClickAction = () => {
-                    _fileNameInput.Value = fileName;
-                    if (_mode == FilePickerMode.Open) {
-                        // Double click emulation via click for now
+                    // Hide system/metadata files
+                    if (fileName.StartsWith("$", StringComparison.OrdinalIgnoreCase)) continue;
+                    
+                    // Filter by extension if specified
+                    if (_fileExtensions != null && _fileExtensions.Length > 0) {
+                        string ext = Path.GetExtension(file).ToLower();
+                        if (!_fileExtensions.Contains(ext)) continue;
                     }
-                };
-                
-                _fileListPanel.AddChild(btn);
-                y += itemHeight;
+                    
+                    var btn = new Button(new Vector2(5, y), new Vector2(itemWidth, itemHeight), fileName) {
+                        BackgroundColor = Color.Transparent,
+                        BorderColor = Color.Transparent,
+                        HoverColor = new Color(60, 60, 60),
+                        TextAlign = TextAlign.Left,
+                        Icon = Shell.GetIcon(file)
+                    };
+
+                    btn.OnClickAction = () => {
+                        _fileNameInput.Value = fileName;
+                    };
+                    
+                    _fileListPanel.AddChild(btn);
+                    y += itemHeight;
+                }
             }
         } catch (Exception ex) {
             DebugLogger.Log($"Error Refreshing FilePicker: {ex.Message}");
@@ -224,6 +227,20 @@ public class FilePickerWindow : Window {
 
     private void TrySubmit() {
         string filename = _fileNameInput.Value?.Trim();
+        
+        if (_mode == FilePickerMode.ChooseDirectory) {
+            string targetPath = _currentPath;
+            if (!string.IsNullOrEmpty(filename)) {
+                string combinedPath = Path.Combine(_currentPath, filename);
+                if (VirtualFileSystem.Instance.IsDirectory(combinedPath)) {
+                    targetPath = combinedPath;
+                }
+            }
+            _onFilePicked?.Invoke(targetPath);
+            Close();
+            return;
+        }
+
         if (string.IsNullOrEmpty(filename)) return;
 
         string fullPath = Path.Combine(_currentPath, filename);
@@ -235,8 +252,7 @@ public class FilePickerWindow : Window {
             } else {
                 DebugLogger.Log("File not found: " + fullPath);
             }
-        } else {
-            // Save mode
+        } else if (_mode == FilePickerMode.Save) {
             _onFilePicked?.Invoke(fullPath);
             Close();
         }
