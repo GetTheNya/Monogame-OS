@@ -1,0 +1,8 @@
+{
+  "appId": "PROCESSMANAGER",
+  "name": "Process manager",
+  "icon": "icon.png",
+  "entryPoint": "Program.cs",
+  "entryClass": "ProcessManagerApp.Program",
+  "entryMethod": "Main"
+}
