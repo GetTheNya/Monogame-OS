@@ -4,8 +4,6 @@ using System.IO;
 using System.Linq;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
-using TheGame.Core.OS;
-using System.Reflection;
 
 namespace TheGame.Core.OS;
 

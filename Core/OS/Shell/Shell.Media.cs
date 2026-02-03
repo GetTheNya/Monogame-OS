@@ -15,6 +15,13 @@ public static partial class Shell {
         }
 
         /// <summary>
+        /// Unregisters the calling process as a media player.
+        /// </summary>
+        public static void UnregisterAsPlayer(TheGame.Core.OS.Process process) {
+            AudioManager.Instance.CleanupProcess(process);
+        }
+
+        /// <summary>
         /// Loads a media file for the calling process.
         /// </summary>
         public static string LoadMedia(TheGame.Core.OS.Process process, string virtualPath, bool useFading = true, bool autoUnload = false) {
