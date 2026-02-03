@@ -45,17 +45,20 @@ public class Sidebar : ScrollPanel {
             float indent = Depth * 16;
             
             if (IsDirectory) {
-                _expandBtn = new Button(new Vector2(indent + 4, 4), new Vector2(16, 16), "▶") {
+                // Centered better in 24px row (y=2 for 20px button), smaller font to avoid clipping
+                _expandBtn = new Button(new Vector2(indent + 2, 2), new Vector2(20, 20), "▶") {
                     BackgroundColor = Color.Transparent,
                     BorderColor = Color.Transparent,
-                    OnClickAction = ToggleExpand
+                    OnClickAction = ToggleExpand,
+                    FontSize = 10 
                 };
                 AddChild(_expandBtn);
             }
 
-            _iconTex = IsDirectory ? GameContent.FolderIcon : GameContent.FileIcon; // Assuming these exist in GameContent
+            _iconTex = IsDirectory ? GameContent.FolderIcon : GameContent.FileIcon;
 
-            _label = new Label(new Vector2(indent + 40, 4), Path.GetFileName(FullPath)) {
+            // Spaced accurately
+            _label = new Label(new Vector2(indent + 46, 4), Path.GetFileName(FullPath)) {
                 FontSize = 14,
                 Color = Color.LightGray
             };
@@ -74,7 +77,8 @@ public class Sidebar : ScrollPanel {
             
             float indent = Depth * 16;
             if (_iconTex != null) {
-                batch.DrawTexture(_iconTex, AbsolutePosition + new Vector2(indent + 20, 4), Color.White * AbsoluteOpacity, 16f / _iconTex.Width);
+                // Moved icon slightly left but still clear of the button
+                batch.DrawTexture(_iconTex, AbsolutePosition + new Vector2(indent + 24, 4), Color.White * AbsoluteOpacity, 16f / _iconTex.Width);
             }
         }
 
@@ -130,6 +134,16 @@ public class Sidebar : ScrollPanel {
         _rootPath = rootPath;
         BackgroundColor = new Color(25, 25, 25);
         Refresh();
+    }
+
+    public string RootPath {
+        get => _rootPath;
+        set {
+            if (_rootPath != value) {
+                _rootPath = value;
+                Refresh();
+            }
+        }
     }
 
     public void Refresh() {

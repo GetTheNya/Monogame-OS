@@ -41,24 +41,29 @@ public class MainWindow : Window {
         // Menu Bar
         _menuBar = new MenuBar(Vector2.Zero, new Vector2(ClientSize.X, 25));
         var fileMenu = new Menu("File");
-        fileMenu.AddItem("New Project", () => { /* TODO */ });
+        fileMenu.AddItem("New Project", () => { 
+            /* TODO */ 
+        }, "Ctrl+N");
         fileMenu.AddItem("Open Project", () => {
             var fp = new FilePickerWindow("NACHOS - Open Project Folder", "C:\\", "", FilePickerMode.ChooseDirectory, (path) => {
                 _projectPath = path;
-                 Title = "NACHOS - " + _projectPath;
-                 _sidebar.Refresh(); // Need to update sidebar root
+                Title = "NACHOS - " + _projectPath;
+                _sidebar.RootPath = path;
+                _terminal.Execute($"cd \"{path}\""); // Use command to update prompt folder correctly
             });
              Shell.UI.OpenWindow(fp);
-        });
+        }, "Ctrl+O");
         fileMenu.AddSeparator();
-        fileMenu.AddItem("Save", SaveActiveFile);
-        fileMenu.AddItem("Exit", Close);
+        fileMenu.AddItem("Save", SaveActiveFile, "Ctrl+S");
+        fileMenu.AddItem("Exit", Close, "Alt+F4");
         _menuBar.AddMenu(fileMenu);
 
         var buildMenu = new Menu("Build");
-        buildMenu.AddItem("Build Project", BuildProject);
-        buildMenu.AddItem("Run Project", RunProject);
+        buildMenu.AddItem("Run Project", RunProject, "F5");
+        buildMenu.AddItem("Build Project", BuildProject, "Shift+F5");
         _menuBar.AddMenu(buildMenu);
+
+        _menuBar.RegisterHotkeys(OwnerProcess);
 
         AddChild(_menuBar);
 
@@ -70,12 +75,20 @@ public class MainWindow : Window {
 
         // Tab Control
         _tabControl = new TabControl(new Vector2(sidebarWidth, 25), new Vector2(ClientSize.X - sidebarWidth, ClientSize.Y - 200 - 25));
+        _tabControl.OnTabClosed += (index) => {
+            if (index >= 0 && index < _pages.Count) {
+                _pages.RemoveAt(index);
+            }
+        };
         AddChild(_tabControl);
 
         // Terminal
         _terminal = new TerminalControl(new Vector2(0, ClientSize.Y - 200), new Vector2(ClientSize.X, 200));
         _terminal.Backend.WorkingDirectory = _projectPath ?? "C:\\";
         AddChild(_terminal);
+
+        // Welcome Message
+        _terminal.Execute("echo \"Welcome to NACHOS!\"");
 
         OnResize += () => {
              _menuBar.Size = new Vector2(ClientSize.X, 25);
@@ -126,11 +139,11 @@ public class MainWindow : Window {
 
     private void BuildProject() {
         if (string.IsNullOrEmpty(_projectPath)) return;
-        _terminal.Backend.ExecuteCommand($"sappc \"{_projectPath}\"");
+        _terminal.Execute($"sappc \"{_projectPath}\"");
     }
 
     private void RunProject() {
         if (string.IsNullOrEmpty(_projectPath)) return;
-        _terminal.Backend.ExecuteCommand($"sappc \"{_projectPath}\" -run");
+        _terminal.Execute($"sappc \"{_projectPath}\" -run");
     }
 }

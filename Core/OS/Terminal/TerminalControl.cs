@@ -13,6 +13,7 @@ using TheGame.Core.Input;
 using TheGame.Graphics;
 using TheGame;
 using FontStashSharp;
+using System.Text.RegularExpressions;
 
 
 namespace TheGame.Core.OS.Terminal;
@@ -176,6 +177,29 @@ public class TerminalControl : TextArea {
             }
         }
         return _currentInput; 
+    }
+
+    public void Execute(string command) {
+        if (string.IsNullOrEmpty(command)) return;
+
+        // Print prompt and command to mimic manual entry
+        _backend.EnsureNewline();
+        _backend.WriteLine("\u001b[32m" + GetPrompt() + "\u001b[0m" + command);
+
+        // Handle internal or external command
+        if (!HandleInternalCommand(command)) {
+            _backend.ExecuteCommand(command);
+        }
+
+        // Add to history if not process running (usually programmatic calls are shell-like)
+        if (!_backend.IsProcessRunning) {
+            _commandHistory.Remove(command);
+            _commandHistory.Add(command);
+        }
+
+        SyncLines();
+        ResetSelection();
+        EnsureCursorVisible();
     }
 
     protected override void OnEnterPressed() {
@@ -401,7 +425,11 @@ public class TerminalControl : TextArea {
     }
 
     private bool HandleInternalCommand(string cmd) {
-        string[] parts = cmd.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var matches = Regex.Matches(cmd, @"[""].+?[""]|[^ ]+");
+        var parts = matches.Cast<Match>()
+                         .Select(m => m.Value.Trim('"'))
+                         .ToArray();
+
         if (parts.Length == 0) return false;
         string name = parts[0].ToLower();
 

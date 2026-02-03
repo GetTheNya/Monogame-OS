@@ -219,7 +219,7 @@ public class Program : TerminalApplication {{
                 return;
             }
 
-            WriteLine("Compilation successful.", Color.Green);
+            WriteLine("Compilation successful. Executing app...", Color.Green);
             ExecuteApp(assembly, manifest, resolvedPath, appArgs);
         } else {
             bool success = AppCompiler.Instance.Validate(sourceFiles, manifest.AppId, out diagnostics, manifest.References);

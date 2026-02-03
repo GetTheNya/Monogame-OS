@@ -26,7 +26,7 @@ public class Program : Application {
         win.Initialize(projectPath);
 
         // 3. Wait for 5 seconds and update progress
-        int steps = 50;
+        int steps = 5;
         for (int i = 0; i <= steps; i++) {
             if (splash.IsVisible) {
                 splash.Progress = i / (float)steps;
