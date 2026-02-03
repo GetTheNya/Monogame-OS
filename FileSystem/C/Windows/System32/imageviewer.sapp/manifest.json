@@ -1,0 +1,6 @@
+{
+    "appId": "IMAGEVIEWER",
+    "name": "Image Viewer",
+    "entryClass": "ImageViewerApp.Program",
+    "entryMethod": "Main"
+}

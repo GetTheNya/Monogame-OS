@@ -1,3 +1,4 @@
+using System;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Microsoft.Xna.Framework.Graphics;
@@ -28,6 +29,22 @@ public static partial class Shell {
         public static Texture2D Load(string virtualPath) {
             if (string.IsNullOrEmpty(virtualPath)) return null;
             return ImageLoader.Load(G.GraphicsDevice, VirtualFileSystem.Instance.ToHostPath(virtualPath));
+        }
+
+        /// <summary>
+        /// Asynchronously loads a texture from a virtual path.
+        /// </summary>
+        public static System.Threading.Tasks.Task<Texture2D> LoadAsync(string virtualPath) {
+            if (string.IsNullOrEmpty(virtualPath)) return System.Threading.Tasks.Task.FromResult<Texture2D>(null);
+            return ImageLoader.LoadAsync(G.GraphicsDevice, VirtualFileSystem.Instance.ToHostPath(virtualPath));
+        }
+
+        /// <summary>
+        /// Unloads a texture from memory by virtual path (e.g. C:\Windows\SystemResources\Icons\PC.png).
+        /// </summary>
+        public static void Unload(string virtualPath) {
+            if (string.IsNullOrEmpty(virtualPath)) return;
+            ImageLoader.Unload(VirtualFileSystem.Instance.ToHostPath(virtualPath));
         }
     }
 }

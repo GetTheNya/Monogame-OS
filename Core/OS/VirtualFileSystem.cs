@@ -235,6 +235,30 @@ public class VirtualFileSystem {
         string hostPath = ToHostPath(virtualPath);
         return File.Exists(hostPath) || Directory.Exists(hostPath);
     }
+
+    public VirtualFileInfo GetFileInfo(string virtualPath) {
+        string hostPath = ToHostPath(virtualPath);
+        if (File.Exists(hostPath)) {
+            var info = new FileInfo(hostPath);
+            return new VirtualFileInfo {
+                Name = info.Name,
+                FullPath = virtualPath,
+                Size = info.Length,
+                LastWriteTime = info.LastWriteTime,
+                IsDirectory = false
+            };
+        } else if (Directory.Exists(hostPath)) {
+            var info = new DirectoryInfo(hostPath);
+            return new VirtualFileInfo {
+                Name = info.Name,
+                FullPath = virtualPath,
+                Size = 0,
+                LastWriteTime = info.LastWriteTime,
+                IsDirectory = true
+            };
+        }
+        return null;
+    }
     
     public string ReadAllText(string virtualPath) {
         string hostPath = ToHostPath(virtualPath);
@@ -524,4 +548,12 @@ public class VirtualFileSystem {
         if (bundle == null) return null;
         return Path.Combine(bundle, resourceName);
     }
+}
+
+public class VirtualFileInfo {
+    public string Name { get; set; }
+    public string FullPath { get; set; }
+    public long Size { get; set; }
+    public DateTime LastWriteTime { get; set; }
+    public bool IsDirectory { get; set; }
 }

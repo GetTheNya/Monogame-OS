@@ -10,8 +10,14 @@ namespace TheGame.Core;
 /// Supports PNG, JPG, and GIF formats.
 /// </summary>
 public static class ImageLoader {
-    // Optional cache to avoid reloading the same image
-    private static Dictionary<string, Texture2D> _cache = new();
+    private static readonly object _cacheLock = new();
+
+    private struct CachedTexture {
+        public Texture2D Texture;
+        public int RefCount;
+    }
+
+    private static Dictionary<string, CachedTexture> _cache = new();
     
     /// <summary>
     /// Load a texture from a file path.
@@ -21,8 +27,14 @@ public static class ImageLoader {
     /// <param name="useCache">If true, caches the texture for future loads of the same path.</param>
     /// <returns>The loaded Texture2D.</returns>
     public static Texture2D Load(GraphicsDevice graphicsDevice, string filePath, bool useCache = true) {
-        if (useCache && _cache.TryGetValue(filePath, out var cached)) {
-            return cached;
+        if (useCache) {
+            lock (_cacheLock) {
+                if (_cache.TryGetValue(filePath, out var cached)) {
+                    cached.RefCount++;
+                    _cache[filePath] = cached;
+                    return cached.Texture;
+                }
+            }
         }
         
         if (!File.Exists(filePath)) {
@@ -33,11 +45,60 @@ public static class ImageLoader {
             var texture = Texture2D.FromStream(graphicsDevice, stream);
             
             if (useCache) {
-                _cache[filePath] = texture;
+                lock (_cacheLock) {
+                    // Double-check after IO
+                    if (_cache.TryGetValue(filePath, out var existing)) {
+                        existing.RefCount++;
+                        _cache[filePath] = existing;
+                        texture.Dispose();
+                        return existing.Texture;
+                    }
+                    _cache[filePath] = new CachedTexture { Texture = texture, RefCount = 1 };
+                }
             }
             
             return texture;
         }
+    }
+
+    /// <summary>
+    /// Asynchronously load a texture from a file path.
+    /// </summary>
+    public static async System.Threading.Tasks.Task<Texture2D> LoadAsync(GraphicsDevice graphicsDevice, string filePath, bool useCache = true) {
+        if (useCache) {
+            lock (_cacheLock) {
+                if (_cache.TryGetValue(filePath, out var cached)) {
+                    cached.RefCount++;
+                    _cache[filePath] = cached;
+                    return cached.Texture;
+                }
+            }
+        }
+        
+        if (!File.Exists(filePath)) {
+            throw new FileNotFoundException($"Image file not found: {filePath}");
+        }
+        
+        // Decoding on background thread
+        var texture = await System.Threading.Tasks.Task.Run(() => {
+            using (FileStream stream = File.OpenRead(filePath)) {
+                return Texture2D.FromStream(graphicsDevice, stream);
+            }
+        });
+            
+        if (useCache) {
+            lock (_cacheLock) {
+                if (_cache.TryGetValue(filePath, out var existing)) {
+                    existing.RefCount++;
+                    _cache[filePath] = existing;
+                    texture.Dispose();
+                    return existing.Texture;
+                }
+                _cache[filePath] = new CachedTexture { Texture = texture, RefCount = 1 };
+            }
+        }
+        
+        return texture;
     }
     
     /// <summary>
@@ -52,16 +113,25 @@ public static class ImageLoader {
     /// Note: This does NOT dispose the textures, only removes references.
     /// </summary>
     public static void ClearCache() {
-        _cache.Clear();
+        lock (_cacheLock) {
+            _cache.Clear();
+        }
     }
     
     /// <summary>
-    /// Dispose and remove a specific texture from cache.
+    /// Decrement reference count and dispose if it reaches zero.
     /// </summary>
     public static void Unload(string filePath) {
-        if (_cache.TryGetValue(filePath, out var texture)) {
-            texture.Dispose();
-            _cache.Remove(filePath);
+        lock (_cacheLock) {
+            if (_cache.TryGetValue(filePath, out var cached)) {
+                cached.RefCount--;
+                if (cached.RefCount <= 0) {
+                    cached.Texture.Dispose();
+                    _cache.Remove(filePath);
+                } else {
+                    _cache[filePath] = cached;
+                }
+            }
         }
     }
     
@@ -69,9 +139,11 @@ public static class ImageLoader {
     /// Dispose all cached textures and clear the cache.
     /// </summary>
     public static void UnloadAll() {
-        foreach (var texture in _cache.Values) {
-            texture.Dispose();
+        lock (_cacheLock) {
+            foreach (var cached in _cache.Values) {
+                cached.Texture.Dispose();
+            }
+            _cache.Clear();
         }
-        _cache.Clear();
     }
 }

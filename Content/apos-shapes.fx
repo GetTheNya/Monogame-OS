@@ -212,19 +212,24 @@ float EllipseSDF(float2 p, float2 ab) {
 }
 float ArcSDF(float2 p, float a0, float a1, float r)
 {
-    float a = fmod(atan2(p.y, p.x), radians(360.));
+    float a = atan2(p.y, p.x);
+    float pi2 = 6.28318530718;
+    
+    if (a < 0.0) a += pi2;
 
-    float ap = a - a0;
-    if (ap < 0.)
-        ap += radians(360.);
-    float a1p = a1 - a0;
-    if (a1p < 0.)
-        a1p += radians(360.);
+    float start = fmod(a0, pi2); if (start < 0.0) start += pi2;
+    float end = fmod(a1, pi2); if (end < 0.0) end += pi2;
 
-    if (ap >= a1p)
+    float diff = end - start;
+    if (diff < 0.0) diff += pi2;
+
+    float rel = a - start;
+    if (rel < 0.0) rel += pi2;
+
+    if (rel > diff)
     {
-        float2 q0 = float2(r * cos(a0), r * sin(a0));
-        float2 q1 = float2(r * cos(a1), r * sin(a1));
+        float2 q0 = float2(r * cos(start), r * sin(start));
+        float2 q1 = float2(r * cos(end), r * sin(end));
         return min(length(p - q0), length(p - q1));
     }
 
@@ -279,7 +284,9 @@ float4 SpritePixelShader(PixelInput p) : SV_TARGET {
         d = BoxSDF(p.TexCoord.xy, float2(sdfSize, p.Meta1.w));
     }
 
-    d -= p.Meta2.z;
+    if (p.Meta1.y < 7.5 || p.Meta1.y > 8.5) {
+        d -= p.Meta2.z;
+    }
 
     float alpha = Antialias(d + lineSize * 2.0 + aaSize - ps * 1.0, aaSize);
 
