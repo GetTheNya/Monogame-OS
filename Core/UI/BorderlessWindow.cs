@@ -68,13 +68,13 @@ public class BorderlessWindow : WindowBase {
                 _contentBatch.FillRectangle(AbsolutePosition, Size, BackgroundColor * AbsoluteOpacity);
             }
 
+            // Custom draw
+            OnDraw(spriteBatch, _contentBatch);
+
             // Draw children
             foreach (var child in Children) {
                 child.Draw(spriteBatch, _contentBatch);
             }
-
-            // Custom draw
-            OnDraw(spriteBatch, _contentBatch);
 
             _contentBatch.End();
             spriteBatch.End();
