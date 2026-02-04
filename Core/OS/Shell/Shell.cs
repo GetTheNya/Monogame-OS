@@ -155,6 +155,10 @@ public static partial class Shell {
     }
 
     public static void Execute(string virtualPath, Rectangle? startBounds = null) {
+        Execute(virtualPath, null, startBounds);
+    }
+
+    public static void Execute(string virtualPath, string args, Rectangle? startBounds = null) {
         string ext = System.IO.Path.GetExtension(virtualPath).ToLower();
         DebugLogger.Log($"Shell.Execute: {virtualPath}, extension: {ext}");
 
@@ -163,7 +167,7 @@ public static partial class Shell {
         if (ext == ".sapp" || ext == ".slnk") {
             var handler = UI.GetFileHandler(ext);
             if (handler != null) {
-                handler.Execute(virtualPath, startBounds);
+                handler.Execute(virtualPath, args, startBounds);
                 return;
             }
         }
@@ -187,11 +191,11 @@ public static partial class Shell {
         }
 
         if (VirtualFileSystem.Instance.IsDirectory(virtualPath)) {
-            var win = UI.CreateAppWindow("EXPLORER");
+            var win = UI.CreateAppWindow("EXPLORER", new[] { args ?? virtualPath });
             if (win != null) {
                 try {
                     dynamic dwin = win;
-                    dwin.NavigateTo(virtualPath);
+                    dwin.NavigateTo(args ?? virtualPath);
                 }
                 catch {
                 }

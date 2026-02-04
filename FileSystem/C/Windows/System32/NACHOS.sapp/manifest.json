@@ -11,6 +11,9 @@
     "Microsoft.CodeAnalysis.CSharp",
     "System.Collections.Immutable",
     "System.ComponentModel.TypeConverter",
-    "System.ComponentModel.Primitives"
+    "System.ComponentModel.Primitives",
+    "System.Text.Json",
+    "System.Memory",
+    "System.Text.RegularExpressions"
   ]
 }

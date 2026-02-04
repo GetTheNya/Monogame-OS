@@ -121,26 +121,40 @@ public class CompletionPopup : UIElement {
         base.Update(gameTime);
         float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
 
-        if (InputManager.IsKeyJustPressed(Microsoft.Xna.Framework.Input.Keys.Up)) {
+        bool up = InputManager.IsKeyRepeated(Microsoft.Xna.Framework.Input.Keys.Up);
+        bool down = InputManager.IsKeyRepeated(Microsoft.Xna.Framework.Input.Keys.Down);
+        bool enter = InputManager.IsKeyJustPressed(Microsoft.Xna.Framework.Input.Keys.Enter);
+        bool tab = InputManager.IsKeyJustPressed(Microsoft.Xna.Framework.Input.Keys.Tab);
+        bool escape = InputManager.IsKeyJustPressed(Microsoft.Xna.Framework.Input.Keys.Escape);
+
+        if (up) {
             if (_filteredItems.Count > 0) {
                 _selectedIndex = (_selectedIndex - 1 + _filteredItems.Count) % _filteredItems.Count;
                 UpdateList();
+                EnsureVisible(_selectedIndex);
             }
-            InputManager.IsKeyboardConsumed = true;
-        } else if (InputManager.IsKeyJustPressed(Microsoft.Xna.Framework.Input.Keys.Down)) {
+        } else if (down) {
             if (_filteredItems.Count > 0) {
                 _selectedIndex = (_selectedIndex + 1) % _filteredItems.Count;
                 UpdateList();
+                EnsureVisible(_selectedIndex);
             }
-            InputManager.IsKeyboardConsumed = true;
-        } else if (InputManager.IsKeyJustPressed(Microsoft.Xna.Framework.Input.Keys.Enter) || InputManager.IsKeyJustPressed(Microsoft.Xna.Framework.Input.Keys.Tab)) {
+        } else if (enter || tab) {
             if (_filteredItems.Count > 0) {
                 _onSelect?.Invoke(_filteredItems[_selectedIndex]);
             }
-            InputManager.IsKeyboardConsumed = true;
-        } else if (InputManager.IsKeyJustPressed(Microsoft.Xna.Framework.Input.Keys.Escape)) {
+        } else if (escape) {
             OnClosed?.Invoke();
-            Parent?.RemoveChild(this);
+            if (Parent != null) Parent.RemoveChild(this);
+            Shell.RemoveOverlayElement(this);
+        }
+
+        // Always consume if these keys are held, so they don't leak to the editor
+        if (InputManager.IsKeyDown(Microsoft.Xna.Framework.Input.Keys.Up) || 
+            InputManager.IsKeyDown(Microsoft.Xna.Framework.Input.Keys.Down) || 
+            InputManager.IsKeyDown(Microsoft.Xna.Framework.Input.Keys.Enter) || 
+            InputManager.IsKeyDown(Microsoft.Xna.Framework.Input.Keys.Tab) || 
+            InputManager.IsKeyDown(Microsoft.Xna.Framework.Input.Keys.Escape)) {
             InputManager.IsKeyboardConsumed = true;
         }
 
@@ -148,6 +162,21 @@ public class CompletionPopup : UIElement {
         if (InputManager.IsAnyMouseButtonJustPressed(MouseButton.Left) && !Bounds.Contains(InputManager.MousePosition)) {
             OnClosed?.Invoke();
             Parent?.RemoveChild(this);
+        }
+    }
+
+    private void EnsureVisible(int index) {
+        if (_scrollPanel == null) return;
+        float itemTop = index * _itemHeight;
+        float itemBottom = itemTop + _itemHeight;
+        
+        float viewportTop = -_scrollPanel.TargetScrollY;
+        float viewportBottom = viewportTop + _scrollPanel.Size.Y;
+        
+        if (itemBottom > viewportBottom) {
+            _scrollPanel.TargetScrollY = -(itemBottom - _scrollPanel.Size.Y);
+        } else if (itemTop < viewportTop) {
+            _scrollPanel.TargetScrollY = -itemTop;
         }
     }
 

@@ -65,9 +65,7 @@ public class MainWindow : Window {
         // Menu Bar
         _menuBar = new MenuBar(Vector2.Zero, new Vector2(ClientSize.X, 25));
         var fileMenu = new Menu("File");
-        fileMenu.AddItem("New Project", () => { 
-            /* TODO */ 
-        }, "Ctrl+N");
+        fileMenu.AddItem("New Project", OpenNewProjectWizard, "Ctrl+N");
         fileMenu.AddItem("Open Project", () => {
             var fp = new FilePickerWindow("NACHOS - Open Project Folder", "C:\\", "", 
             FilePickerMode.ChooseDirectory, OpenProject);
@@ -127,6 +125,7 @@ public class MainWindow : Window {
              _tabControl.Size = new Vector2(ClientSize.X - sidebarWidth, ClientSize.Y - 200 - 25);
              _terminal.Position = new Vector2(0, ClientSize.Y - 200);
              _terminal.Size = new Vector2(ClientSize.X, 200);
+             _sidebar.UpdateLayout();
 
              foreach (var p in _pages) {
                  if (p.Editor != null) {
@@ -180,6 +179,25 @@ public class MainWindow : Window {
              
              // Trigger IntelliSense logic
              int cursorIdx = editor.GetIndexFromPosition(editor.CursorLine, editor.CursorCol);
+
+             // Suppress if in a comment (Green: 87, 166, 74)
+             bool inComment = editor.Tokens.Any(t => cursorIdx > t.Start && cursorIdx <= t.Start + t.Length && t.Color == new Color(87, 166, 74));
+             
+             // Fast path: Check if current line has // before cursor (to catch it before highlighter runs)
+             if (!inComment) {
+                 string line = editor.Lines[editor.CursorLine];
+                 int commentIdx = line.IndexOf("//");
+                 if (commentIdx != -1 && editor.CursorCol > commentIdx) inComment = true;
+             }
+
+             if (inComment) {
+                 if (_activePopup != null) {
+                     Shell.RemoveOverlayElement(_activePopup);
+                     _activePopup = null;
+                 }
+                 return;
+             }
+
              string text = editor.Value;
              if (cursorIdx >= 0 && cursorIdx <= text.Length) {
                  char lastChar = cursorIdx > 0 ? text[cursorIdx - 1] : '\0';
@@ -217,6 +235,8 @@ public class MainWindow : Window {
                      }
                  }
              }
+             
+             ShowSignatureHelp(pageInfo);
         };
         
         // Initial highlight
@@ -229,9 +249,20 @@ public class MainWindow : Window {
                     _activePopup.Position = caretPos.Value + new Vector2(0, 18);
                 }
             }
+            ShowSignatureHelp(pageInfo);
         };
 
         _tabControl.SelectedIndex = _pages.Count - 1;
+    }
+
+    private void OpenNewProjectWizard() {
+        var settings = new ProjectSettings();
+        var wizard = new ProjectWizardWindow(settings);
+        wizard.OnFinished += (data) => {
+            string projectPath = ProjectGenerator.CreateProject(OwnerProcess, data);
+            OpenProject(projectPath);
+        };
+        Shell.UI.OpenWindow(wizard);
     }
 
     private void OpenProject(string path) {
@@ -261,8 +292,10 @@ public class MainWindow : Window {
     }
 
     private CompletionPopup _activePopup;
+    private SignaturePopup _activeSignaturePopup;
     private bool _isCompleting = false;
     private CancellationTokenSource _intelliSenseCts;
+    private CancellationTokenSource _signatureCts;
 
     public override void Update(GameTime gameTime) {
         // Process UI actions from background threads
@@ -375,6 +408,54 @@ public class MainWindow : Window {
             }
         }, token);
     }
+
+    private void ShowSignatureHelp(OpenPage page) {
+        _signatureCts?.Cancel();
+        _signatureCts = new CancellationTokenSource();
+        var token = _signatureCts.Token;
+
+        var sourceFiles = new Dictionary<string, string>();
+        foreach (var p in _pages) sourceFiles[p.Path] = p.Editor.Value;
+
+        int pos = page.Editor.GetIndexFromPosition(page.Editor.CursorLine, page.Editor.CursorCol);
+
+        Task.Run(async () => {
+            try {
+                var sig = await IntelliSenseProvider.GetSignatureHelpAsync(sourceFiles, page.Path, pos);
+                if (token.IsCancellationRequested) return;
+
+                _pendingUiActions.Enqueue(() => {
+                    if (token.IsCancellationRequested) return;
+
+                    if (sig == null) {
+                        if (_activeSignaturePopup != null) {
+                            Shell.RemoveOverlayElement(_activeSignaturePopup);
+                            _activeSignaturePopup = null;
+                        }
+                        return;
+                    }
+
+                    var caretPos = page.Editor.GetCaretPosition();
+                    if (caretPos != null) {
+                        Vector2 popupPos = caretPos.Value - new Vector2(0, 35); // Show ABOVE the line
+                        
+                        if (_activeSignaturePopup == null) {
+                            _activeSignaturePopup = new SignaturePopup(popupPos, sig.Value.MethodName, sig.Value.Parameters);
+                            _activeSignaturePopup.ActiveIndex = sig.Value.ActiveIndex;
+                            Shell.AddOverlayElement(_activeSignaturePopup);
+                        } else {
+                            // Update existing
+                            _activeSignaturePopup.Position = popupPos;
+                            _activeSignaturePopup.SetSignature(sig.Value.MethodName, sig.Value.Parameters);
+                            _activeSignaturePopup.UpdateParameters(sig.Value.ActiveIndex);
+                        }
+                    }
+                });
+            } catch (Exception ex) {
+                DebugLogger.Log("SignatureHelp Task Error: " + ex.Message);
+            }
+        }, token);
+    }
     // --- Background Analysis ---
 
     private CancellationTokenSource _analysisCts;
@@ -422,7 +503,7 @@ public class MainWindow : Window {
 
                 if (string.IsNullOrEmpty(_projectPath)) return;
 
-                AppCompiler.Instance.Validate(sourceFiles, "NACHOS_ANALYSIS", out var diagnostics);
+                var compilation = AppCompiler.Instance.Validate(sourceFiles, "NACHOS_ANALYSIS", out var diagnostics);
                 
                 // Group diagnostics by file
                 var diagsByFile = diagnostics.GroupBy(d => d.Location.SourceTree?.FilePath).ToList();
@@ -431,6 +512,22 @@ public class MainWindow : Window {
                     if (token.IsCancellationRequested) return;
                     
                     foreach (var p in pagesSnapshot) {
+                        // Semantic Highlighting
+                        var tree = compilation.SyntaxTrees.FirstOrDefault(t => t.FilePath == p.Path);
+                        if (tree != null) {
+                            var semanticModel = compilation.GetSemanticModel(tree);
+                            var content = sourceFiles[p.Path];
+                            Task.Run(() => {
+                                var semanticTokens = CSharpHighlighter.Highlight(content, semanticModel);
+                                _pendingUiActions.Enqueue(() => {
+                                    if (p.Editor.Value == content) { // Ensure content hasn't changed since highlight started
+                                        p.Editor.Tokens = semanticTokens;
+                                    }
+                                });
+                            });
+                        }
+
+                        // Diagnostics
                         var fileDiags = diagsByFile.FirstOrDefault(g => g.Key == p.Path);
                         if (fileDiags != null) {
                             p.Editor.Diagnostics = fileDiags.Select(d => {
@@ -456,6 +553,10 @@ public class MainWindow : Window {
     }
  
     protected override void ExecuteClose() {
+        if (_activeSignaturePopup != null) {
+            Shell.RemoveOverlayElement(_activeSignaturePopup);
+            _activeSignaturePopup = null;
+        }
         if (_activePopup != null) {
             Shell.RemoveOverlayElement(_activePopup);
             _activePopup = null;

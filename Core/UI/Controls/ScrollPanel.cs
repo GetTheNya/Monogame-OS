@@ -15,12 +15,12 @@ public class ScrollPanel : Panel {
     private float _targetScrollY = 0f;
     private float _targetScrollX = 0f;
     
-    // Protected properties for derived classes
-    protected float TargetScrollY {
+    // Public properties for external control
+    public float TargetScrollY {
         get => _targetScrollY;
         set => _targetScrollY = value;
     }
-    protected float TargetScrollX {
+    public float TargetScrollX {
         get => _targetScrollX;
         set => _targetScrollX = value;
     }
@@ -342,10 +342,11 @@ public class ScrollPanel : Panel {
         // Actually, we already handled priority.
         IsMouseOver = UIManager.IsHovered(this);
         if (IsMouseOver) {
+            bool alreadyConsumed = InputManager.IsMouseConsumed;
             OnHover();
             if (ConsumesInput) InputManager.IsMouseConsumed = true;
             
-            if (InputManager.IsMouseButtonJustPressed(MouseButton.Right)) {
+            if (!alreadyConsumed && InputManager.IsMouseButtonJustPressed(MouseButton.Right)) {
                 HandleContextMenuInput();
             }
         }

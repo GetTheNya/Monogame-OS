@@ -1,0 +1,19 @@
+using System;
+using TheGame.Core.OS;
+
+namespace {namespace};
+
+public class Program : Application {
+    public static Application Main(string[] args) => new Program();
+
+    protected override void OnLoad(string[] args) {
+<sample>
+        Console.WriteLine("Hello from {projectName}!");
+</sample>
+<noSample>
+        // Add your initialization code here
+</noSample>
+        // Keep process alive if it's a daemon/background task, 
+        // or just exit if it's a one-shot tool.
+    }
+}

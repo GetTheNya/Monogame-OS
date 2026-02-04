@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
@@ -18,6 +19,7 @@ public class AppCompiler {
 
     private readonly List<MetadataReference> _baseReferences;
     private readonly Dictionary<string, MetadataReference> _optionalReferences;
+    public IEnumerable<string> AvailableReferences => _optionalReferences.Keys.OrderBy(k => k);
 
     private AppCompiler() {
         // Base references that EVERY app needs
@@ -47,7 +49,11 @@ public class AppCompiler {
             { "System.ComponentModel.Primitives", MetadataReference.CreateFromFile(typeof(System.ComponentModel.Component).Assembly.Location) },
             { "NAudio", MetadataReference.CreateFromFile(typeof(NAudio.Wave.WaveOutEvent).Assembly.Location) },
             { "FontStashSharp", MetadataReference.CreateFromFile(typeof(FontStashSharp.FontSystem).Assembly.Location) },
-            { "FontStashSharp.MonoGame", MetadataReference.CreateFromFile(Assembly.Load("FontStashSharp.MonoGame").Location) }
+            { "FontStashSharp.MonoGame", MetadataReference.CreateFromFile(Assembly.Load("FontStashSharp.MonoGame").Location) },
+            { "System.Text.Json", MetadataReference.CreateFromFile(typeof(JsonSerializer).Assembly.Location)},
+            { "System.Text.Encodings.Web", MetadataReference.CreateFromFile(Assembly.Load("System.Text.Encodings.Web").Location)},
+            { "System.Memory", MetadataReference.CreateFromFile(Assembly.Load("System.Memory").Location)},
+            { "System.Text.RegularExpressions", MetadataReference.CreateFromFile(Assembly.Load("System.Text.RegularExpressions").Location)}
         };
     }
 
@@ -67,11 +73,11 @@ public class AppCompiler {
     /// Compiles C# source files and returns diagnostics without loading the resulting assembly.
     /// Useful for compilation checks without memory overhead.
     /// </summary>
-    public bool Validate(Dictionary<string, string> sourceFiles, string assemblyName, out IEnumerable<Diagnostic> diagnostics, IEnumerable<string> extraReferences = null) {
+    public CSharpCompilation Validate(Dictionary<string, string> sourceFiles, string assemblyName, out IEnumerable<Diagnostic> diagnostics, IEnumerable<string> extraReferences = null) {
         var syntaxTrees = sourceFiles.Select(kvp =>
             CSharpSyntaxTree.ParseText(kvp.Value, path: kvp.Key)
         ).ToArray();
-
+ 
         var compilation = CSharpCompilation.Create(
             assemblyName,
             syntaxTrees: syntaxTrees,
@@ -85,7 +91,7 @@ public class AppCompiler {
         EmitResult result = compilation.Emit(Stream.Null);
         diagnostics = result.Diagnostics;
 
-        return result.Success;
+        return compilation;
     }
 
     /// <summary>
@@ -97,22 +103,7 @@ public class AppCompiler {
     /// <param name="extraReferences">Optional assembly names from manifest</param>
     /// <returns>Compiled assembly or null if compilation failed</returns>
     public Assembly Compile(Dictionary<string, string> sourceFiles, string assemblyName, out IEnumerable<Diagnostic> diagnostics, IEnumerable<string> extraReferences = null) {
-        // Parse all source files into syntax trees
-        var syntaxTrees = sourceFiles.Select(kvp =>
-            CSharpSyntaxTree.ParseText(kvp.Value, path: kvp.Key)
-        ).ToArray();
-
-        // Create compilation
-        var compilation = CSharpCompilation.Create(
-            assemblyName,
-            syntaxTrees: syntaxTrees,
-            references: GetFullReferences(extraReferences),
-            options: new CSharpCompilationOptions(
-                OutputKind.DynamicallyLinkedLibrary,
-                optimizationLevel: OptimizationLevel.Debug,
-                allowUnsafe: false
-            )
-        );
+        var compilation = Validate(sourceFiles, assemblyName, out diagnostics, extraReferences);
 
         // Compile to memory stream
         using var ms = new MemoryStream();
@@ -123,25 +114,6 @@ public class AppCompiler {
         if (!result.Success) {
             return null;
         }
-
-        // if (!result.Success) {
-        //     // Compilation failed, collect errors
-        //     var failures = result.Diagnostics
-        //         .Where(diagnostic => diagnostic.IsWarningAsError || diagnostic.Severity == DiagnosticSeverity.Error);
-
-        //     foreach (var diagnostic in failures) {
-        //         var lineSpan = diagnostic.Location.GetLineSpan();
-        
-        //         int line = lineSpan.StartLinePosition.Line + 1;
-        //         int column = lineSpan.StartLinePosition.Character + 1;
-
-        //         string fileName = lineSpan.Path ?? "Source";
-
-        //         diagnostics.Add($"{fileName}({line},{column}): {diagnostic.Id}: {diagnostic.GetMessage()}");
-        //     }
-
-        //     return null;
-        // }
 
         // Load the compiled assembly
         ms.Seek(0, SeekOrigin.Begin);

@@ -6,8 +6,8 @@
   "author": "Unknown",
   "description": "Browse files and folders",
   "entryPoint": "Program.cs",
-  "entryClass": "FileExplorerApp.FileExplorerWindow",
-  "entryMethod": "CreateWindow",
+  "entryClass": "FileExplorerApp.ExplorerApp",
+  "entryMethod": "Main",
   "permissions": [],
   "dependencies": [],
   "references": [

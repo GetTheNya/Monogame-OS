@@ -260,4 +260,82 @@ private static readonly string[] _keywords = {
             }
         });
     }
+
+    public static async Task<(string MethodName, List<(string Type, string Name)> Parameters, int ActiveIndex)?> GetSignatureHelpAsync(Dictionary<string, string> sourceFiles, string currentFile, int cursorPosition) {
+        return await Task.Run<(string MethodName, List<(string Type, string Name)> Parameters, int ActiveIndex)?>(() => {
+            try {
+                var syntaxTrees = sourceFiles.Select(kvp => 
+                    CSharpSyntaxTree.ParseText(kvp.Value, path: kvp.Key)
+                ).ToArray();
+
+                var currentTree = syntaxTrees.FirstOrDefault(t => t.FilePath == currentFile);
+                if (currentTree == null) return null;
+
+                var compilation = CSharpCompilation.Create(
+                    "SignatureHelpCompilation",
+                    syntaxTrees: syntaxTrees,
+                    references: AppCompiler.Instance.GetType().GetMethod("GetFullReferences", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                        .Invoke(AppCompiler.Instance, new object[] { null }) as IEnumerable<MetadataReference>
+                );
+
+                var semanticModel = compilation.GetSemanticModel(currentTree);
+                var root = currentTree.GetRoot();
+                
+                var nodeAtCursor = root.FindNode(new Microsoft.CodeAnalysis.Text.TextSpan(cursorPosition, 0), findInsideTrivia: true);
+
+                // Find the innermost ArgumentList that the cursor is strictly inside
+                var argList = nodeAtCursor
+                    .AncestorsAndSelf()
+                    .OfType<ArgumentListSyntax>()
+                    .FirstOrDefault(al => {
+                        bool afterOpen = cursorPosition >= al.OpenParenToken.Span.End;
+                        bool beforeClose = al.CloseParenToken.IsMissing || cursorPosition <= al.CloseParenToken.Span.Start;
+                        return afterOpen && beforeClose;
+                    });
+
+                // Final fallback: look back one char if we are exactly at the end of a token or trivia
+                if (argList == null && cursorPosition > 0) {
+                    argList = root.FindNode(new Microsoft.CodeAnalysis.Text.TextSpan(cursorPosition - 1, 0), findInsideTrivia: true)
+                        .AncestorsAndSelf()
+                        .OfType<ArgumentListSyntax>()
+                        .FirstOrDefault(al => cursorPosition >= al.OpenParenToken.Span.End && (al.CloseParenToken.IsMissing || cursorPosition <= al.CloseParenToken.Span.Start));
+                }
+
+                if (argList != null) {
+                    var invocation = argList.Parent;
+                    var symbolInfo = semanticModel.GetSymbolInfo(invocation);
+                    var method = symbolInfo.Symbol as IMethodSymbol;
+                    
+                    if (method == null && symbolInfo.CandidateSymbols.Length > 0) {
+                        method = symbolInfo.CandidateSymbols[0] as IMethodSymbol;
+                    }
+
+                    if (method == null && invocation is ObjectCreationExpressionSyntax oce) {
+                        var oceInfo = semanticModel.GetSymbolInfo(oce);
+                        method = oceInfo.Symbol as IMethodSymbol ?? oceInfo.CandidateSymbols.OfType<IMethodSymbol>().FirstOrDefault();
+                    }
+
+                    if (method != null) {
+                        var parameters = method.Parameters.Select(p => (p.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat), p.Name)).ToList();
+                        
+                        // Find active index
+                        int activeIndex = 0;
+                        if (argList.Arguments.Count > 0) {
+                            for (int i = 0; i < argList.Arguments.Count; i++) {
+                                if (cursorPosition > argList.Arguments[i].Span.End) activeIndex = i + 1;
+                                else break;
+                            }
+                        }
+                        
+                        return (method.Name == ".ctor" ? method.ContainingType.Name : method.Name, parameters, activeIndex);
+                    }
+                }
+                
+                return null;
+            } catch (Exception ex) {
+                DebugLogger.Log("SignatureHelp Error: " + ex.Message);
+                return null;
+            }
+        });
+    }
 }

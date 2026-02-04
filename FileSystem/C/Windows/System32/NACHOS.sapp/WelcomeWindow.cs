@@ -59,7 +59,7 @@ public class WelcomeWindow : Window {
         var newBtn = new Button(Vector2.Zero, new Vector2(leftColWidth, 35), "New Project") {
             BackgroundColor = new Color(45, 45, 45),
             HoverColor = new Color(60, 60, 60),
-            OnClickAction = () => { /* New project logic */ }
+            OnClickAction = OpenNewProjectWizard
         };
         actionsPanel.AddChild(newBtn);
 
@@ -99,7 +99,13 @@ public class WelcomeWindow : Window {
 
         foreach (var path in _settings.RecentProjects.AsEnumerable().Reverse()) {
             string currentPath = path;
-            var btn = new Button(new Vector2(0, y), new Vector2(_recentList.Size.X - 15, itemHeight), "") {
+            var itemPanel = new Panel(new Vector2(0, y), new Vector2(_recentList.Size.X - 15, itemHeight)) {
+                BackgroundColor = Color.Transparent,
+                BorderColor = Color.Transparent
+            };
+            _recentList.AddChild(itemPanel);
+
+            var btn = new Button(Vector2.Zero, new Vector2(itemPanel.Size.X - 40, itemHeight), "") {
                 BackgroundColor = Color.Transparent,
                 HoverColor = new Color(40, 40, 40),
                 BorderColor = Color.Transparent,
@@ -111,9 +117,25 @@ public class WelcomeWindow : Window {
             
             btn.AddChild(nameLabel);
             btn.AddChild(pathLabel);
+            itemPanel.AddChild(btn);
+
+            var removeBtn = new Button(new Vector2(itemPanel.Size.X - 35, 10), new Vector2(30, 30), "X") {
+                BackgroundColor = Color.Transparent,
+                BorderColor = Color.Transparent,
+                TextColor = Color.Gray,
+                HoverColor = new Color(80, 40, 40),
+                OnClickAction = () => RemoveFromRecent(currentPath)
+            };
+            itemPanel.AddChild(removeBtn);
             
-            _recentList.AddChild(btn);
             y += itemHeight;
+        }
+    }
+
+    private void RemoveFromRecent(string path) {
+        if (_settings.RecentProjects.Remove(path)) {
+            Shell.AppSettings.Save(OwnerProcess, _settings);
+            PopulateRecent();
         }
     }
 
@@ -122,6 +144,16 @@ public class WelcomeWindow : Window {
             SelectProject(path);
         });
         Shell.UI.OpenWindow(fp);
+    }
+
+    private void OpenNewProjectWizard() {
+        var settings = new ProjectSettings();
+        var wizard = new ProjectWizardWindow(settings);
+        wizard.OnFinished += (data) => {
+            string projectPath = ProjectGenerator.CreateProject(OwnerProcess, data);
+            SelectProject(projectPath);
+        };
+        OwnerProcess.Application.OpenModal(wizard, Bounds);
     }
 
     private void SelectProject(string path) {

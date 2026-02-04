@@ -28,9 +28,16 @@ public class WizardWindow<TData> : Window {
     private bool _isFinishing;
     private int _lastTotalCount = -1;
     private int _lastCurrentIdx = -1;
+    private float _lastPanelWidth = -1;
     private float _dotUpdateTimer = 0;
 
     public WizardWindow(string title, TData initialData, WizardStep<TData> firstStep) : base(Vector2.Zero, new Vector2(500, 400)) {
+        Title = title;
+        Data = initialData;
+        CanResize = false;
+
+        SetupUI();
+        
         // Center on screen
         var viewport = G.GraphicsDevice.Viewport;
         Position = new Vector2(
@@ -38,32 +45,58 @@ public class WizardWindow<TData> : Window {
             (viewport.Height - Size.Y - 40) / 2
         );
 
-        Title = title;
-        Data = initialData;
-        CanResize = false;
-
-        SetupUI();
+        OnResize += UpdateLayout;
         
         // Setup close interception
         OnCloseRequested += HandleCloseRequested;
 
         PushStep(firstStep, animated: false);
+        
+        // Final layout update after first step is pushed
+        UpdateLayout();
     }
 
     private void SetupUI() {
-        // Content container for steps
-        _stepContainer = new Panel(new Vector2(20, 50), new Vector2(ClientSize.X - 40, ClientSize.Y - 110)) {
+        _stepContainer = new Panel(Vector2.Zero, Vector2.Zero) {
             BackgroundColor = Color.Transparent,
             BorderColor = Color.Transparent
         };
         AddChild(_stepContainer);
 
-        // Progress dots container
-        _progressPanel = new Panel(new Vector2(0, 10), new Vector2(ClientSize.X, 30)) {
+        _progressPanel = new Panel(Vector2.Zero, Vector2.Zero) {
             BackgroundColor = Color.Transparent,
             BorderColor = Color.Transparent
         };
         AddChild(_progressPanel);
+
+        _cancelButton = new Button(Vector2.Zero, new Vector2(100, 30), "Cancel") {
+            OnClickAction = Cancel
+        };
+        AddChild(_cancelButton);
+
+        _nextButton = new Button(Vector2.Zero, new Vector2(100, 30), "Next >") {
+            OnClickAction = Next
+        };
+        AddChild(_nextButton);
+
+        _backButton = new Button(Vector2.Zero, new Vector2(100, 30), "< Back") {
+            OnClickAction = Back
+        };
+        AddChild(_backButton);
+
+        UpdateLayout();
+    }
+
+    private void UpdateLayout() {
+        if (_stepContainer == null) return;
+
+        // Content container for steps
+        _stepContainer.Position = new Vector2(20, 50);
+        _stepContainer.Size = new Vector2(ClientSize.X - 40, ClientSize.Y - 110);
+
+        // Progress dots container
+        _progressPanel.Position = new Vector2(0, 10);
+        _progressPanel.Size = new Vector2(ClientSize.X, 30);
 
         // Buttons
         float btnWidth = 100;
@@ -71,20 +104,16 @@ public class WizardWindow<TData> : Window {
         float spacing = 10;
         float bottomMargin = 20;
 
-        _cancelButton = new Button(new Vector2(ClientSize.X - btnWidth - 20, ClientSize.Y - btnHeight - bottomMargin), new Vector2(btnWidth, btnHeight), "Cancel") {
-            OnClickAction = Cancel
-        };
-        AddChild(_cancelButton);
+        _cancelButton.Position = new Vector2(ClientSize.X - btnWidth - 20, ClientSize.Y - btnHeight - bottomMargin);
+        _nextButton.Position = new Vector2(_cancelButton.Position.X - btnWidth - spacing, _cancelButton.Position.Y);
+        _backButton.Position = new Vector2(_nextButton.Position.X - btnWidth - spacing, _nextButton.Position.Y);
 
-        _nextButton = new Button(new Vector2(_cancelButton.Position.X - btnWidth - spacing, _cancelButton.Position.Y), new Vector2(btnWidth, btnHeight), "Next >") {
-            OnClickAction = Next
-        };
-        AddChild(_nextButton);
+        // Update current step size
+        if (CurrentStep != null) {
+            CurrentStep.Size = _stepContainer.Size;
+        }
 
-        _backButton = new Button(new Vector2(_nextButton.Position.X - btnWidth - spacing, _nextButton.Position.Y), new Vector2(btnWidth, btnHeight), "< Back") {
-            OnClickAction = Back
-        };
-        AddChild(_backButton);
+        UpdateProgressDots();
     }
 
     protected override void OnUpdate(GameTime gameTime) {
@@ -226,11 +255,13 @@ public class WizardWindow<TData> : Window {
         }
 
         int totalCount = currentIdx + 1 + futureCount;
+        float currentWidth = _progressPanel.Size.X;
 
-        // Only rebuild if something changed
-        if (totalCount == _lastTotalCount && currentIdx == _lastCurrentIdx) return;
+        // Only rebuild if something changed (including width)
+        if (totalCount == _lastTotalCount && currentIdx == _lastCurrentIdx && Math.Abs(currentWidth - _lastPanelWidth) < 0.1f) return;
         _lastTotalCount = totalCount;
         _lastCurrentIdx = currentIdx;
+        _lastPanelWidth = currentWidth;
 
         _progressPanel.ClearChildren();
         _dots.Clear();

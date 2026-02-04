@@ -19,10 +19,23 @@ public class AppSettings {
     public string LastPath { get; set; } = "C:\\";
 }
 
-public class FileExplorerWindow : Window {
-    public static Window CreateWindow() {
-        return new FileExplorerWindow(new Vector2(100, 100), new Vector2(850, 600));
+public class ExplorerApp : Application {
+    public static ExplorerApp Main(string[] args) {
+        return new ExplorerApp();
     }
+
+    protected override void OnLoad(string[] args) {
+        var win = new FileExplorerWindow(new Vector2(100, 100), new Vector2(850, 600));
+        MainWindow = win;
+        
+        if (args != null && args.Length > 0) {
+            win.InitialPath = args[0];
+        }
+    }
+}
+
+public class FileExplorerWindow : Window {
+    public string InitialPath { get; set; }
 
     private string _currentPath = "C:\\";
     public string CurrentPath => _currentPath;
@@ -44,6 +57,14 @@ public class FileExplorerWindow : Window {
     protected override void OnLoad() {
         _settings = Shell.AppSettings.Load<AppSettings>(OwnerProcess);
         SetupUI();
+        
+        // Use InitialPath if provided, otherwise fallback to settings
+        if (!string.IsNullOrEmpty(InitialPath)) {
+            _currentPath = InitialPath;
+        } else if (string.IsNullOrEmpty(_currentPath) || _currentPath == "C:\\") {
+            if (!string.IsNullOrEmpty(_settings.LastPath)) _currentPath = _settings.LastPath;
+        }
+        
         NavigateTo(_currentPath);
     }
 
@@ -138,6 +159,10 @@ public class FileExplorerWindow : Window {
         _fileList.Position = new Vector2(SidebarWidth, 66);
         _fileList.Size = new Vector2(ClientSize.X - SidebarWidth, ClientSize.Y - 66);
         _fileList.UpdateLayout();
+    }
+
+    private Window CreateWindow() {
+        return new FileExplorerWindow(new Vector2(Position.X + 20, Position.Y + 20), Size);
     }
 
     public void NavigateTo(string path) {

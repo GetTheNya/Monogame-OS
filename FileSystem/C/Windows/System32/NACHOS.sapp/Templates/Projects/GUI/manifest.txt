@@ -1,0 +1,8 @@
+{
+    "appId": "{projectName}",
+    "name": "{projectName}",
+    "entryClass": "{namespace}.Program",
+    "entryMethod": "Main",
+    "singleInstance": false,
+    "references": [ ]
+}

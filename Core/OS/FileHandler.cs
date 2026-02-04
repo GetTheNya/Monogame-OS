@@ -6,7 +6,8 @@ namespace TheGame.Core.OS;
 
 public abstract class FileHandler {
     public abstract string Extension { get; }
-    public abstract void Execute(string virtualPath, Rectangle? startBounds = null);
+    public virtual void Execute(string virtualPath, Rectangle? startBounds = null) => Execute(virtualPath, null, startBounds);
+    public abstract void Execute(string virtualPath, string args, Rectangle? startBounds = null);
     public virtual Texture2D GetIcon(string virtualPath) => GameContent.FileIcon;
 }
 

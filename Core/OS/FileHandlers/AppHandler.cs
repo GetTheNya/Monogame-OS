@@ -6,10 +6,16 @@ namespace TheGame.Core.OS;
 public class AppHandler : FileHandler {
     public override string Extension => ".sapp";
 
-    public override void Execute(string virtualPath, Rectangle? startBounds = null) {
+    public override void Execute(string virtualPath, string args, Rectangle? startBounds = null) {
         string appId = GetAppId(virtualPath);
         if (string.IsNullOrEmpty(appId)) return;
-        var win = Shell.UI.CreateAppWindow(appId);
+        
+        string[] argArray = null;
+        if (!string.IsNullOrEmpty(args)) {
+             argArray = new[] { args };
+        }
+
+        var win = Shell.UI.CreateAppWindow(appId, argArray);
         if (win != null) Shell.UI.OpenWindow(win, startBounds);
     }
 

@@ -1,0 +1,7 @@
+namespace {namespace};
+
+public class {fileName} {
+    public {fileName}() {
+        // Constructor logic
+    }
+}

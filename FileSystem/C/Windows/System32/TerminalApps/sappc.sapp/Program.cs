@@ -222,8 +222,8 @@ public class Program : TerminalApplication {{
             WriteLine("Compilation successful. Executing app...", Color.Green);
             ExecuteApp(assembly, manifest, resolvedPath, appArgs);
         } else {
-            bool success = AppCompiler.Instance.Validate(sourceFiles, manifest.AppId, out diagnostics, manifest.References);
-            if (!success) {
+            var compilation = AppCompiler.Instance.Validate(sourceFiles, manifest.AppId, out diagnostics, manifest.References);
+            if (diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error || d.IsWarningAsError)) {
                 WriteLine("Compilation failed.", Color.Red);
                 ReportErrors(diagnostics);
                 return;

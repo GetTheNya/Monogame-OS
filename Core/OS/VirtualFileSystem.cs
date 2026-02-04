@@ -356,6 +356,46 @@ public class VirtualFileSystem {
         }
     }
 
+    public void Copy(string sourceVirtualPath, string destVirtualPath) {
+        string sourceHost = ToHostPath(sourceVirtualPath);
+        string destHost = ToHostPath(destVirtualPath);
+        
+        if (string.IsNullOrEmpty(sourceHost) || string.IsNullOrEmpty(destHost)) return;
+        if (!Exists(sourceVirtualPath)) return;
+
+        string destDir = Path.GetDirectoryName(destHost);
+        if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
+
+        if (File.Exists(sourceHost)) {
+            File.Copy(sourceHost, destHost, true);
+        } else if (Directory.Exists(sourceHost)) {
+            DirectoryCopy(sourceHost, destHost, true);
+        }
+    }
+
+    private void DirectoryCopy(string sourceDirName, string destDirName, bool copySubDirs) {
+        DirectoryInfo dir = new DirectoryInfo(sourceDirName);
+        if (!dir.Exists) return;
+
+        DirectoryInfo[] dirs = dir.GetDirectories();
+        if (!Directory.Exists(destDirName)) {
+            Directory.CreateDirectory(destDirName);
+        }
+
+        FileInfo[] files = dir.GetFiles();
+        foreach (FileInfo file in files) {
+            string temppath = Path.Combine(destDirName, file.Name);
+            file.CopyTo(temppath, true);
+        }
+
+        if (copySubDirs) {
+            foreach (DirectoryInfo subdir in dirs) {
+                string temppath = Path.Combine(destDirName, subdir.Name);
+                DirectoryCopy(subdir.FullName, temppath, copySubDirs);
+            }
+        }
+    }
+
     private void RemoveTrashInfo(string trashVirtualPath) {
         string metadataPath = "C:\\$Recycle.Bin\\$trash_info.json";
         if (!Exists(metadataPath)) return;
