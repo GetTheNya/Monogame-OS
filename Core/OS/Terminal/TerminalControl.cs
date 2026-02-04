@@ -182,17 +182,21 @@ public class TerminalControl : TextArea {
     public void Execute(string command) {
         if (string.IsNullOrEmpty(command)) return;
 
-        // Print prompt and command to mimic manual entry
-        _backend.EnsureNewline();
-        _backend.WriteLine("\u001b[32m" + GetPrompt() + "\u001b[0m" + command);
+        // Print prompt and command to mimic manual entry - but queue it!
+        _backend.EnqueueAction(() => {
+            _backend.EnsureNewline();
+            _backend.WriteLine("\u001b[32m" + GetPrompt() + "\u001b[0m" + command);
+        });
 
-        // Handle internal or external command
-        if (!HandleInternalCommand(command)) {
-            _backend.ExecuteCommand(command);
-        }
+        // Queue the command execution as well
+        _backend.EnqueueAction(() => {
+            if (!HandleInternalCommand(command)) {
+                _backend.ExecuteCommand(command);
+            }
+        });
 
-        // Add to history if not process running (usually programmatic calls are shell-like)
-        if (!_backend.IsProcessRunning) {
+        // Add to history if not busy (usually programmatic calls are shell-like)
+        if (!_backend.IsBusy) {
             _commandHistory.Remove(command);
             _commandHistory.Add(command);
         }
@@ -215,6 +219,12 @@ public class TerminalControl : TextArea {
         _historyIndex = -1;
 
         if (!_backend.IsProcessRunning) {
+            if (_backend.IsBusy) {
+                // Already something in the queue, so queue this too instead of running immediately
+                Execute(rawInput);
+                return;
+            }
+
             _backend.EnsureNewline();
             _backend.WriteLine("\u001b[32m" + GetPrompt() + "\u001b[0m" + rawInput);
 

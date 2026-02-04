@@ -29,6 +29,7 @@ public class TabControl : UIElement {
 
     public ScrollPanel TabBar => _tabBar;
     public Panel ContentArea => _contentArea;
+    public TabPage SelectedPage => (_selectedIndex >= 0 && _selectedIndex < _pages.Count) ? _pages[_selectedIndex] : null;
     
     public event Action<int> OnTabChanged;
     public event Action<int> OnTabClosed; // New event

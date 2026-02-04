@@ -16,9 +16,11 @@ public static partial class Shell {
     public static TheGame.Core.UI.ContextMenu GlobalContextMenu;
 
     public static Action<UIElement> OnAddOverlayElement;
+    public static Action<UIElement> OnRemoveOverlayElement;
     public static bool IsRenderingDrag = false;
 
     public static void AddOverlayElement(UIElement element) => OnAddOverlayElement?.Invoke(element);
+    public static void RemoveOverlayElement(UIElement element) => OnRemoveOverlayElement?.Invoke(element);
     public static void DrawDrag(SpriteBatch sb, ShapeBatch sbatch) => DragDropManager.Instance.DrawDragVisual(sb, sbatch);
 
     public static void Update(GameTime gameTime) {

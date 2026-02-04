@@ -42,6 +42,9 @@ public class AppCompiler {
         _optionalReferences = new Dictionary<string, MetadataReference>(StringComparer.OrdinalIgnoreCase) {
             { "Microsoft.CodeAnalysis", MetadataReference.CreateFromFile(typeof(MetadataReference).Assembly.Location) },
             { "Microsoft.CodeAnalysis.CSharp", MetadataReference.CreateFromFile(typeof(CSharpCompilation).Assembly.Location) },
+            { "System.Collections.Immutable", MetadataReference.CreateFromFile(typeof(System.Collections.Immutable.ImmutableArray).Assembly.Location) },
+            { "System.ComponentModel.TypeConverter", MetadataReference.CreateFromFile(typeof(System.Timers.Timer).Assembly.Location) },
+            { "System.ComponentModel.Primitives", MetadataReference.CreateFromFile(typeof(System.ComponentModel.Component).Assembly.Location) },
             { "NAudio", MetadataReference.CreateFromFile(typeof(NAudio.Wave.WaveOutEvent).Assembly.Location) },
             { "FontStashSharp", MetadataReference.CreateFromFile(typeof(FontStashSharp.FontSystem).Assembly.Location) },
             { "FontStashSharp.MonoGame", MetadataReference.CreateFromFile(Assembly.Load("FontStashSharp.MonoGame").Location) }

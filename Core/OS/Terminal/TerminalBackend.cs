@@ -28,6 +28,7 @@ public class TerminalBackend : ITerminal {
     private class PipelineJob {
         public List<CommandCall> Commands = new();
         public string Operator; // "", "&&", "||", or ";"
+        public Action Action; // Optional action to run instead of a command
     }
 
     private Queue<PipelineJob> _commandQueue = new();
@@ -102,6 +103,14 @@ public class TerminalBackend : ITerminal {
         }
     }
 
+    public void EnqueueAction(Action action) {
+        if (action == null) return;
+        _commandQueue.Enqueue(new PipelineJob { Action = action });
+        if (_activeProcess == null) {
+            RunNextCommand();
+        }
+    }
+
     private void RunNextCommand() {
         if (_commandQueue.Count == 0) {
             // No more commands, notify UI that we're ready for new input
@@ -120,6 +129,16 @@ public class TerminalBackend : ITerminal {
         }
         if (job.Operator == "||" && _lastExitCode == 0) {
             // Skip
+            RunNextCommand();
+            return;
+        }
+
+        if (job.Action != null) {
+            try {
+                job.Action();
+            } catch (Exception ex) {
+                AddLine($"Error executing internal action: {ex.Message}\n", Color.Red, "SYSTEM");
+            }
             RunNextCommand();
             return;
         }
@@ -353,6 +372,7 @@ public class TerminalBackend : ITerminal {
     }
 
     public bool IsProcessRunning => _activePipeline.Count > 0;
+    public bool IsBusy => _activePipeline.Count > 0 || _commandQueue.Count > 0;
 
     public void TerminateActiveProcess() {
         lock (_activePipeline) {

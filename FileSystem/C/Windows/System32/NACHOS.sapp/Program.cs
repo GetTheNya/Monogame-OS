@@ -21,11 +21,7 @@ public class Program : Application {
         MainWindow = splash; 
         OpenWindow(splash);
 
-        // 2. Create Main Window (early so it's ready)
-        var win = CreateWindow<MainWindow>();
-        win.Initialize(projectPath);
-
-        // 3. Wait for 5 seconds and update progress
+        // 2. Initial delay/fake progress
         int steps = 5;
         for (int i = 0; i <= steps; i++) {
             if (splash.IsVisible) {
@@ -34,11 +30,24 @@ public class Program : Application {
             await Task.Delay(100);
         }
 
-        // 4. Transition to Main Window
+        // 3. Show Welcome Screen if no path provided
+        if (string.IsNullOrEmpty(projectPath)) {
+            var welcome = CreateWindow<WelcomeWindow>();
+            MainWindow = welcome;
+            OpenWindow(welcome);
+            splash.Close();
+            projectPath = await welcome.WaitForSelectionAsync();
+            if (string.IsNullOrEmpty(projectPath)) return;
+        } else {
+            splash.Close();
+        }
+
+        // 4. Create and Show Main Window
+        var win = CreateWindow<MainWindow>();
+        win.Initialize(projectPath);
+
         MainWindow = win;
         OpenWindow(win);
-        
-        splash.Close();
 
         // 5. Keep process alive until main window is closed
         var tcs = new TaskCompletionSource<bool>();

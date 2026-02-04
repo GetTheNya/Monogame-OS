@@ -95,6 +95,7 @@ public class DesktopScene : Core.Scenes.Scene {
         // Register Shell event to update Explorers
         Shell.Initialize(_windowLayer, _contextMenu);
         Shell.OnAddOverlayElement = (el) => _uiManager.AddElement(el);
+        Shell.OnRemoveOverlayElement = (el) => _uiManager.RemoveElement(el);
 
         // Initialize Notification System
         _notificationPanel = new NotificationHistoryPanel();

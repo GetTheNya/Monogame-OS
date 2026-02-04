@@ -50,6 +50,7 @@ public abstract class UIElement : IContextMenuProvider {
     public float AbsoluteOpacity => (Parent?.AbsoluteOpacity ?? 1.0f) * Opacity;
     public Action OnRightClickAction { get; set; }
     public Action OnDoubleClickAction { get; set; }
+    public Action<SpriteBatch, ShapeBatch, Vector2, Vector2> OnDrawOver { get; set; }
     
     /// <summary>
     /// Optional name for element identification (e.g., "SubmitBtn").
@@ -293,6 +294,8 @@ public abstract class UIElement : IContextMenuProvider {
             foreach (var child in snapshot) {
                 child.Draw(spriteBatch, shapeBatch);
             }
+
+            OnDrawOver?.Invoke(spriteBatch, shapeBatch, AbsolutePosition, Size);
         } catch (Exception ex) {
             if (!CrashHandler.TryHandleAnyAppException(ex)) {
                 throw;

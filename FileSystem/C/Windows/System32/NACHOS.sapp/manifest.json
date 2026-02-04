@@ -6,6 +6,11 @@
   "entryClass": "NACHOS.Program",
   "entryMethod": "Main",
   "references": [
-    "FontStashSharp.MonoGame"
+    "FontStashSharp.MonoGame",
+    "Microsoft.CodeAnalysis",
+    "Microsoft.CodeAnalysis.CSharp",
+    "System.Collections.Immutable",
+    "System.ComponentModel.TypeConverter",
+    "System.ComponentModel.Primitives"
   ]
 }
