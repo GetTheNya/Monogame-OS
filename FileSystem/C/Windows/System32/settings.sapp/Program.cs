@@ -28,11 +28,13 @@ public class SettingsWindow : Window {
     }
 
     private void SetupUI() {
-        _tabs = new TabControl(Vector2.Zero, ClientSize);
+        _tabs = new TabControl(Vector2.Zero, ClientSize) {
+            AllowCloseTabs = false
+        };
         
-        _tabs.AddTab("Personalization").Content.AddChild(CreatePersonalizationTab());
-        _tabs.AddTab("System").Content.AddChild(CreateSystemTab());
-        _tabs.AddTab("About").Content.AddChild(CreateAboutTab());
+        _tabs.AddTab("Personalization", Shell.Images.Load(@"C:\Windows\SystemResources\Icons\user.png")).Content.AddChild(CreatePersonalizationTab());
+        _tabs.AddTab("System", Shell.Images.Load(@"C:\Windows\SystemResources\Icons\settings.png")).Content.AddChild(CreateSystemTab());
+        _tabs.AddTab("About", Shell.Images.Load(@"C:\Windows\SystemResources\Icons\PC.png")).Content.AddChild(CreateAboutTab());
 
         AddChild(_tabs);
     }

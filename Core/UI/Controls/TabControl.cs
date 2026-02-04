@@ -26,6 +26,7 @@ public class TabControl : UIElement {
     public Color ActiveTabColor { get; set; } = new Color(45, 45, 45);
     public Color HoverTabColor { get; set; } = new Color(55, 55, 55);
     public Color AccentColor { get; set; } = new Color(0, 120, 215);
+    public bool AllowCloseTabs { get; set; } = true;
 
     public ScrollPanel TabBar => _tabBar;
     public Panel ContentArea => _contentArea;
@@ -71,16 +72,18 @@ public class TabControl : UIElement {
         
         int index = _pages.Count;
         btn.OnClickAction = () => SelectedIndex = _pages.IndexOf(page);
-
-        // Close button
-        var closeBtn = new Button(new Vector2(btn.Size.X - 22, 5), new Vector2(18, 18), "×") {
-            BackgroundColor = Color.Transparent,
-            BorderColor = Color.Transparent,
-            HoverColor = Color.Red * 0.5f,
-            FontSize = 14
-        };
-        closeBtn.OnClickAction = () => RemoveTab(_pages.IndexOf(page));
-        btn.AddChild(closeBtn);
+        
+        if (AllowCloseTabs) {
+            // Close button
+            var closeBtn = new Button(new Vector2(btn.Size.X - 22, 5), new Vector2(18, 18), "×") {
+                BackgroundColor = Color.Transparent,
+                BorderColor = Color.Transparent,
+                HoverColor = Color.Red * 0.5f,
+                FontSize = 14
+            };
+            closeBtn.OnClickAction = () => RemoveTab(_pages.IndexOf(page));
+            btn.AddChild(closeBtn);
+        }
         
         page.TabButton = btn;
         _pages.Add(page);
@@ -152,7 +155,7 @@ public class TabControl : UIElement {
     protected override void UpdateInput() {
         base.UpdateInput();
 
-        if (InputManager.IsMouseButtonJustPressed(MouseButton.Middle)) {
+        if (InputManager.IsMouseButtonJustPressed(MouseButton.Middle) && AllowCloseTabs) {
              // Close tab on middle click
              foreach (var page in _pages.ToList()) {
                  if (page.TabButton.IsMouseOver) {

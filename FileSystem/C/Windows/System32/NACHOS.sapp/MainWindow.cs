@@ -57,6 +57,7 @@ public class MainWindow : Window {
     }
 
     protected override void OnLoad() {
+        FileIconHelper.Initialize(G.GraphicsDevice);
         SetupUI();
     }
 
@@ -148,7 +149,8 @@ public class MainWindow : Window {
         }
 
         var editor = new CodeEditor(Vector2.Zero, _tabControl.ContentArea.Size, path);
-        var page = _tabControl.AddTab(editor.FileName);
+        var icon = FileIconHelper.GetIcon(path);
+        var page = _tabControl.AddTab(editor.FileName, icon);
         page.Content.AddChild(editor);
         
         var pageInfo = new OpenPage { Path = path, Editor = editor, Page = page };

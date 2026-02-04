@@ -55,7 +55,7 @@ public class Sidebar : ScrollPanel {
                 AddChild(_expandBtn);
             }
 
-            _iconTex = IsDirectory ? GameContent.FolderIcon : GameContent.FileIcon;
+            _iconTex = FileIconHelper.GetIcon(FullPath);
 
             // Spaced accurately
             _label = new Label(new Vector2(indent + 46, 4), Path.GetFileName(FullPath)) {
