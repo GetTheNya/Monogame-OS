@@ -1,0 +1,10 @@
+{
+    "appId": "WIZARD_DEMO",
+    "name": "Wizard Demo",
+    "entryClass": "WizardDemoApp.Program",
+    "entryMethod": "Main",
+    "singleInstance": true,
+    "references": [
+        "FontStashSharp"
+    ]
+}
