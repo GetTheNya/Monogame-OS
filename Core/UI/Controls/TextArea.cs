@@ -396,7 +396,7 @@ public class TextArea : ValueControl<string> {
                 }
             }
         }
-        return 0;
+        return -1;
     }
 
     public virtual void SelectAll() {
@@ -483,7 +483,7 @@ public class TextArea : ValueControl<string> {
         return char.IsLetterOrDigit(c) || c == '_';
     }
 
-    protected virtual void MoveCursor(int dx, int dy, bool select) {
+    public virtual void MoveCursor(int dx, int dy, bool select) {
         if (dy != 0) {
             _cursorLine = Math.Clamp(_cursorLine + dy, 0, _lines.Count - 1);
             _cursorCol = Math.Min(_cursorCol, _lines[_cursorLine].Length);

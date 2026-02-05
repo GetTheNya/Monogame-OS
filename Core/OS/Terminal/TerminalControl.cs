@@ -133,7 +133,7 @@ public class TerminalControl : TextArea {
         }
     }
 
-    protected override void MoveCursor(int dx, int dy, bool select) {
+    public override void MoveCursor(int dx, int dy, bool select) {
         base.MoveCursor(dx, dy, select);
         if (!select && !CanEditAt(_cursorLine, _cursorCol)) {
             _cursorLine = _lines.Count - 1;

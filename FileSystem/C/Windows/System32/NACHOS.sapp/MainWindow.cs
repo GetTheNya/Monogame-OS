@@ -83,6 +83,13 @@ public class MainWindow : Window {
 
         _menuBar.RegisterHotkeys(OwnerProcess);
 
+        // Editor global hotkeys
+        Shell.Hotkeys.RegisterLocal(OwnerProcess, "Alt+Up", () => GetActiveEditor()?.SwapLineUp());
+        Shell.Hotkeys.RegisterLocal(OwnerProcess, "Alt+Down", () => GetActiveEditor()?.SwapLineDown());
+        Shell.Hotkeys.RegisterLocal(OwnerProcess, "Ctrl+D", () => GetActiveEditor()?.DuplicateCurrentLine());
+        Shell.Hotkeys.RegisterLocal(OwnerProcess, "Shift+Alt+Down", () => GetActiveEditor()?.DuplicateCurrentLine());
+        Shell.Hotkeys.RegisterLocal(OwnerProcess, "Ctrl+/", () => GetActiveEditor()?.ToggleComment());
+
         AddChild(_menuBar);
 
         // Sidebar
@@ -97,6 +104,13 @@ public class MainWindow : Window {
             if (index >= 0 && index < _pages.Count) {
                 _pages[index].Editor?.Dispose(); 
                 _pages.RemoveAt(index);
+                
+                // Update sidebar highlight to new active tab or null
+                if (_tabControl.SelectedIndex >= 0 && _tabControl.SelectedIndex < _pages.Count) {
+                    _sidebar.SelectedPath = _pages[_tabControl.SelectedIndex].Path;
+                } else {
+                    _sidebar.SelectedPath = null;
+                }
             }
         };
         _tabControl.OnTabChanged += (index) => {
@@ -105,7 +119,11 @@ public class MainWindow : Window {
                 _activePopup = null;
             }
             if (index >= 0 && index < _pages.Count) {
-                QueueAnalysis(_pages[index]);
+                var activePage = _pages[index];
+                QueueAnalysis(activePage);
+                _sidebar.SelectedPath = activePage.Path;
+            } else {
+                _sidebar.SelectedPath = null;
             }
         };
         AddChild(_tabControl);
@@ -154,6 +172,7 @@ public class MainWindow : Window {
         
         var pageInfo = new OpenPage { Path = path, Editor = editor, Page = page };
         _pages.Add(pageInfo);
+        _sidebar.SelectedPath = path;
 
         editor.OnDirtyChanged = () => {
             page.Title = editor.FileName + (editor.IsDirty ? "*" : "");
@@ -320,6 +339,17 @@ public class MainWindow : Window {
             }
 
             if (page.Editor.IsFocused) {
+                if (page.Editor.ActiveSnippetSession != null) {
+                    page.Editor.ActiveSnippetSession.HandleInput();
+                    
+                    if (InputManager.IsKeyboardConsumed && (InputManager.IsKeyJustPressed(Microsoft.Xna.Framework.Input.Keys.Enter) || InputManager.IsKeyJustPressed(Microsoft.Xna.Framework.Input.Keys.Tab))) {
+                        if (_activePopup != null) {
+                            Shell.RemoveOverlayElement(_activePopup);
+                            _activePopup = null;
+                        }
+                    }
+                }
+
                 if (InputManager.IsKeyDown(Microsoft.Xna.Framework.Input.Keys.LeftControl) && InputManager.IsKeyJustPressed(Microsoft.Xna.Framework.Input.Keys.Space)) {
                     ShowIntelliSense(page);
                     InputManager.IsKeyboardConsumed = true;
@@ -363,7 +393,50 @@ public class MainWindow : Window {
                             
                             var popup = new CompletionPopup(popupPos, items, (item) => {
                                 _isCompleting = true;
-                                page.Editor.ReplaceCurrentWord(item.Label); 
+                                 if (item.Kind == "M") {
+                                    // ... existing method logic ...
+                                    string line = page.Editor.Lines[page.Editor.CursorLine];
+                                    int col = page.Editor.CursorCol;
+                                    
+                                    // Heuristic: check if inside an expression (unmatched opening paren before cursor)
+                                    int parens = 0;
+                                    for (int i = 0; i < col; i++) {
+                                        if (line[i] == '(') parens++;
+                                        else if (line[i] == ')') parens--;
+                                    }
+                                    bool inExpression = parens > 0;
+
+                                    // Check if followed by ( or ;
+                                    bool hasParenAfter = false;
+                                    bool hasSemicolonAfter = false;
+                                    for (int i = col; i < line.Length; i++) {
+                                        if (char.IsWhiteSpace(line[i])) continue;
+                                        if (line[i] == '(') hasParenAfter = true;
+                                        if (line[i] == ';') hasSemicolonAfter = true;
+                                        break;
+                                    }
+
+                                    string suffix = "";
+                                    int back = 0;
+                                    if (!hasParenAfter) {
+                                        suffix += "()";
+                                        back = 1;
+                                    }
+                                    if (!inExpression && !hasSemicolonAfter) {
+                                        suffix += ";";
+                                        if (back > 0) back++;
+                                    }
+
+                                    page.Editor.ReplaceCurrentWord(item.Label + suffix);
+                                    if (back > 0) page.Editor.MoveCursor(-back, 0, false);
+                                } else if (item.Kind == "SN") {
+                                    var snippet = SnippetManager.GetSnippets().FirstOrDefault(s => s.Shortcut == item.Label);
+                                    if (snippet != null) {
+                                        page.Editor.InsertSnippet(snippet);
+                                    }
+                                } else {
+                                    page.Editor.ReplaceCurrentWord(item.Label); 
+                                }
                                 _isCompleting = false; 
                                 
                                 // Immediate update for color/diagnostics
@@ -566,5 +639,10 @@ public class MainWindow : Window {
             p.Editor.OnCursorMoved = null;
         }
         base.ExecuteClose();
+    }
+    private CodeEditor GetActiveEditor() {
+        if (_tabControl == null || _tabControl.SelectedPage == null) return null;
+        var active = _pages.FirstOrDefault(p => p.Page == _tabControl.SelectedPage);
+        return active?.Editor;
     }
 }

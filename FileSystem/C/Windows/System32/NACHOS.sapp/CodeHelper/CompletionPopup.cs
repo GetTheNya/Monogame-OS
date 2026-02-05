@@ -118,6 +118,7 @@ public class CompletionPopup : UIElement {
     }
 
     public override void Update(GameTime gameTime) {
+        if (InputManager.IsKeyboardConsumed) return;
         base.Update(gameTime);
         float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
 
@@ -140,6 +141,12 @@ public class CompletionPopup : UIElement {
                 EnsureVisible(_selectedIndex);
             }
         } else if (enter || tab) {
+            // Snippet priority: if there is an active snippet session, it should handle Enter/Tab
+            if (UIManager.FocusedElement is CodeEditor ed && ed.ActiveSnippetSession != null) {
+                // Return and let MainWindow/SnippetSession handle it
+                return;
+            }
+
             if (_filteredItems.Count > 0) {
                 _onSelect?.Invoke(_filteredItems[_selectedIndex]);
             }

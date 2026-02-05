@@ -57,8 +57,39 @@ public struct Hotkey : IEquatable<Hotkey> {
             else if (part == "ALT") mods |= HotkeyModifiers.Alt;
             else if (part == "SHIFT") mods |= HotkeyModifiers.Shift;
             else if (part == "WIN") mods |= HotkeyModifiers.Win;
-            else if (Enum.TryParse<Keys>(part, true, out var k)) {
-                key = k;
+            else {
+                // Handle symbols
+                Keys? symbolKey = part switch {
+                    "/" => Keys.OemQuestion,
+                    "?" => Keys.OemQuestion,
+                    "." => Keys.OemPeriod,
+                    ">" => Keys.OemPeriod,
+                    "," => Keys.OemComma,
+                    "<" => Keys.OemComma,
+                    ";" => Keys.OemSemicolon,
+                    ":" => Keys.OemSemicolon,
+                    "[" => Keys.OemOpenBrackets,
+                    "{" => Keys.OemOpenBrackets,
+                    "]" => Keys.OemCloseBrackets,
+                    "}" => Keys.OemCloseBrackets,
+                    "\\" => Keys.OemBackslash,
+                    "|" => Keys.OemPipe,
+                    "'" => Keys.OemQuotes,
+                    "\"" => Keys.OemQuotes,
+                    "-" => Keys.OemMinus,
+                    "_" => Keys.OemMinus,
+                    "=" => Keys.OemPlus,
+                    "+" => Keys.OemPlus,
+                    "`" => Keys.OemTilde,
+                    "~" => Keys.OemTilde,
+                    _ => null
+                };
+
+                if (symbolKey.HasValue) {
+                    key = symbolKey.Value;
+                } else if (Enum.TryParse<Keys>(part, true, out var k)) {
+                    key = k;
+                }
             }
         }
 

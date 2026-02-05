@@ -120,7 +120,8 @@ public class Node : Panel, IDraggable, IDropTarget {
             _hoverTimer = 0;
         }
 
-        BackgroundColor = _isHoveredByDrag ? new Color(60, 60, 60) : Color.Transparent;
+        BackgroundColor = _isHoveredByDrag ? new Color(60, 60, 60) : 
+                         (Sidebar.SelectedPath == FullPath ? new Color(45, 45, 45) : Color.Transparent);
     }
 
     protected override void OnClick() {

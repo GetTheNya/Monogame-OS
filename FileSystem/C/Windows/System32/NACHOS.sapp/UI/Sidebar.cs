@@ -19,6 +19,7 @@ public class Sidebar : ScrollPanel, IDropTarget {
     private string _rootPath;
     private List<Node> _rootNodes = new();
     public Action<string> OnFileSelected;
+    public string SelectedPath { get; set; }
 
     public Sidebar(Vector2 position, Vector2 size, string rootPath) : base(position, size) {
         _rootPath = rootPath;

@@ -244,9 +244,17 @@ private static readonly string[] _keywords = {
                     foreach (var kw in _keywords) {
                         items.Add(new CompletionItem(kw, "keyword", "K", 0, false));
                     }
+
+                    // Add Snippets
+                    var snippets = SnippetManager.GetSnippets();
+                    foreach (var sn in snippets) {
+                        items.Add(new CompletionItem(sn.Shortcut, sn.Description, "SN", 3000, true));
+                    }
                 }
 
-                var final = items.DistinctBy(c => c.Label)
+                var final = items.OrderByDescending(c => c.Score)
+                    .ThenByDescending(c => c.IsPreferred)
+                    .DistinctBy(c => c.Label)
                     .OrderByDescending(c => c.Score)
                     .ThenByDescending(c => c.IsPreferred)
                     .ThenBy(c => c.Label)
