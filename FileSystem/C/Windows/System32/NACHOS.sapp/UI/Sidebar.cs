@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -9,10 +10,12 @@ using TheGame.Core.UI;
 using TheGame.Core.UI.Controls;
 using TheGame.Graphics;
 using TheGame;
+using TheGame.Core.Input;
+using TheGame.Core.OS.DragDrop;
 
 namespace NACHOS;
 
-public class Sidebar : ScrollPanel {
+public class Sidebar : ScrollPanel, IDropTarget {
     private string _rootPath;
     private List<Node> _rootNodes = new();
     public Action<string> OnFileSelected;
@@ -46,6 +49,20 @@ public class Sidebar : ScrollPanel {
         foreach (var f in files) _rootNodes.Add(new Node(f, 0, this));
         
         UpdateLayout();
+    }
+
+    public override void Update(GameTime gameTime) {
+        base.Update(gameTime);
+        if (Shell.Drag.IsActive && IsMouseOver) {
+            Shell.Drag.CheckDropTarget(this, InputManager.MousePosition.ToVector2());
+        }
+    }
+
+    protected override void UpdateInput() {
+        base.UpdateInput();
+        if (Shell.Drag.IsActive && IsMouseOver && InputManager.IsMouseButtonJustReleased(MouseButton.Left)) {
+            Shell.Drag.TryDropOn(this, InputManager.MousePosition.ToVector2());
+        }
     }
 
     public void UpdateLayout() {
@@ -174,21 +191,102 @@ public class Sidebar : ScrollPanel {
         if (files == null) return;
         
         foreach (var f in files) {
-            string name = Path.GetFileName(f);
-            string dest = Path.Combine(atPath, name);
-            
-            // Collision handle
-            if (VirtualFileSystem.Instance.Exists(dest)) {
-                string baseName = Path.GetFileNameWithoutExtension(name);
-                string ext = Path.GetExtension(name);
-                int i = 1;
-                while (VirtualFileSystem.Instance.Exists(dest)) {
-                    dest = Path.Combine(atPath, $"{baseName} ({i++}){ext}");
-                }
-            }
-            
-            VirtualFileSystem.Instance.Copy(f, dest);
+            HandleSinglePaste(atPath, f, false);
         }
         Refresh();
+    }
+
+    private void HandleSinglePaste(string atPath, string sourcePath, bool isCopy) {
+        string name = Path.GetFileName(sourcePath);
+        string dest = Path.Combine(atPath, name);
+        
+        // Collision handle
+        if (VirtualFileSystem.Instance.Exists(dest)) {
+            string baseName = Path.GetFileNameWithoutExtension(name);
+            string ext = Path.GetExtension(name);
+            int i = 1;
+            while (VirtualFileSystem.Instance.Exists(dest)) {
+                dest = Path.Combine(atPath, $"{baseName} ({i++}){ext}");
+            }
+        }
+        
+        if (isCopy) {
+            VirtualFileSystem.Instance.Copy(sourcePath, dest);
+        } else {
+            VirtualFileSystem.Instance.Move(sourcePath, dest);
+        }
+    }
+
+    // === IDropTarget ===
+    public bool CanAcceptDrop(object dragData) {
+        var paths = GetPathsFromData(dragData);
+        if (paths.Count == 0) return false;
+
+        // Don't allow dropping into itself
+        foreach (var p in paths) {
+            if (_rootPath.Equals(p, StringComparison.OrdinalIgnoreCase)) return false;
+            if (_rootPath.StartsWith(p + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) return false;
+        }
+
+        return true;
+    }
+
+    public DragDropEffect OnDragOver(object dragData, Vector2 position) {
+        bool ctrl = InputManager.IsKeyDown(Keys.LeftControl) || 
+                    InputManager.IsKeyDown(Keys.RightControl);
+        
+        if (!ctrl) {
+            var paths = GetPathsFromData(dragData);
+            string normRoot = NormalizePath(_rootPath);
+            if (paths.Count > 0 && paths.All(p => string.Equals(NormalizePath(Path.GetDirectoryName(p)), normRoot, StringComparison.OrdinalIgnoreCase))) {
+                return DragDropEffect.None;
+            }
+        }
+
+        return ctrl ? DragDropEffect.Copy : DragDropEffect.Move;
+    }
+
+    public void OnDragLeave() { }
+
+    public bool OnDrop(object dragData, Vector2 position) {
+        var paths = GetPathsFromData(dragData);
+        if (paths.Count == 0) return false;
+
+        bool ctrl = InputManager.IsKeyDown(Keys.LeftControl) || 
+                    InputManager.IsKeyDown(Keys.RightControl);
+
+        try {
+            string normRoot = NormalizePath(_rootPath);
+            foreach (var p in paths) {
+                // Ignore moves to same folder
+                if (!ctrl && string.Equals(NormalizePath(Path.GetDirectoryName(p)), normRoot, StringComparison.OrdinalIgnoreCase)) {
+                    continue;
+                }
+                HandleSinglePaste(_rootPath, p, ctrl);
+            }
+            Refresh();
+            return true;
+        } catch (Exception ex) {
+            Shell.Notifications.Show("Error", ex.Message);
+            return false;
+        }
+    }
+
+    public Rectangle GetDropBounds() => Bounds;
+
+    private List<string> GetPathsFromData(object data) {
+        if (data is string s) return new List<string> { s };
+        if (data is List<string> l) return l;
+        if (data is IDraggable d) {
+            var dragData = d.GetDragData();
+            if (dragData is string s2) return new List<string> { s2 };
+            if (dragData is List<string> l2) return l2;
+        }
+        return new List<string>();
+    }
+
+    private string NormalizePath(string path) {
+        if (string.IsNullOrEmpty(path)) return "";
+        return path.Replace('/', '\\').TrimEnd('\\').ToUpper();
     }
 }

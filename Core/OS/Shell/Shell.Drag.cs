@@ -44,7 +44,6 @@ public static partial class Shell {
         /// Automatically calls OnDragStart on the source.
         /// </summary>
         public static void BeginDraggable(IDraggable source, Vector2 sourcePosition, Vector2 grabOffset) {
-            source.OnDragStart(grabOffset);
             DragDropManager.Instance.BeginDrag(source, sourcePosition, grabOffset);
         }
         

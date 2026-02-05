@@ -9,10 +9,14 @@ using TheGame.Core.UI;
 using TheGame.Core.UI.Controls;
 using TheGame.Graphics;
 using TheGame;
+using TheGame.Core.Input;
+using TheGame.Core.OS.DragDrop;
+
+using Keys = Microsoft.Xna.Framework.Input.Keys;
 
 namespace NACHOS;
 
-public class Node : Panel {
+public class Node : Panel, IDraggable, IDropTarget {
     public string FullPath;
     public bool IsDirectory;
     public bool IsExpanded;
@@ -23,6 +27,11 @@ public class Node : Panel {
     private Button _expandBtn;
     private Texture2D _iconTex;
     private Label _label;
+
+    private Vector2 _dragStartPos;
+    private bool _isHoveredByDrag;
+    private float _originalOpacity = 1f;
+    private float _hoverTimer = 0f;
 
     public Node(string path, int depth, Sidebar sidebar) : base(Vector2.Zero, new Vector2(0, 24)) {
         FullPath = path;
@@ -59,6 +68,59 @@ public class Node : Panel {
             Color = Color.LightGray
         };
         AddChild(_label);
+    }
+
+    protected override void UpdateInput() {
+        base.UpdateInput();
+        if (!IsVisible) return;
+
+        // Start drag detection
+        if (IsMouseOver && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
+            _dragStartPos = InputManager.MousePosition.ToVector2();
+        }
+
+        if (InputManager.IsMouseButtonDown(MouseButton.Left) && !Shell.Drag.IsActive && _dragStartPos != Vector2.Zero) {
+            if (Vector2.Distance(_dragStartPos, InputManager.MousePosition.ToVector2()) > 5f) {
+                Vector2 grabOffset = _dragStartPos - AbsolutePosition;
+                Shell.Drag.BeginDraggable(this, AbsolutePosition, grabOffset);
+                _dragStartPos = Vector2.Zero;
+            }
+        }
+
+        if (InputManager.IsMouseButtonJustReleased(MouseButton.Left)) {
+            _dragStartPos = Vector2.Zero;
+        }
+
+        // Handle drop if we are hovered and drag released
+        if (Shell.Drag.IsActive && IsMouseOver && InputManager.IsMouseButtonJustReleased(MouseButton.Left)) {
+            Shell.Drag.TryDropOn(this, InputManager.MousePosition.ToVector2());
+        }
+    }
+
+    public override void Update(GameTime gameTime) {
+        base.Update(gameTime);
+        float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
+
+        // Visual feedback for drop target
+        if (Shell.Drag.IsActive && IsMouseOver) {
+            Shell.Drag.CheckDropTarget(this, InputManager.MousePosition.ToVector2());
+
+            // Auto-expand folder on hover
+            if (IsDirectory && _isHoveredByDrag && !IsExpanded) {
+                _hoverTimer += dt;
+                if (_hoverTimer >= 1.0f) {
+                    ToggleExpand();
+                    _hoverTimer = 0;
+                }
+            } else {
+                _hoverTimer = 0;
+            }
+        } else {
+            _isHoveredByDrag = false;
+            _hoverTimer = 0;
+        }
+
+        BackgroundColor = _isHoveredByDrag ? new Color(60, 60, 60) : Color.Transparent;
     }
 
     protected override void OnClick() {
@@ -141,6 +203,144 @@ public class Node : Panel {
 
          // NOTE: New..., Paste, Refresh, and Reveal in Explorer will bubble up to Sidebar 
          // and use the "VirtualPath" we set above.
+    }
+
+    // === IDraggable ===
+    public object GetDragData() => FullPath;
+    public Texture2D GetDragIcon() => _iconTex;
+    public string GetDragLabel() => Path.GetFileName(FullPath);
+
+    public UIElement GetCustomDragVisual() {
+        var panel = new Panel(Vector2.Zero, new Vector2(200, 24)) {
+            BackgroundColor = new Color(0, 0, 0, 150),
+            BorderColor = Color.White * 0.5f,
+            BorderThickness = 1
+        };
+
+        if (_iconTex != null) {
+            panel.AddChild(new Icon(new Vector2(4, 4), new Vector2(16, 16), _iconTex));
+        }
+
+        panel.AddChild(new Label(new Vector2(24, 4), Path.GetFileName(FullPath)) {
+            FontSize = 14,
+            Color = Color.White
+        });
+
+        return panel;
+    }
+
+    public void OnDragStart(Vector2 grabOffset) {
+        _originalOpacity = Opacity;
+        Opacity = 0.5f;
+    }
+
+    public void OnDragEnd() {
+        Opacity = _originalOpacity;
+    }
+
+    public void OnDragCancel() {
+        Opacity = _originalOpacity;
+    }
+
+    // === IDropTarget ===
+    public bool CanAcceptDrop(object dragData) {
+        if (!IsDirectory) return false;
+        
+        var paths = GetPathsFromData(dragData);
+        if (paths.Count == 0) return false;
+
+        // Don't allow dropping into itself or its own children
+        foreach (var p in paths) {
+            if (FullPath.Equals(p, StringComparison.OrdinalIgnoreCase)) return false;
+            if (FullPath.StartsWith(p + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) return false;
+        }
+
+        return true;
+    }
+
+    public DragDropEffect OnDragOver(object dragData, Vector2 position) {
+        bool ctrl = InputManager.IsKeyDown(Keys.LeftControl) || 
+                    InputManager.IsKeyDown(Keys.RightControl);
+        
+        _isHoveredByDrag = true;
+
+        if (!ctrl) {
+            var paths = GetPathsFromData(dragData);
+            string normPath = NormalizePath(FullPath);
+            if (paths.Count > 0 && paths.All(p => string.Equals(NormalizePath(Path.GetDirectoryName(p)), normPath, StringComparison.OrdinalIgnoreCase))) {
+                _isHoveredByDrag = false;
+                return DragDropEffect.None;
+            }
+        }
+
+        return ctrl ? DragDropEffect.Copy : DragDropEffect.Move;
+    }
+
+    public void OnDragLeave() {
+        _isHoveredByDrag = false;
+        _hoverTimer = 0;
+    }
+
+    public bool OnDrop(object dragData, Vector2 position) {
+        _isHoveredByDrag = false;
+        _hoverTimer = 0;
+        var paths = GetPathsFromData(dragData);
+        if (paths.Count == 0) return false;
+
+        bool ctrl = InputManager.IsKeyDown(Keys.LeftControl) || 
+                    InputManager.IsKeyDown(Keys.RightControl);
+
+        try {
+            string normPath = NormalizePath(FullPath);
+            foreach (var sourcePath in paths) {
+                // Ignore moves to same folder
+                if (!ctrl && string.Equals(NormalizePath(Path.GetDirectoryName(sourcePath)), normPath, StringComparison.OrdinalIgnoreCase)) {
+                    continue;
+                }
+
+                string fileName = Path.GetFileName(sourcePath);
+                string destPath = Path.Combine(FullPath, fileName);
+
+                // Collision handling
+                if (VirtualFileSystem.Instance.Exists(destPath)) {
+                    string baseName = Path.GetFileNameWithoutExtension(fileName);
+                    string ext = Path.GetExtension(fileName);
+                    int i = 1;
+                    while (VirtualFileSystem.Instance.Exists(destPath)) {
+                        destPath = Path.Combine(FullPath, $"{baseName} ({i++}){ext}");
+                    }
+                }
+
+                if (ctrl) {
+                    VirtualFileSystem.Instance.Copy(sourcePath, destPath);
+                } else {
+                    VirtualFileSystem.Instance.Move(sourcePath, destPath);
+                }
+            }
+            Sidebar.Refresh();
+            return true;
+        } catch (Exception ex) {
+            Shell.Notifications.Show("Error", ex.Message);
+            return false;
+        }
+    }
+
+    public Rectangle GetDropBounds() => Bounds;
+
+    private List<string> GetPathsFromData(object data) {
+        if (data is string s) return new List<string> { s };
+        if (data is List<string> l) return l;
+        if (data is IDraggable d) {
+            var dragData = d.GetDragData();
+            if (dragData is string s2) return new List<string> { s2 };
+            if (dragData is List<string> l2) return l2;
+        }
+        return new List<string>();
+    }
+
+    private string NormalizePath(string path) {
+        if (string.IsNullOrEmpty(path)) return "";
+        return path.Replace('/', '\\').TrimEnd('\\').ToUpper();
     }
 
     private void PromptRename() {
