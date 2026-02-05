@@ -5,6 +5,8 @@ using Microsoft.Xna.Framework.Graphics;
 using TheGame.Core.Input;
 using TheGame.Core.UI;
 using TheGame.Graphics;
+using TheGame.Core.OS.DragDrop;
+using TheGame.Core.Animation;  // For Tween
 
 namespace TheGame.Core.OS;
 
@@ -19,22 +21,48 @@ public class DragDropManager {
     private object _dragData;
     private Vector2 _dragSourcePosition;
     private Dictionary<DesktopIcon, Vector2> _dragOriginalPositions;
+    private Dictionary<object, Vector2> _customPositions = new(); // For non-DesktopIcon snap-back
     private bool _isActive;
     private Vector2 _dragGrabOffset;
+    private DragDropEffect _currentEffect = DragDropEffect.None;
     
-    // Cached icons and label to avoid per-frame lookups
+    // Cached drag visuals
     private List<Texture2D> _cachedDragIcons = new();
     private string _cachedDragLabel;
+    private UIElement _cachedCustomVisual;  // NEW: Custom UI element for drag visual
     
     // Visual customization
     private float _dragOpacity = 0.7f;
     private bool _showItemCount = true;
+    
+    // Snap-back animation
+    private Tween _snapBackTween;
+    private Vector2 _animatedDragPosition;  // Current position during snap-back
     private Dictionary<object, Vector2> _dropPreviews = new();
 
     public bool IsActive => _isActive;
     public object DragData => _dragData;
     public Vector2 DragGrabOffset => _dragGrabOffset;
     public Vector2 DragSourcePosition => _dragSourcePosition;
+    public bool IsSnapBackAnimating => _snapBackTween != null;  // NEW: Check if snap-back is running
+    
+    /// <summary>
+    /// Gets or sets the current drag-drop effect for visual feedback.
+    /// This is automatically set by IDropTarget.OnDragOver calls.
+    /// </summary>
+    public DragDropEffect CurrentEffect {
+        get => _currentEffect;
+        set => _currentEffect = value;
+    }
+    
+    /// <summary>
+    /// Updates snap-back animation. Call each frame.
+    /// </summary>
+    public void Update(GameTime gameTime) {
+        if (_snapBackTween != null) {
+            _snapBackTween.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
+        }
+    }
 
     private DragDropManager() {
         _dragOriginalPositions = new Dictionary<DesktopIcon, Vector2>();
@@ -62,8 +90,27 @@ public class DragDropManager {
         // Cache icons and label at drag start - NOT in DrawDragVisual()
         _cachedDragIcons.Clear();
         _cachedDragLabel = null;
+        _cachedCustomVisual = null;  // Clear custom visual
         
-        if (data is string path) {
+        // Check for IDraggable first (new interface-based API)
+        if (data is IDraggable draggable) {
+            // Try to get custom visual first
+            _cachedCustomVisual = draggable.GetCustomDragVisual();
+            
+            // Fall back to icon/label if no custom visual
+            if (_cachedCustomVisual == null) {
+                var icon = draggable.GetDragIcon();
+                if (icon != null) {
+                    _cachedDragIcons.Add(icon);
+                }
+                _cachedDragLabel = draggable.GetDragLabel();
+            }
+            
+            // Notify drag start
+            draggable.OnDragStart(grabOffset);
+        }
+        // Legacy types
+        else if (data is string path) {
             _cachedDragIcons.Add(Shell.GetIcon(path));
             _cachedDragLabel = System.IO.Path.GetFileName(path);
         } else if (data is List<string> list && list.Count > 0) {
@@ -114,22 +161,73 @@ public class DragDropManager {
     public void EndDrag() {
         _dragData = null;
         _isActive = false;
+        _currentEffect = DragDropEffect.None;
         _dragOriginalPositions.Clear();
+        _customPositions.Clear();
         _dropPreviews.Clear();
     }
 
     /// <summary>
-    /// Cancels the drag operation and triggers snap-back behavior.
+    /// Cancels the current drag operation with snap-back animation.
     /// </summary>
     public void CancelDrag() {
         if (!_isActive) return;
 
-        // Restore original positions for any stored icons
-        foreach (var kvp in _dragOriginalPositions) {
-            kvp.Key.Position = kvp.Value;
+        // Notify draggable source IMMEDIATELY to restore visual state
+        if (_dragData is IDraggable draggable) {
+            draggable.OnDragCancel();
         }
 
-        EndDrag();
+        // Calculate snap-back target (where we grabbed from)
+        Vector2 targetPos = _dragSourcePosition + _dragGrabOffset;
+        Vector2 currentPos = InputManager.MousePosition.ToVector2();
+        
+        // Create snap-back tween with EaseOutBack for nice overshoot effect
+        _animatedDragPosition = currentPos;
+        _snapBackTween = new Tween(
+            this,
+            (Vector2 pos) => _animatedDragPosition = pos,
+            currentPos,
+            targetPos,
+            0.3f,  // 300ms
+            Easing.EaseOutQuad
+        ).OnCompleteAction(() => {
+            // Animation complete - cleanup only (draggable already notified)
+            _snapBackTween = null;
+            EndDrag();
+        });
+    }
+    
+    /// <summary>
+    /// Gets information about the current drag operation.
+    /// Returns null if no drag is active.
+    /// </summary>
+    public DragInfo GetDragInfo() {
+        if (!_isActive) return null;
+        return new DragInfo {
+            Data = _dragData,
+            SourcePosition = _dragSourcePosition,
+            GrabOffset = _dragGrabOffset,
+            IsMultiItem = _dragData is List<string>
+        };
+    }
+    
+    /// <summary>
+    /// Stores a custom position for snap-back behavior.
+    /// Useful for non-DesktopIcon draggable items.
+    /// </summary>
+    public void StoreCustomPosition(object key, Vector2 position) {
+        if (key != null) {
+            _customPositions[key] = position;
+        }
+    }
+    
+    /// <summary>
+    /// Gets the current mouse position adjusted for drag offset.
+    /// Useful for calculating drop positions.
+    /// </summary>
+    public Vector2 GetAdjustedMousePosition() {
+        return InputManager.MousePosition.ToVector2() - _dragGrabOffset;
     }
     
     /// <summary>
@@ -160,7 +258,32 @@ public class DragDropManager {
     /// Should be called during the main draw loop.
     /// </summary>
     public void DrawDragVisual(SpriteBatch sb, ShapeBatch sbatch) {
-        if (!_isActive || _dragData == null || _cachedDragIcons.Count == 0 || _cachedDragIcons[0] == null) return;
+        if (!_isActive || _dragData == null) return;
+
+        // === CUSTOM VISUAL RENDERING ===
+        if (_cachedCustomVisual != null) {
+            Shell.IsRenderingDrag = true;
+            try {
+                // Use animated position during snap-back, otherwise use mouse
+                Vector2 currentPos = _snapBackTween != null ? _animatedDragPosition : InputManager.MousePosition.ToVector2();
+                Vector2 drawPos = currentPos - _dragGrabOffset;
+                _cachedCustomVisual.Position = drawPos;
+                
+                // Render the custom UI element
+                _cachedCustomVisual.Draw(sb, sbatch);
+                
+                // Draw effect indicator (but not during snap-back)
+                if (_snapBackTween == null) {
+                    DrawEffectIndicator(sb, sbatch, drawPos);
+                }
+            } finally {
+                Shell.IsRenderingDrag = false;
+            }
+            return;  // Skip default icon rendering
+        }
+
+        // === DEFAULT ICON/LABEL RENDERING ===
+        if (_cachedDragIcons.Count == 0 || _cachedDragIcons[0] == null) return;
 
         Shell.IsRenderingDrag = true;
         try {
@@ -200,8 +323,9 @@ public class DragDropManager {
             }
 
             if (!leaderDrawn) {
-                // Calculate current mouse position for drawing
-                Vector2 drawPos = InputManager.MousePosition.ToVector2() - _dragGrabOffset;
+                // Use animated position during snap-back, otherwise use mouse
+                Vector2 currentPos = _snapBackTween != null ? _animatedDragPosition : InputManager.MousePosition.ToVector2();
+                Vector2 drawPos = currentPos - _dragGrabOffset;
                 float iconSize = 48f;
                 float scale = iconSize / (float)_cachedDragIcons[0].Width;
                 bool isMultiItem = _dragData is List<string>;
@@ -210,7 +334,13 @@ public class DragDropManager {
                 // This prevents the flickering "count circle" distraction on the desktop
                 bool showBadge = _dropPreviews.Count == 0;
                 DrawDragIcon(sb, sbatch, drawPos, _dragOpacity, isMultiItem, showLabel: showBadge);
+                
+                // Draw effect indicator based on current effect (but not during snap-back)
+                if (_snapBackTween == null) {
+                    DrawEffectIndicator(sb, sbatch, drawPos);
+                }
             }
+
 
         } finally {
             Shell.IsRenderingDrag = false;
@@ -311,6 +441,40 @@ public class DragDropManager {
             // Draw text with shadow
             font.DrawText(batch, lines[i], labelPos + new Vector2(1, 1), Color.Black * (opacity * 0.5f));
             font.DrawText(batch, lines[i], labelPos, Color.White * opacity);
+        }
+    }
+    /// <summary>
+    /// Draws the visual effect indicator (+ for copy, → for move, etc.)
+    /// </summary>
+    private void DrawEffectIndicator(SpriteBatch sb, ShapeBatch sbatch, Vector2 position) {
+        // Show default MOVE effect if no target is hovered
+        var effectToShow = _currentEffect == DragDropEffect.None ? DragDropEffect.Move : _currentEffect;
+        
+        var font = GameContent.FontSystem?.GetFont(20);  // Larger font
+        if (font == null) return;
+        
+        string indicator = effectToShow switch {
+            DragDropEffect.Copy => "+",  // Plus sign for copy
+            DragDropEffect.Move => "→",  // Arrow for move
+            DragDropEffect.Link => "&",  // Ampersand for link
+            _ => null
+        };
+        
+        if (indicator != null) {
+            // Draw indicator offset from drag icon (bottom-right)
+            Vector2 indicatorPos = position + new Vector2(48, 48);  // Offset from icon bottom-right
+            float circleRadius = 16f;  // Larger circle
+            Vector2 circleCenter = indicatorPos + new Vector2(circleRadius, circleRadius);
+            
+            // Background circle with shadow
+            sbatch.FillCircle(circleCenter + new Vector2(2, 2), circleRadius, Color.Black * 0.5f);  // Shadow
+            sbatch.FillCircle(circleCenter, circleRadius, Color.Black * 0.8f);  // Background
+            sbatch.BorderCircle(circleCenter, circleRadius, Color.White, 2.5f);  // Border
+            
+            // Indicator text centered in circle
+            var size = font.MeasureString(indicator);
+            Vector2 textPos = circleCenter - new Vector2(size.X / 2, size.Y / 2);
+            font.DrawText(sbatch, indicator, textPos, Color.White);
         }
     }
 

@@ -24,26 +24,33 @@ public static partial class Shell {
     public static void DrawDrag(SpriteBatch sb, ShapeBatch sbatch) => DragDropManager.Instance.DrawDragVisual(sb, sbatch);
 
     public static void Update(GameTime gameTime) {
+        // Update DragDropManager for snap-back animation
+        DragDropManager.Instance.Update(gameTime);
+        
         // Update all running processes
         ProcessManager.Instance.Update(gameTime);
 
         // Global watchdog: If mouse is released but drag is still active, it means the drop wasn't handled.
-        // We use !IsMouseButtonDown instead of IsJustReleased to catch it even if consumed.
-        if (DragDropManager.Instance.IsActive && !InputManager.IsMouseButtonDown(MouseButton.Left)) {
+        // Only trigger if snap-back isn't already animating (prevents re-triggering)
+        if (DragDropManager.Instance.IsActive && 
+            !DragDropManager.Instance.IsSnapBackAnimating &&
+            !InputManager.IsMouseButtonDown(MouseButton.Left)) {
             DragDropManager.Instance.CancelDrag();
         }
     }
 
-    // Drag and Drop API
+    // Drag and Drop API (Deprecated - Use Shell.Drag instead)
     /// <summary>
     /// Checks if a drag operation is currently active.
     /// </summary>
+    [System.Obsolete("Use Shell.Drag.IsActive instead")]
     public static bool IsDragging => DragDropManager.Instance.IsActive;
 
     /// <summary>
     /// Gets or sets the currently dragged item. Setting to null ends the drag.
     /// Note: For proper snap-back behavior, use BeginDrag() with source position.
     /// </summary>
+    [System.Obsolete("Use Shell.Drag.DraggedItem instead")]
     public static object DraggedItem {
         get => DragDropManager.Instance.DragData;
         set {
@@ -55,24 +62,28 @@ public static partial class Shell {
     /// <summary>
     /// Begins a drag operation with source position for snap-back.
     /// </summary>
+    [System.Obsolete("Use Shell.Drag.Begin() instead")]
     public static void BeginDrag(object data, Vector2 sourcePosition, Vector2 grabOffset)
         => DragDropManager.Instance.BeginDrag(data, sourcePosition, grabOffset);
 
     /// <summary>
     /// Ends the current drag operation (successful drop).
     /// </summary>
+    [System.Obsolete("Use Shell.Drag.End() instead")]
     public static void EndDrag()
         => DragDropManager.Instance.EndDrag();
 
     /// <summary>
     /// Cancels the drag and restores original positions.
     /// </summary>
+    [System.Obsolete("Use Shell.Drag.Cancel() instead")]
     public static void CancelDrag()
         => DragDropManager.Instance.CancelDrag();
 
     /// <summary>
     /// Checks if a specific item is currently being dragged.
     /// </summary>
+    [System.Obsolete("Use Shell.Drag.IsItemDragged() instead")]
     public static bool IsItemBeingDragged(object item)
         => DragDropManager.Instance.IsItemDragged(item);
 

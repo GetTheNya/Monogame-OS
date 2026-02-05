@@ -255,16 +255,16 @@ public class DesktopScene : Core.Scenes.Scene {
                     icon.DragDelta = Vector2.Zero;
                     Shell.Drag.SetDropPreview(icon, null);
 
-                    var dragged = Shell.DraggedItem;
+                    var dragged = Shell.Drag.DraggedItem;
                     if (dragged != null && dragged != icon) {
                         if (dragged is DesktopIcon di) VirtualFileSystem.Instance.Recycle(di.VirtualPath);
                         else if (dragged is string s) VirtualFileSystem.Instance.Recycle(s);
                         else if (dragged is List<string> list) foreach (var p in list) VirtualFileSystem.Instance.Recycle(p);
                         LoadDesktopIcons();
                         Shell.RefreshExplorers();
-                        Shell.DraggedItem = null;
+                        Shell.Drag.DraggedItem = null;
                     }
-                    Shell.EndDrag();
+                    Shell.Drag.End();
                 };
                 icon.OnRightClickAction = () => {
                     _contextMenu.Show(InputManager.MousePosition.ToVector2(), new List<MenuItem> {
@@ -303,7 +303,7 @@ public class DesktopScene : Core.Scenes.Scene {
                         }
                         LoadDesktopIcons();
                         Shell.RefreshExplorers("$Recycle.Bin");
-                        Shell.EndDrag();
+                        Shell.Drag.End();
                         return;
                     }
 
@@ -344,7 +344,7 @@ public class DesktopScene : Core.Scenes.Scene {
                         }
                         icon.DragDelta = Vector2.Zero;
                     }
-                    Shell.EndDrag();
+                    Shell.Drag.End();
                 };
                 icon.OnRightClickAction = () => {
                     _contextMenu.Show(InputManager.MousePosition.ToVector2(), new List<MenuItem> {
@@ -769,13 +769,13 @@ public class DesktopScene : Core.Scenes.Scene {
                                  InputManager.MousePosition.Y <= G.GraphicsDevice.Viewport.Height;
 
             bool overTrash = TrashIcon != null && TrashIcon.Bounds.Contains(InputManager.MousePosition);
-            bool draggingItself = Shell.DraggedItem == TrashIcon || (Shell.DraggedItem is System.Collections.Generic.List<string> list && list.Count == 1 && list[0] == TrashIcon.VirtualPath);
+            bool draggingItself = Shell.Drag.DraggedItem == TrashIcon || (Shell.Drag.DraggedItem is System.Collections.Generic.List<string> list && list.Count == 1 && list[0] == TrashIcon.VirtualPath);
 
-            if ((!alreadyConsumed || (overTrash && !draggingItself)) && isOverDesktop && justReleased && Shell.DraggedItem != null) {
-                HandleDesktopDrop(Shell.DraggedItem);
+            if ((!alreadyConsumed || (overTrash && !draggingItself)) && isOverDesktop && justReleased && Shell.Drag.DraggedItem != null) {
+                HandleDesktopDrop(Shell.Drag.DraggedItem);
             }
 
-            if (justReleased && Shell.DraggedItem != null && !alreadyConsumed) {
+            if (justReleased && Shell.Drag.DraggedItem != null && !alreadyConsumed) {
                 // Clicking/dropping on empty space - cancel drag but don't reset deltas yet
                 // The icons themselves (or their drop handlers) will reset deltas.
                 DragDropManager.Instance.CancelDrag();
@@ -911,7 +911,7 @@ public class DesktopScene : Core.Scenes.Scene {
                 else if (item is List<string> list) foreach (var p in list) VirtualFileSystem.Instance.Recycle(p);
                 RefreshAction?.Invoke();
                 Shell.RefreshExplorers();
-                Shell.DraggedItem = null;
+                Shell.Drag.DraggedItem = null;
                 return;
             }
             string desktopPath = "C:\\Users\\Admin\\Desktop\\";
@@ -955,7 +955,7 @@ public class DesktopScene : Core.Scenes.Scene {
                 }
                 changed = true;
             }
-            if (changed) { RefreshAction?.Invoke(); Shell.RefreshExplorers(); Shell.DraggedItem = null; }
+            if (changed) { RefreshAction?.Invoke(); Shell.RefreshExplorers(); Shell.Drag.DraggedItem = null; }
             InputManager.IsMouseConsumed = true;
         }
 

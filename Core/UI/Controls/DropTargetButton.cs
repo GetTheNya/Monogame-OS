@@ -18,9 +18,9 @@ public class DropTargetButton : Button {
 
         // If something is released over us that was being dragged
         if (InputManager.IsMouseButtonJustReleased(MouseButton.Left) && IsMouseOver) {
-            if (Shell.DraggedItem != null) {
-                OnDropAction?.Invoke(Shell.DraggedItem);
-                Shell.DraggedItem = null;
+            if (Shell.Drag.DraggedItem != null) {
+                OnDropAction?.Invoke(Shell.Drag.DraggedItem);
+                Shell.Drag.DraggedItem = null;
             }
         }
     }

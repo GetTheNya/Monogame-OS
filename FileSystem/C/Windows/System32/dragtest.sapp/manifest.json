@@ -1,0 +1,13 @@
+{
+  "appId": "DRAGTEST",
+  "name": "Drag test",
+  "version": "1.0.0",
+  "entryPoint": "Program.cs",
+  "entryClass": "DragDropTestApp.Program",
+  "entryMethod": "Main",
+  "permissions": [],
+  "dependencies": [],
+  "references": [
+    "FontStashSharp"
+  ]
+}

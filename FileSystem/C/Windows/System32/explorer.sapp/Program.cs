@@ -423,7 +423,7 @@ public class FileListPanel : ScrollPanel {
         }
 
         // Update drop target highlight during drag
-        if (Shell.IsDragging && hoveredItem != null && hoveredItem.IsDir) {
+        if (Shell.Drag.IsActive && hoveredItem != null && hoveredItem.IsDir) {
             _dropTargetItem = hoveredItem;
         } else {
             _dropTargetItem = null;
@@ -434,11 +434,11 @@ public class FileListPanel : ScrollPanel {
 
         // Handle active drag release
         if (InputManager.IsMouseButtonJustReleased(MouseButton.Left)) {
-            if (Shell.IsDragging && inBounds) {
-                var dropped = Shell.DraggedItem;
+            if (Shell.Drag.IsActive && inBounds) {
+                var dropped = Shell.Drag.DraggedItem;
                 string targetPath = hoveredItem != null && hoveredItem.IsDir ? hoveredItem.Path : _window.CurrentPath;
                 _window.HandleDropData(dropped, targetPath);
-                Shell.EndDrag();
+                Shell.Drag.End();
             }
             _isDragging = false;
             _isSelecting = false;
@@ -496,13 +496,13 @@ public class FileListPanel : ScrollPanel {
         }
 
         // Handle dragging to start Shell drag
-        if (_isDragging && InputManager.IsMouseButtonDown(MouseButton.Left) && !Shell.IsDragging) {
+        if (_isDragging && InputManager.IsMouseButtonDown(MouseButton.Left) && !Shell.Drag.IsActive) {
             if (Vector2.Distance(_dragStartPos, mouse) > 6) {
                 var paths = _selectedPaths.Count > 0 ? _selectedPaths.ToList() : new List<string> { _dragSourcePath };
                 Vector2 grabOffset = new Vector2(24, 24);
 
-                if (paths.Count > 1) Shell.BeginDrag(paths, _dragStartPos, grabOffset);
-                else Shell.BeginDrag(paths[0], _dragStartPos, grabOffset);
+                if (paths.Count > 1) Shell.Drag.Begin(paths, _dragStartPos, grabOffset);
+                else Shell.Drag.Begin(paths[0], _dragStartPos, grabOffset);
                 _isDragging = false;
             }
         }
