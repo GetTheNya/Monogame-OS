@@ -12,7 +12,7 @@ public static class FileIconHelper {
     private static Dictionary<string, Texture2D> _icons = new();
 
     public static void Initialize(GraphicsDevice gd) {
-        string iconDir = "C:\\Windows\\System32\\NACHOS.sapp\\Icons";
+        string iconDir = "C:\\Windows\\System32\\NACHOS.sapp\\Content\\Icons";
         string hostIconDir = VirtualFileSystem.Instance.ToHostPath(iconDir);
 
         if (Directory.Exists(hostIconDir)) {
