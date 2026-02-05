@@ -229,9 +229,23 @@ public class MainWindow : Window {
                  while (start > 0 && start <= currentLine.Length && (char.IsLetterOrDigit(currentLine[start - 1]) || currentLine[start - 1] == '_')) start--;
                  string word = currentLine.Substring(start, Math.Min(editor.CursorCol, currentLine.Length) - start);
 
+                 // Check if we're after a keyword that needs IntelliSense
+                 bool afterKeyword = false;
+                 if (lastChar == ' ' && start > 0) {
+                     int kwStart = start - 1;
+                     while (kwStart > 0 && currentLine[kwStart - 1] == ' ') kwStart--;
+                     int kwEnd = kwStart;
+                     while (kwStart > 0 && (char.IsLetterOrDigit(currentLine[kwStart - 1]) || currentLine[kwStart - 1] == '_')) kwStart--;
+                     string previousWord = currentLine.Substring(kwStart, kwEnd - kwStart);
+                     
+                     if (previousWord == "override" || previousWord == "new" || previousWord == "partial") {
+                         afterKeyword = true;
+                     }
+                 }
+
                  var currentPopup = _activePopup;
-                 if (lastChar == '.' || lastChar == '(' || lastChar == ',') {
-                     // Always re-trigger on these chars for context
+                 if (lastChar == '.' || lastChar == '(' || lastChar == ',' || lastChar == '<' || lastChar == '{' || afterKeyword) {
+                     // Always re-trigger on these chars/contexts
                      ShowIntelliSense(pageInfo);
                  } else if (word.Length > 0) {
                      // Words: trigger if just started, or update if exists
@@ -246,13 +260,15 @@ public class MainWindow : Window {
                                currentPopup.Position = caretPos.Value + new Vector2(0, 18);
                           }
                        }
-                 } else {
-                     // No word, and not trigger char: hide.
+                 } else if (lastChar != ' ') {
+                     // No word and not a space: hide
+                     // Keep popup open if space after trigger chars like ", " in arguments
                      if (currentPopup != null) {
                          Shell.RemoveOverlayElement(currentPopup);
                          if (_activePopup == currentPopup) _activePopup = null;
                      }
                  }
+                 // If lastChar == ' ' and currentPopup exists, do nothing (keep it open)
              }
              
              ShowSignatureHelp(pageInfo);
@@ -291,6 +307,9 @@ public class MainWindow : Window {
             if (_sidebar != null) _sidebar.RootPath = path;
             if (_terminal != null) _terminal.Execute($"cd \"{path}\""); // Use command to update prompt folder correctly
             AddToRecent(path);
+            
+            // Initialize usage tracker for this project
+            UsageTracker.Initialize(path);
         }
     }
 
@@ -429,13 +448,22 @@ public class MainWindow : Window {
 
                                     page.Editor.ReplaceCurrentWord(item.Label + suffix);
                                     if (back > 0) page.Editor.MoveCursor(-back, 0, false);
-                                } else if (item.Kind == "SN") {
+                                 } else if (item.Kind == "SN") {
                                     var snippet = SnippetManager.GetSnippets().FirstOrDefault(s => s.Shortcut == item.Label);
                                     if (snippet != null) {
                                         page.Editor.InsertSnippet(snippet);
                                     }
                                 } else {
-                                    page.Editor.ReplaceCurrentWord(item.Label); 
+                                    // Handle generic types (e.g. List -> List<>)
+                                    bool isGeneric = (item.Kind == "C" || item.Kind == "S" || item.Kind == "I" || item.Kind == "D") && 
+                                                     (item.Detail.Contains("<") || item.Detail.Contains(">"));
+                                    
+                                    if (isGeneric) {
+                                        page.Editor.ReplaceCurrentWord(item.Label + "<>");
+                                        page.Editor.MoveCursor(-1, 0, false);
+                                    } else {
+                                        page.Editor.ReplaceCurrentWord(item.Label); 
+                                    }
                                 }
                                 _isCompleting = false; 
                                 
@@ -626,6 +654,9 @@ public class MainWindow : Window {
     }
  
     protected override void ExecuteClose() {
+        // Save IntelliSense usage tracking data
+        UsageTracker.Shutdown();
+        
         if (_activeSignaturePopup != null) {
             Shell.RemoveOverlayElement(_activeSignaturePopup);
             _activeSignaturePopup = null;

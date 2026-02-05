@@ -51,6 +51,14 @@ private static readonly string[] _keywords = {
                 var semanticModel = compilation.GetSemanticModel(currentTree);
                 var root = currentTree.GetRoot();
                 
+                // Determine completion context
+                var context = ContextResolver.DetermineContext(currentTree, semanticModel, cursorPosition);
+                
+                // Suppress IntelliSense in comments and strings
+                if (context == CompletionContext.Comment || context == CompletionContext.StringLiteral) {
+                    return new List<CompletionItem>();
+                }
+                
                 // Detect member access context first to determine symbols container
                 INamespaceOrTypeSymbol container = null;
                 var nodeAtCursor = root.FindNode(new Microsoft.CodeAnalysis.Text.TextSpan(cursorPosition, 0), findInsideTrivia: true, getInnermostNodeForTie: true);
@@ -72,8 +80,41 @@ private static readonly string[] _keywords = {
                     }
                 }
 
+                // Object initializer container detection
+                if (container == null && context == CompletionContext.ObjectInitializer) {
+                    var targetNode = nodeAtCursor ?? root.FindNode(new Microsoft.CodeAnalysis.Text.TextSpan(cursorPosition, 0));
+                    var initializer = targetNode?.AncestorsAndSelf().OfType<InitializerExpressionSyntax>()
+                        .FirstOrDefault(init => init.IsKind(SyntaxKind.ObjectInitializerExpression));
+                    
+                    if (initializer?.Parent is ObjectCreationExpressionSyntax oce) {
+                        var typeInfo = semanticModel.GetTypeInfo(oce);
+                        container = typeInfo.Type;
+                    } else if (initializer?.Parent is ImplicitObjectCreationExpressionSyntax ioce) {
+                        var typeInfo = semanticModel.GetTypeInfo(ioce);
+                        container = typeInfo.Type;
+                    }
+                }
+
                 // Find visible symbols at cursor, potentially filtered by container
-                var symbols = semanticModel.LookupSymbols(cursorPosition, container: container, includeReducedExtensionMethods: true);
+                var symbolsArray = semanticModel.LookupSymbols(cursorPosition, container: container, includeReducedExtensionMethods: true);
+
+                // Strict filtering based on context
+                var filteredSymbols = symbolsArray.AsEnumerable();
+                
+                if (context == CompletionContext.TypeDeclaration) {
+                    // Only show types and namespaces
+                    filteredSymbols = filteredSymbols.Where(s => s is ITypeSymbol || s is INamespaceSymbol);
+                } else if (context == CompletionContext.ObjectInitializer && container != null) {
+                    // Only show properties/fields of the container
+                    filteredSymbols = filteredSymbols.Where(s => (s.Kind == SymbolKind.Property || s.Kind == SymbolKind.Field) && 
+                                                               s.ContainingType != null && 
+                                                               SymbolEqualityComparer.Default.Equals(s.ContainingType, container));
+                } else if (context == CompletionContext.Override) {
+                    // Filter to virtual/abstract methods from base classes
+                    filteredSymbols = filteredSymbols.Where(s => s.Kind == SymbolKind.Method && (s.IsVirtual || s.IsAbstract || s.IsOverride));
+                }
+
+                var symbols = filteredSymbols.ToArray();
                 
                 var format = new SymbolDisplayFormat(
                     typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypes,
@@ -165,10 +206,15 @@ private static readonly string[] _keywords = {
                 var enclosingSymbol = semanticModel.GetEnclosingSymbol(cursorPosition);
                 var enclosingType = enclosingSymbol?.ContainingType;
 
-                var items = symbols.Select(symbol => {
+                var items = new List<CompletionItem>();
+                foreach (var symbol in symbols) {
                     string kind = "V"; // Default to variable/local
                     bool isLocalContext = symbol.Kind == SymbolKind.Local || symbol.Kind == SymbolKind.Parameter;
                     
+                    // Scoring System (Tiered)
+                    // 1. Scope (Locals > Class > Globals)
+                    int score = 0;
+
                     if (symbol.Kind == SymbolKind.Method) kind = "M";
                     else if (symbol.Kind == SymbolKind.Property) kind = "P";
                     else if (symbol.Kind == SymbolKind.Field) kind = "F";
@@ -182,12 +228,10 @@ private static readonly string[] _keywords = {
                         else if (nt.TypeKind == TypeKind.Interface) kind = "I";
                         else if (nt.TypeKind == TypeKind.Enum) kind = "E";
                         else if (nt.TypeKind == TypeKind.Delegate) kind = "D";
+                        score += 100; // Small base boost for types
                     }
                     else if (symbol.Kind == SymbolKind.Namespace) kind = "N";
 
-                    // Scoring System (Tiered)
-                    // 1. Scope (Locals > Class > Globals)
-                    int score = 0;
                     if (isLocalContext) score += 1000;
                     else if (enclosingType != null && symbol.ContainingSymbol is ITypeSymbol containerType) {
                         if (SymbolEqualityComparer.Default.Equals(containerType, enclosingType)) {
@@ -196,7 +240,7 @@ private static readonly string[] _keywords = {
                             score += 400; // Inherited member
                         }
                     }
-                    
+                     
                     // 2. Semantic Context (Expected Type)
                     if (expectedType != null) {
                         ITypeSymbol symbolType = null;
@@ -208,17 +252,26 @@ private static readonly string[] _keywords = {
 
                         if (symbolType != null) {
                              if (SymbolEqualityComparer.Default.Equals(symbolType, expectedType)) {
-                                 score += 2000;
+                                 score += 5000; // HIGHEST PRIORITY: exact type match
                              } else if (compilation.ClassifyConversion(symbolType, expectedType).IsImplicit) {
-                                 score += 1500; // Compatible type
+                                 score += 3500; // Compatible type
                              }
                         }
+                    }
+                    
+                    // 2b. Type Declaration Context - Boost type symbols
+                    if (context == CompletionContext.TypeDeclaration && symbol is INamedTypeSymbol) {
+                        score += 4000; // Prioritize types in type contexts
                     }
 
                     // 3. Penalty (Base Object)
                     if (symbol.ContainingType?.SpecialType == SpecialType.System_Object) {
                         score -= 5000;
                     }
+                    
+                    // 4. Recent Usage Tracking
+                    int usageScore = UsageTracker.GetScore(symbol.Name);
+                    score += usageScore;
 
                     // Use ToMinimalDisplayString to keep it short and context-aware
                     string detail = symbol.ToMinimalDisplayString(semanticModel, cursorPosition, format);
@@ -230,34 +283,62 @@ private static readonly string[] _keywords = {
                     else if (symbol is IPropertySymbol ps) detail = $"{ps.Type.ToMinimalDisplayString(semanticModel, cursorPosition)} {symbol.Name}";
                     else if (symbol is IParameterSymbol pas) detail = $"{pas.Type.ToMinimalDisplayString(semanticModel, cursorPosition)} {symbol.Name}";
 
-                    return new CompletionItem(
+                    items.Add(new CompletionItem(
                         symbol.Name,
                         detail,
                         kind,
                         score,
                         isPreferred
-                    );
-                }).ToList();
+                    ));
+                }
 
-                // Add Keywords only if we are NOT in a member access context
-                if (container == null) {
-                    foreach (var kw in _keywords) {
-                        items.Add(new CompletionItem(kw, "keyword", "K", 0, false));
+                // Add Keywords and Snippets based on context
+                // NEVER add in: MemberAccess, Argument, Attribute, UsingDirective, Override, ObjectInitializer, TypeDeclaration
+                if (context != CompletionContext.MemberAccess && 
+                    context != CompletionContext.Argument && 
+                    context != CompletionContext.Attribute && 
+                    context != CompletionContext.UsingDirective &&
+                    context != CompletionContext.Override &&
+                    context != CompletionContext.ObjectInitializer &&
+                    context != CompletionContext.TypeDeclaration) {
+                    
+                    // Add keywords at StatementStart and Assignment
+                    if (context == CompletionContext.StatementStart || 
+                        context == CompletionContext.Assignment) {
+                        foreach (var kw in _keywords) {
+                            items.Add(new CompletionItem(kw, "keyword", "K", 0, false));
+                        }
                     }
 
-                    // Add Snippets
+                    // Add Snippets ONLY at StatementStart and Assignment
                     var snippets = SnippetManager.GetSnippets();
-                    foreach (var sn in snippets) {
-                        items.Add(new CompletionItem(sn.Shortcut, sn.Description, "SN", 3000, true));
+                    
+                    if (context == CompletionContext.StatementStart) {
+                        // Add ALL snippets at statement start
+                        foreach (var sn in snippets) {
+                            int snippetScore = sn.Category == SnippetCategory.Statement ? 2000 : 500;
+                            items.Add(new CompletionItem(sn.Shortcut, sn.Description, "SN", snippetScore, true));
+                        }
+                    } else if (context == CompletionContext.Assignment) {
+                        // Add ONLY expression snippets at assignment
+                        foreach (var sn in snippets.Where(s => s.Category == SnippetCategory.Expression)) {
+                            items.Add(new CompletionItem(sn.Shortcut, sn.Description, "SN", 500, true));
+                        }
                     }
                 }
 
-                var final = items.OrderByDescending(c => c.Score)
-                    .ThenByDescending(c => c.IsPreferred)
-                    .DistinctBy(c => c.Label)
-                    .OrderByDescending(c => c.Score)
-                    .ThenByDescending(c => c.IsPreferred)
-                    .ThenBy(c => c.Label)
+                // Sorting and deduplication (manually to avoid JIT issues with complex Linq)
+                var deduplicated = new Dictionary<string, CompletionItem>();
+                foreach (var item in items) {
+                    if (!deduplicated.ContainsKey(item.Label) || item.Score > deduplicated[item.Label].Score) {
+                        deduplicated[item.Label] = item;
+                    }
+                }
+
+                var final = deduplicated.Values
+                    .OrderByDescending((CompletionItem c) => c.Score)
+                    .ThenByDescending((CompletionItem c) => c.IsPreferred)
+                    .ThenBy((CompletionItem c) => c.Label)
                     .ToList();
                 
                 DebugLogger.Log($"IntelliSense: {final.Count} items. Preferred: {final.Count(i => i.IsPreferred)}. Context: {expectedType?.ToDisplayString() ?? "None"}");
@@ -345,5 +426,65 @@ private static readonly string[] _keywords = {
                 return null;
             }
         });
+    }
+
+    // Fuzzy Matching Helpers
+    private static bool MatchesUppercaseAcronym(string query, string label) {
+        // "MNGM" matches "MyNewGoodMethod"
+        // Requirements:
+        //   1. Query length >= 2 characters
+        //   2. All characters in query must be uppercase
+        //   3. Extract PascalCase/camelCase initials
+        if (query.Length < 2 || !query.All(char.IsUpper)) return false;
+        
+        string initials = string.Concat(label.Where(char.IsUpper));
+        return string.Equals(query, initials, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool MatchesMixedAcronym(string query, string label) {
+        // "sb" matches "SpriteBatch", "spriteBatch"
+        // Requirements:
+        //   1. Query length >= 2 characters
+        //   2. Extract uppercase letters from label
+        if (query.Length < 2) return false;
+        
+        string initials = string.Concat(label.Where(char.IsUpper));
+        return string.Equals(query, initials, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int CalculateStringMatchScore(string query, string label) {
+        if (string.IsNullOrEmpty(query)) return 0;
+        
+        int score = 0;
+        
+        // Uppercase acronym match: +200
+        if (MatchesUppercaseAcronym(query, label)) {
+            score += 200;
+        }
+        // Mixed-case acronym match: +50
+        else if (MatchesMixedAcronym(query, label)) {
+            score += 50;
+        }
+        
+        // Exact prefix match (case-sensitive): +100
+        if (label.StartsWith(query, StringComparison.Ordinal)) {
+            score += 100;
+        }
+        // Prefix match (case-insensitive): +75
+        else if (label.StartsWith(query, StringComparison.OrdinalIgnoreCase)) {
+            score += 75;
+        }
+        
+        // Case-sensitive match anywhere: +50
+        if (label.Contains(query, StringComparison.Ordinal)) {
+            score += 50;
+        }
+        
+        // Contains match: +5
+        if (label.Contains(query, StringComparison.OrdinalIgnoreCase)) {
+            score += 5;
+        }
+        
+        return score;
     }
 }

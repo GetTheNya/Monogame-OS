@@ -148,7 +148,9 @@ public class CompletionPopup : UIElement {
             }
 
             if (_filteredItems.Count > 0) {
-                _onSelect?.Invoke(_filteredItems[_selectedIndex]);
+                var selectedItem = _filteredItems[_selectedIndex];
+                UsageTracker.RecordSelection(selectedItem.Label);
+                _onSelect?.Invoke(selectedItem);
             }
         } else if (escape) {
             OnClosed?.Invoke();
@@ -190,13 +192,60 @@ public class CompletionPopup : UIElement {
     private void FilterItems() {
         if (!string.IsNullOrEmpty(_searchQuery)) {
             _filteredItems = _allFilesItems
-                .Where(i => i.Label.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(i => i.Score)
+                .Where(i => {
+                    // Basic contains check
+                    if (i.Label.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)) return true;
+                    
+                    // Fuzzy matching: uppercase acronym (MNGM → MyNewGoodMethod)
+                    if (_searchQuery.Length >= 2 && _searchQuery.All(char.IsUpper)) {
+                        string initials = string.Concat(i.Label.Where(char.IsUpper));
+                        if (string.Equals(_searchQuery, initials, StringComparison.OrdinalIgnoreCase)) return true;
+                    }
+                    
+                    // Fuzzy matching: mixed acronym (sb → SpriteBatch)
+                    if (_searchQuery.Length >= 2) {
+                        string initials = string.Concat(i.Label.Where(char.IsUpper));
+                        if (string.Equals(_searchQuery, initials, StringComparison.OrdinalIgnoreCase)) return true;
+                    }
+                    
+                    return false;
+                })
+                .OrderByDescending(i => {
+                    // Calculate match score for sorting
+                    int matchScore = 0;
+                    
+                    // Uppercase acronym: +200
+                    if (_searchQuery.Length >= 2 && _searchQuery.All(char.IsUpper)) {
+                        string initials = string.Concat(i.Label.Where(char.IsUpper));
+                        if (string.Equals(_searchQuery, initials, StringComparison.OrdinalIgnoreCase)) {
+                            matchScore += 200;
+                        }
+                    }
+                    
+                    // Mixed acronym: +50
+                    if (_searchQuery.Length >= 2 && matchScore == 0) {
+                        string initials = string.Concat(i.Label.Where(char.IsUpper));
+                        if (string.Equals(_searchQuery, initials, StringComparison.OrdinalIgnoreCase)) {
+                            matchScore += 50;
+                        }
+                    }
+                    
+                    // Prefix match (case-sensitive): +1000
+                    if (i.Label.StartsWith(_searchQuery, StringComparison.Ordinal)) matchScore += 1000;
+                    
+                    // Prefix match (case-insensitive): +500
+                    else if (i.Label.StartsWith(_searchQuery, StringComparison.OrdinalIgnoreCase)) matchScore += 500;
+                    
+                    // Exact match: +2000
+                    if (i.Label.Equals(_searchQuery, StringComparison.Ordinal)) matchScore += 2000;
+                    else if (i.Label.Equals(_searchQuery, StringComparison.OrdinalIgnoreCase)) matchScore += 1000;
+                    
+                    // Contains (case-sensitive): +100
+                    if (i.Label.Contains(_searchQuery, StringComparison.Ordinal)) matchScore += 100;
+                    
+                    return i.Score + matchScore;
+                })
                 .ThenByDescending(i => i.IsPreferred)
-                .ThenByDescending(i => i.Label.Equals(_searchQuery, StringComparison.Ordinal))
-                .ThenByDescending(i => i.Label.StartsWith(_searchQuery, StringComparison.Ordinal))
-                .ThenByDescending(i => i.Label.Equals(_searchQuery, StringComparison.OrdinalIgnoreCase))
-                .ThenByDescending(i => i.Label.StartsWith(_searchQuery, StringComparison.OrdinalIgnoreCase))
                 .ThenBy(i => i.Label)
                 .ToList();
         } else {

@@ -41,6 +41,7 @@ public static class SnippetManager {
         string title = shortcut;
         string description = "";
         string body = "";
+        SnippetCategory category = SnippetCategory.Statement; // Default
 
         var lines = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
         int separatorIndex = -1;
@@ -58,6 +59,13 @@ public static class SnippetManager {
                     title = line.Substring(6).Trim();
                 } else if (line.StartsWith("description:", StringComparison.OrdinalIgnoreCase)) {
                     description = line.Substring(12).Trim();
+                } else if (line.StartsWith("category:", StringComparison.OrdinalIgnoreCase)) {
+                    string categoryStr = line.Substring(9).Trim().ToLowerInvariant();
+                    if (categoryStr == "expression") {
+                        category = SnippetCategory.Expression;
+                    } else {
+                        category = SnippetCategory.Statement;
+                    }
                 }
             }
             body = string.Join("\n", lines.Skip(separatorIndex + 1));
@@ -65,6 +73,6 @@ public static class SnippetManager {
             body = content;
         }
 
-        return new SnippetItem(shortcut, title, description, body, filePath);
+        return new SnippetItem(shortcut, title, description, body, filePath, category);
     }
 }

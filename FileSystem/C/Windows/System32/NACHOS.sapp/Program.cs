@@ -20,7 +20,7 @@ public class Program : Application {
         var splash = CreateWindow<SplashScreen>();
         MainWindow = splash; 
         OpenWindow(splash);
-
+        
         // 2. Initial delay/fake progress
         int steps = 5;
         for (int i = 0; i <= steps; i++) {
