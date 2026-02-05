@@ -8,6 +8,8 @@ using Microsoft.Xna.Framework.Graphics;
 using TheGame.Core.OS;
 using System.Linq;
 
+using TheGame.Core.Designer;
+
 namespace TheGame.Core.UI;
 
 public abstract class UIElement : IContextMenuProvider {
@@ -25,6 +27,7 @@ public abstract class UIElement : IContextMenuProvider {
             if (_position == value) return;
             _position = value;
             OnMove?.Invoke();
+            OnDesignMove?.Invoke();
         }
     }
 
@@ -35,11 +38,18 @@ public abstract class UIElement : IContextMenuProvider {
             if (_size == value) return;
             _size = value;
             OnResize?.Invoke();
+            OnDesignResize?.Invoke();
         }
     }
 
     public System.Action OnResize { get; set; }
     public System.Action OnMove { get; set; }
+    
+    // Designer Specific Events
+    public System.Action OnDesignResize { get; set; }
+    public System.Action OnDesignMove { get; set; }
+    public System.Action OnDesignSelect { get; set; }
+
     public virtual Vector2 ClientSize => Size;
     public bool IsVisible { get; set; } = true;
     public bool ConsumesInput { get; set; } = true; // If true, mouse/keyboard input is blocked for elements below
@@ -48,7 +58,10 @@ public abstract class UIElement : IContextMenuProvider {
     public bool IsEnabled { get; set; } = true;
     public float Opacity { get; set; } = 1.0f;
     public float AbsoluteOpacity => (Parent?.AbsoluteOpacity ?? 1.0f) * Opacity;
+    public Vector4 Padding { get; set; } = Vector4.Zero;
+    
     public Action OnRightClickAction { get; set; }
+    public Action OnLostFocus { get; set; }
     public Action OnDoubleClickAction { get; set; }
     public Action<SpriteBatch, ShapeBatch, Vector2, Vector2> OnDrawOver { get; set; }
     
@@ -229,6 +242,12 @@ public abstract class UIElement : IContextMenuProvider {
 
     protected virtual void UpdateInput() {
         if (!IsVisible) return;
+        
+        if (DesignMode.SuppressNormalInput(this)) {
+            // Check for focus/hover but skip the rest of normal logic (click, etc)
+            IsMouseOver = UIManager.IsHovered(this);
+            return;
+        }
 
         bool alreadyConsumed = InputManager.IsMouseConsumed;
         IsMouseOver = UIManager.IsHovered(this);

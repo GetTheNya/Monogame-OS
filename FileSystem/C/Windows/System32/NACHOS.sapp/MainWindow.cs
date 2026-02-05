@@ -16,6 +16,7 @@ using System.Threading;
 using TheGame.Core.Input;
 using Microsoft.Xna.Framework.Input;
 using System.Collections.Concurrent;
+using NACHOS.Designer;
 
 namespace NACHOS;
 
@@ -32,6 +33,7 @@ public class MainWindow : Window {
     private class OpenPage {
         public string Path;
         public CodeEditor Editor;
+        public DesignerTab Designer;
         public TabPage Page;
     }
 
@@ -66,6 +68,7 @@ public class MainWindow : Window {
         _menuBar = new MenuBar(Vector2.Zero, new Vector2(ClientSize.X, 25));
         var fileMenu = new Menu("File");
         fileMenu.AddItem("New Project", OpenNewProjectWizard, "Ctrl+N");
+        fileMenu.AddItem("New UI Layout", CreateNewUILayout, "Ctrl+Shift+N");
         fileMenu.AddItem("Open Project", () => {
             var fp = new FilePickerWindow("NACHOS - Open Project Folder", "C:\\", "", 
             FilePickerMode.ChooseDirectory, OpenProject);
@@ -165,130 +168,150 @@ public class MainWindow : Window {
              }
         }
 
-        var editor = new CodeEditor(Vector2.Zero, _tabControl.ContentArea.Size, path);
-        var icon = FileIconHelper.GetIcon(path);
-        var page = _tabControl.AddTab(editor.FileName, icon);
-        page.Content.AddChild(editor);
+        TabPage page;
+        OpenPage pageInfo;
+
+        if (path.EndsWith(".uilayout")) {
+            var designer = new DesignerTab(Vector2.Zero, _tabControl.ContentArea.Size, path);
+            var icon = FileIconHelper.GetIcon(path);
+            page = _tabControl.AddTab(Path.GetFileName(path), icon);
+            page.Content.AddChild(designer);
+            pageInfo = new OpenPage { Path = path, Designer = designer, Page = page };
+            
+            designer.OnDirtyChanged = () => {
+                page.Title = Path.GetFileName(path) + (designer.IsDirty ? "*" : "");
+                page.TabButton.Text = page.Title;
+            };
+        } else {
+            var editor = new CodeEditor(Vector2.Zero, _tabControl.ContentArea.Size, path);
+            var icon = FileIconHelper.GetIcon(path);
+            page = _tabControl.AddTab(editor.FileName, icon);
+            page.Content.AddChild(editor);
+            pageInfo = new OpenPage { Path = path, Editor = editor, Page = page };
+
+            editor.OnDirtyChanged = () => {
+                page.Title = editor.FileName + (editor.IsDirty ? "*" : "");
+                page.TabButton.Text = page.Title;
+            };
+
+            editor.UseInternalScrolling = false;
+            editor.Size = new Vector2(
+                Math.Max(_tabControl.ContentArea.Size.X, editor.GetTotalWidth()), 
+                Math.Max(_tabControl.ContentArea.Size.Y, editor.GetTotalHeight())
+            );
+
+            editor.OnValueChanged += (val) => {
+                // ... (rest of editor.OnValueChanged logic)
+                UpdateEditorSizeAndAnalysis(editor, pageInfo);
+            };
+            
+            editor.OnCursorMoved += () => {
+                if (_activePopup != null && _tabControl.SelectedPage == page) {
+                    var caretPos = editor.GetCaretPosition();
+                    if (caretPos != null) {
+                        _activePopup.Position = caretPos.Value + new Vector2(0, 18);
+                    }
+                }
+                ShowSignatureHelp(pageInfo);
+            };
+        }
         
-        var pageInfo = new OpenPage { Path = path, Editor = editor, Page = page };
         _pages.Add(pageInfo);
         _sidebar.SelectedPath = path;
-
-        editor.OnDirtyChanged = () => {
-            page.Title = editor.FileName + (editor.IsDirty ? "*" : "");
-            page.TabButton.Text = page.Title;
-        };
-
-        editor.UseInternalScrolling = false;
-        editor.Size = new Vector2(
-            Math.Max(_tabControl.ContentArea.Size.X, editor.GetTotalWidth()), 
-            Math.Max(_tabControl.ContentArea.Size.Y, editor.GetTotalHeight())
-        );
-
-         editor.OnValueChanged += (val) => {
-             if (_isCompleting) return;
-             var currentTabControl = _tabControl;
-             if (currentTabControl == null || currentTabControl.ContentArea == null) return;
-             
-             editor.Size = new Vector2(
-                 Math.Max(currentTabControl.ContentArea.Size.X, editor.GetTotalWidth()), 
-                 Math.Max(currentTabControl.ContentArea.Size.Y, editor.GetTotalHeight())
-             );
-             QueueAnalysis(pageInfo);
-             
-             // Trigger IntelliSense logic
-             int cursorIdx = editor.GetIndexFromPosition(editor.CursorLine, editor.CursorCol);
-
-             // Suppress if in a comment (Green: 87, 166, 74)
-             bool inComment = editor.Tokens.Any(t => cursorIdx > t.Start && cursorIdx <= t.Start + t.Length && t.Color == new Color(87, 166, 74));
-             
-             // Fast path: Check if current line has // before cursor (to catch it before highlighter runs)
-             if (!inComment) {
-                 string line = editor.Lines[editor.CursorLine];
-                 int commentIdx = line.IndexOf("//");
-                 if (commentIdx != -1 && editor.CursorCol > commentIdx) inComment = true;
-             }
-
-             if (inComment) {
-                 if (_activePopup != null) {
-                     Shell.RemoveOverlayElement(_activePopup);
-                     _activePopup = null;
-                 }
-                 return;
-             }
-
-             string text = editor.Value;
-             if (cursorIdx >= 0 && cursorIdx <= text.Length) {
-                 char lastChar = cursorIdx > 0 ? text[cursorIdx - 1] : '\0';
-                 
-                 // Get current word
-                 int start = editor.CursorCol;
-                 var lines = editor.Lines;
-                 if (lines == null || editor.CursorLine < 0 || editor.CursorLine >= lines.Count) return;
-                 string currentLine = lines[editor.CursorLine];
-                 while (start > 0 && start <= currentLine.Length && (char.IsLetterOrDigit(currentLine[start - 1]) || currentLine[start - 1] == '_')) start--;
-                 string word = currentLine.Substring(start, Math.Min(editor.CursorCol, currentLine.Length) - start);
-
-                 // Check if we're after a keyword that needs IntelliSense
-                 bool afterKeyword = false;
-                 if (lastChar == ' ' && start > 0) {
-                     int kwStart = start - 1;
-                     while (kwStart > 0 && currentLine[kwStart - 1] == ' ') kwStart--;
-                     int kwEnd = kwStart;
-                     while (kwStart > 0 && (char.IsLetterOrDigit(currentLine[kwStart - 1]) || currentLine[kwStart - 1] == '_')) kwStart--;
-                     string previousWord = currentLine.Substring(kwStart, kwEnd - kwStart);
-                     
-                     if (previousWord == "override" || previousWord == "new" || previousWord == "partial") {
-                         afterKeyword = true;
-                     }
-                 }
-
-                 var currentPopup = _activePopup;
-                 if (lastChar == '.' || lastChar == '(' || lastChar == ',' || lastChar == '<' || lastChar == '{' || afterKeyword) {
-                     // Always re-trigger on these chars/contexts
-                     ShowIntelliSense(pageInfo);
-                 } else if (word.Length > 0) {
-                     // Words: trigger if just started, or update if exists
-                     if (currentPopup == null && word.Length >= 1 && !editor.IsFetchingCompletions) {
-                         ShowIntelliSense(pageInfo, word);
-                     } else if (currentPopup != null) {
-                         currentPopup.SearchQuery = word;
-                         
-                         // Sync position during typing
-                         var caretPos = editor.GetCaretPosition();
-                          if (caretPos != null) {
-                               currentPopup.Position = caretPos.Value + new Vector2(0, 18);
-                          }
-                       }
-                 } else if (lastChar != ' ') {
-                     // No word and not a space: hide
-                     // Keep popup open if space after trigger chars like ", " in arguments
-                     if (currentPopup != null) {
-                         Shell.RemoveOverlayElement(currentPopup);
-                         if (_activePopup == currentPopup) _activePopup = null;
-                     }
-                 }
-                 // If lastChar == ' ' and currentPopup exists, do nothing (keep it open)
-             }
-             
-             ShowSignatureHelp(pageInfo);
-        };
+        _tabControl.SelectedIndex = _pages.Count - 1;
         
-        // Initial highlight
+        if (pageInfo.Editor != null) QueueAnalysis(pageInfo);
+    }
+
+    private void UpdateEditorSizeAndAnalysis(CodeEditor editor, OpenPage pageInfo) {
+        if (_isCompleting) return;
+        var currentTabControl = _tabControl;
+        if (currentTabControl == null || currentTabControl.ContentArea == null) return;
+        
+        editor.Size = new Vector2(
+            Math.Max(currentTabControl.ContentArea.Size.X, editor.GetTotalWidth()), 
+            Math.Max(currentTabControl.ContentArea.Size.Y, editor.GetTotalHeight())
+        );
         QueueAnalysis(pageInfo);
         
-        editor.OnCursorMoved += () => {
-            if (_activePopup != null && _tabControl.SelectedPage == page) {
-                var caretPos = editor.GetCaretPosition();
-                if (caretPos != null) {
-                    _activePopup.Position = caretPos.Value + new Vector2(0, 18);
+        // Trigger IntelliSense logic
+        int cursorIdx = editor.GetIndexFromPosition(editor.CursorLine, editor.CursorCol);
+
+        // Suppress if in a comment (Green: 87, 166, 74)
+        bool inComment = editor.Tokens.Any(t => cursorIdx > t.Start && cursorIdx <= t.Start + t.Length && t.Color == new Color(87, 166, 74));
+        
+        // Fast path: Check if current line has // before cursor (to catch it before highlighter runs)
+        if (!inComment) {
+            string line = editor.Lines[editor.CursorLine];
+            int commentIdx = line.IndexOf("//");
+            if (commentIdx != -1 && editor.CursorCol > commentIdx) inComment = true;
+        }
+
+        if (inComment) {
+            if (_activePopup != null) {
+                Shell.RemoveOverlayElement(_activePopup);
+                _activePopup = null;
+            }
+            return;
+        }
+
+        string text = editor.Value;
+        if (cursorIdx >= 0 && cursorIdx <= text.Length) {
+            char lastChar = cursorIdx > 0 ? text[cursorIdx - 1] : '\0';
+            
+            // Get current word
+            int start = editor.CursorCol;
+            var lines = editor.Lines;
+            if (lines == null || editor.CursorLine < 0 || editor.CursorLine >= lines.Count) return;
+            string currentLine = lines[editor.CursorLine];
+            while (start > 0 && start <= currentLine.Length && (char.IsLetterOrDigit(currentLine[start - 1]) || currentLine[start - 1] == '_')) start--;
+            string word = currentLine.Substring(start, Math.Min(editor.CursorCol, currentLine.Length) - start);
+
+            // Check if we're after a keyword that needs IntelliSense
+            bool afterKeyword = false;
+            if (lastChar == ' ' && start > 0) {
+                int kwStart = start - 1;
+                while (kwStart > 0 && currentLine[kwStart - 1] == ' ') kwStart--;
+                int kwEnd = kwStart;
+                while (kwStart > 0 && (char.IsLetterOrDigit(currentLine[kwStart - 1]) || currentLine[kwStart - 1] == '_')) kwStart--;
+                string previousWord = currentLine.Substring(kwStart, kwEnd - kwStart);
+                
+                if (previousWord == "override" || previousWord == "new" || previousWord == "partial") {
+                    afterKeyword = true;
                 }
             }
-            ShowSignatureHelp(pageInfo);
-        };
 
-        _tabControl.SelectedIndex = _pages.Count - 1;
+            var currentPopup = _activePopup;
+            if (lastChar == '.' || lastChar == '(' || lastChar == ',' || lastChar == '<' || lastChar == '{' || afterKeyword) {
+                // Always re-trigger on these chars/contexts
+                ShowIntelliSense(pageInfo);
+            } else if (word.Length > 0) {
+                // Words: trigger if just started, or update if exists
+                if (currentPopup == null && word.Length >= 1 && !editor.IsFetchingCompletions) {
+                    ShowIntelliSense(pageInfo, word);
+                } else if (currentPopup != null) {
+                    currentPopup.SearchQuery = word;
+                    
+                    // Sync position during typing
+                    var caretPos = editor.GetCaretPosition();
+                     if (caretPos != null) {
+                          currentPopup.Position = caretPos.Value + new Vector2(0, 18);
+                     }
+                  }
+            } else if (lastChar != ' ') {
+                // No word and not a space: hide
+                // Keep popup open if space after trigger chars like ", " in arguments
+                if (currentPopup != null) {
+                    Shell.RemoveOverlayElement(currentPopup);
+                    if (_activePopup == currentPopup) _activePopup = null;
+                }
+            }
+            // If lastChar == ' ' and currentPopup exists, do nothing (keep it open)
+        }
+        
+        ShowSignatureHelp(pageInfo);
     }
+
 
     private void OpenNewProjectWizard() {
         var settings = new ProjectSettings();
@@ -315,8 +338,23 @@ public class MainWindow : Window {
 
     private void SaveActiveFile() {
         if (_tabControl.SelectedIndex >= 0 && _tabControl.SelectedIndex < _pages.Count) {
-            _pages[_tabControl.SelectedIndex].Editor.Save();
+            var active = _pages[_tabControl.SelectedIndex];
+            if (active.Editor != null) active.Editor.Save();
+            else if (active.Designer != null) active.Designer.Save();
         }
+    }
+
+    private void CreateNewUILayout() {
+        if (string.IsNullOrEmpty(_projectPath)) return;
+        var fp = new FilePickerWindow("Create New UI Layout", _projectPath, "new_layout.uilayout", FilePickerMode.Save, (path) => {
+            if (!path.EndsWith(".uilayout")) path += ".uilayout";
+            // Create empty layout
+            var root = new Window { Title = "My Layout", Size = new Vector2(400, 300) };
+            string json = UISerializer.Serialize(root);
+            VirtualFileSystem.Instance.WriteAllText(path, json);
+            OpenFile(path);
+        });
+        Shell.UI.OpenWindow(fp);
     }
 
     private void BuildProject() {
@@ -347,7 +385,7 @@ public class MainWindow : Window {
             var currentPopup = _activePopup;
             if (currentPopup != null) {
                 if (IsVisible) {
-                    var caretPos = page.Editor.GetCaretPosition();
+                    var caretPos = page.Editor?.GetCaretPosition();
                     if (caretPos != null) {
                         currentPopup.Position = caretPos.Value + new Vector2(0, 18);
                     }
@@ -357,7 +395,7 @@ public class MainWindow : Window {
                 }
             }
 
-            if (page.Editor.IsFocused) {
+            if (page.Editor != null && page.Editor.IsFocused) {
                 if (page.Editor.ActiveSnippetSession != null) {
                     page.Editor.ActiveSnippetSession.HandleInput();
                     
@@ -387,7 +425,7 @@ public class MainWindow : Window {
         page.Editor.IsFetchingCompletions = true;
 
         var sourceFiles = new Dictionary<string, string>();
-        var pagesSnapshot = _pages.ToList();
+        var pagesSnapshot = _pages.Where(p => p.Editor != null).ToList();
         foreach (var p in pagesSnapshot) sourceFiles[p.Path] = p.Editor.Value;
 
         int pos = page.Editor.GetIndexFromPosition(page.Editor.CursorLine, page.Editor.CursorCol);
@@ -516,7 +554,7 @@ public class MainWindow : Window {
         var token = _signatureCts.Token;
 
         var sourceFiles = new Dictionary<string, string>();
-        foreach (var p in _pages) sourceFiles[p.Path] = p.Editor.Value;
+        foreach (var p in _pages.Where(pg => pg.Editor != null)) sourceFiles[p.Path] = p.Editor.Value;
 
         int pos = page.Editor.GetIndexFromPosition(page.Editor.CursorLine, page.Editor.CursorCol);
 
@@ -563,6 +601,7 @@ public class MainWindow : Window {
     private Dictionary<string, System.Timers.Timer> _highlightTimers = new();
 
     private void QueueAnalysis(OpenPage page) {
+        if (page.Editor == null) return;
         // Debounced Highlighter (Background then UI Update)
         if (!_highlightTimers.TryGetValue(page.Path, out var timer)) {
             timer = new System.Timers.Timer(500);
@@ -592,7 +631,7 @@ public class MainWindow : Window {
 
         // Snapshot current values on UI thread
         var sourceFiles = new Dictionary<string, string>();
-        var pagesSnapshot = _pages.ToList();
+        var pagesSnapshot = _pages.Where(p => p.Editor != null).ToList();
         foreach (var p in pagesSnapshot) {
             sourceFiles[p.Path] = p.Editor.Value;
         }
@@ -666,8 +705,10 @@ public class MainWindow : Window {
             _activePopup = null;
         }
         foreach (var p in _pages) {
-            p.Editor.OnValueChanged = null;
-            p.Editor.OnCursorMoved = null;
+            if (p.Editor != null) {
+                p.Editor.OnValueChanged = null;
+                p.Editor.OnCursorMoved = null;
+            }
         }
         base.ExecuteClose();
     }
