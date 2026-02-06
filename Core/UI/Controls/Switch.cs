@@ -3,7 +3,9 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TheGame.Graphics;
 using TheGame.Core.Input;
+using TheGame.Core.Designer;
 using TheGame.Core.Animation;
+using System.ComponentModel;
 
 namespace TheGame.Core.UI.Controls;
 
@@ -12,6 +14,10 @@ public class Switch : ValueControl<bool> {
     public Color TextColor { get; set; } = Color.White;
 
     private float _thumbOffset = 0f; // 0 to 1
+
+    [Obsolete("For Designer/Serialization use only", error: true)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public Switch() : this(Vector2.Zero, "Switch") {  }
 
     public Switch(Vector2 position, string label = "") : base(position, new Vector2(40, 20)) {
         Label = label;
@@ -22,6 +28,8 @@ public class Switch : ValueControl<bool> {
     private float _dragStartX;
 
     protected override void UpdateInput() {
+        if (DesignMode.SuppressNormalInput(this)) return;
+
         base.UpdateInput(); // handle hover/_isPressed/click
 
         if (InputManager.IsAnyMouseButtonJustPressed(MouseButton.Left) && IsMouseOver) {

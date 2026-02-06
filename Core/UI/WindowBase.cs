@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using TheGame.Core.Designer;
 using TheGame.Core.Input;
 using TheGame.Core.OS;
 using TheGame.Graphics;
@@ -72,6 +73,7 @@ public abstract class WindowBase : UIElement {
     // Modal support
     public WindowBase ParentWindow { get; set; }
     public List<WindowBase> ChildWindows { get; } = new();
+    [DesignerIgnoreJsonSerialization]
     public bool IsModal { get; set; }
     public bool IsBlocked => ChildWindows.Any(c => c.IsModal && c.IsVisible);
 

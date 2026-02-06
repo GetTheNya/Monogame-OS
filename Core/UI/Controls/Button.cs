@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System;
+using System.ComponentModel;
 using TheGame.Graphics;
 
 namespace TheGame.Core.UI.Controls;
@@ -15,7 +16,6 @@ public class Button : UIControl {
     public TextAlign TextAlign { get; set; } = TextAlign.Center;
     public int FontSize { get; set; } = 20;
     public bool UseBoldFont { get; set; } = false;
-    public Vector2 Padding { get; set; } = new Vector2(5, 5);
     
     // Scrolling logic
     private enum ScrollState { WaitingAtStart, ScrollingForward, WaitingAtEnd, Returning }
@@ -27,9 +27,14 @@ public class Button : UIControl {
     private string _lastMeasuredText = "";
     private int _lastMeasuredFontSize = -1;
 
+    [Obsolete("For Designer/Serialization use only", error: true)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public Button() : this(Vector2.Zero, Vector2.Zero, "Button") { }
+
     public Button(Vector2 position, Vector2 size, string text = "") : base(position, size) {
         Text = text;
         ConsumesInput = true;
+        Padding = new Vector4(5, 5, 5, 5);
     }
 
     public override void Update(GameTime gameTime) {
@@ -46,9 +51,12 @@ public class Button : UIControl {
                     _lastMeasuredFontSize = (int)(FontSize * Scale);
                 }
 
-                float pX = Padding.X * Scale;
-                float iconAreaWidth = Icon != null ? (Size.Y * Scale - (Padding.Y * Scale * 2)) + pX : 0;
-                float remainingWidth = (Size.X * Scale) - pX - iconAreaWidth - pX;
+                float pL = Padding.X * Scale;
+                float pR = Padding.Z * Scale;
+                float pT = Padding.Y * Scale;
+                float pB = Padding.W * Scale;
+                float iconAreaWidth = Icon != null ? (Size.Y * Scale - (pT + pB)) + pL : 0;
+                float remainingWidth = (Size.X * Scale) - pL - iconAreaWidth - pR;
 
                 _isTextOverflowing = _fullTextWidth > remainingWidth + 2f; // 2px tolerance like in TextHelper
 
@@ -140,14 +148,16 @@ public class Button : UIControl {
         // Border
         batch.BorderRectangle(drawPos, size, BorderColor * AbsoluteOpacity, thickness: 1f, rounded: 3f);
 
-        float pX = Padding.X * Scale;
-        float pY = Padding.Y * Scale;
+        float pL = Padding.X * Scale;
+        float pT = Padding.Y * Scale;
+        float pR = Padding.Z * Scale;
+        float pB = Padding.W * Scale;
         float iconSize = 0f;
 
         // Draw Icon if present
         if (Icon != null) {
-            iconSize = size.Y - (pY * 2);
-            var iconPos = new Vector2(drawPos.X + pX, drawPos.Y + pY);
+            iconSize = size.Y - (pT + pB);
+            var iconPos = new Vector2(drawPos.X + pL, drawPos.Y + pT);
             float scale = iconSize / Icon.Width;
             batch.DrawTexture(Icon, iconPos, Color.White * AbsoluteOpacity, scale);
         }
@@ -157,8 +167,8 @@ public class Button : UIControl {
             var fontSystem = UseBoldFont ? GameContent.BoldFontSystem : GameContent.FontSystem;
             var font = fontSystem?.GetFont((int)(FontSize * Scale));
             if (font != null) {
-                float contentStartX = drawPos.X + pX + iconSize + (iconSize > 0 ? pX : 0);
-                float remainingWidth = size.X - (contentStartX - drawPos.X) - pX;
+                float contentStartX = drawPos.X + pL + iconSize + (iconSize > 0 ? pL : 0);
+                float remainingWidth = size.X - (contentStartX - drawPos.X) - pR;
 
                 if (remainingWidth > 5) {
                     // We only use the fancy scissored scrolling if hovered AND it's actually overflowing

@@ -98,7 +98,7 @@ public class ContextMenu : Panel {
                 IsEnabled = item.IsEnabled,
                 TextColor = item.IsEnabled ? Color.White : Color.Gray,
                 TextAlign = TextAlign.Left,
-                Padding = new Vector2(30, 0),
+                Padding = new Vector4(30, 0, 30, 0),
                 UseBoldFont = item.IsDefault,
                 OnClickAction = () => {
                     if (item.Type == MenuItemType.Checkbox) {

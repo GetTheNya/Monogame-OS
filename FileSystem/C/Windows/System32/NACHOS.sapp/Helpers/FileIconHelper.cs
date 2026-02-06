@@ -20,6 +20,7 @@ public static class FileIconHelper {
             LoadIcon(gd, hostIconDir, "c_sharp.png", ".cs");
             LoadIcon(gd, hostIconDir, "image.png", ".png", ".jpg", ".jpeg", ".bmp", ".gif");
             LoadIcon(gd, hostIconDir, "json.png", ".json");
+            LoadIcon(gd, hostIconDir, "layout.png", ".uilayout");
         }
     }
 

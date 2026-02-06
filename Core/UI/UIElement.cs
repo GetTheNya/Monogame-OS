@@ -13,11 +13,13 @@ using TheGame.Core.Designer;
 namespace TheGame.Core.UI;
 
 public abstract class UIElement : IContextMenuProvider {
+    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public UIElement Parent { get; set; }
     private readonly List<UIElement> _childrenInternal = new();
     private UIElement[] _childrenSnapshot = Array.Empty<UIElement>();
     private readonly object _childrenLock = new();
 
+    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public IReadOnlyList<UIElement> Children => _childrenSnapshot;
 
     private Vector2 _position;
@@ -32,6 +34,7 @@ public abstract class UIElement : IContextMenuProvider {
     }
 
     private Vector2 _size;
+    [DesignerTooltip("Size of an element")]
     public Vector2 Size {
         get => _size;
         set {
@@ -57,12 +60,14 @@ public abstract class UIElement : IContextMenuProvider {
     public bool IsActive { get; set; } = true;
     public bool IsEnabled { get; set; } = true;
     public float Opacity { get; set; } = 1.0f;
+    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public float AbsoluteOpacity => (Parent?.AbsoluteOpacity ?? 1.0f) * Opacity;
     public Vector4 Padding { get; set; } = Vector4.Zero;
     
     public Action OnRightClickAction { get; set; }
     public Action OnLostFocus { get; set; }
     public Action OnDoubleClickAction { get; set; }
+    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public Action<SpriteBatch, ShapeBatch, Vector2, Vector2> OnDrawOver { get; set; }
     
     /// <summary>
@@ -73,6 +78,7 @@ public abstract class UIElement : IContextMenuProvider {
     /// <summary>
     /// Generic tag for storing custom metadata.
     /// </summary>
+    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public object Tag { get; set; }
     
     /// <summary>
@@ -130,6 +136,7 @@ public abstract class UIElement : IContextMenuProvider {
 
     // Tooltip properties
     public string Tooltip { get; set; }
+    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public float TooltipDelay { get; set; } = 0.5f;
 
     protected UIElement() {
@@ -163,20 +170,24 @@ public abstract class UIElement : IContextMenuProvider {
     /// Static render offset used during RenderTarget rendering.
     /// When set, AbsolutePosition is adjusted to create local coordinates.
     /// </summary>
+    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public static Vector2 RenderOffset { get; set; } = Vector2.Zero;
 
     // Relative to parent, or absolute if no parent? 
     // Let's assume Position is relative to Parent.
     // RawAbsolutePosition computes the true screen position without any offset
-    protected Vector2 RawAbsolutePosition => (Parent?.RawAbsolutePosition ?? Vector2.Zero) + (Parent?.GetChildOffset(this) ?? Vector2.Zero) + Position;
+    public virtual Vector2 RawAbsolutePosition => (Parent?.RawAbsolutePosition ?? Vector2.Zero) + (Parent?.GetChildOffset(this) ?? Vector2.Zero) + Position;
     
     // AbsolutePosition subtracts RenderOffset ONCE at the end (not recursively)
     public Vector2 AbsolutePosition => RawAbsolutePosition - RenderOffset;
+    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public Rectangle Bounds => new Rectangle(AbsolutePosition.ToPoint(), Size.ToPoint());
 
+    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public bool IsMouseOver { get; protected set; }
     
     private bool _isFocused;
+    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public bool IsFocused {
         get => _isFocused;
         set {

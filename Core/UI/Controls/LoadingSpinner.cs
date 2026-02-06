@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TheGame.Graphics;
@@ -13,6 +14,10 @@ public class LoadingSpinner : UIElement {
     private float _rotation = 0f;
     private float _timer = 0f;
     private float _currentArcSize = 45f;
+
+    [Obsolete("For Designer/Serialization use only", error: true)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public LoadingSpinner() : this(Vector2.Zero, Vector2.Zero) {}
 
     public LoadingSpinner(Vector2 position, Vector2 size) : base(position, size) {
         ConsumesInput = false;

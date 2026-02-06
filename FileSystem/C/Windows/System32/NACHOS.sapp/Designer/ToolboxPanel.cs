@@ -20,7 +20,6 @@ public class ToolboxPanel : ScrollPanel {
         BackgroundColor = new Color(40, 40, 40);
         Padding = new Vector4(10, 10, 10, 10);
         
-        AddToolboxItem("Window", typeof(Window));
         AddToolboxItem("Button", typeof(Button));
         AddToolboxItem("Label", typeof(Label));
         AddToolboxItem("TextInput", typeof(TextInput));
@@ -30,8 +29,10 @@ public class ToolboxPanel : ScrollPanel {
         AddToolboxItem("Slider", typeof(Slider));
         AddToolboxItem("ComboBox", typeof(ComboBox));
         AddToolboxItem("ProgressBar", typeof(ProgressBar));
-        AddToolboxItem("TabControl", typeof(TabControl));
         AddToolboxItem("Panel", typeof(Panel));
+        AddToolboxItem("Color picker", typeof(ColorPicker));
+        AddToolboxItem("Loading Spinner", typeof(LoadingSpinner));
+        AddToolboxItem("Scroll panel", typeof(ScrollPanel));
     }
     
     private void AddToolboxItem(string name, Type type) {
@@ -47,7 +48,7 @@ public class ToolboxItem : Button, IDraggable {
     public Type ControlType { get; }
     private Vector2 _dragStartPos;
     
-    public ToolboxItem(string name, Type type) : base(Vector2.Zero, new Vector2(120, 30), name) {
+    public ToolboxItem(string name, Type type) : base(Vector2.Zero, new Vector2(150, 30), name) {
         ControlType = type;
         BackgroundColor = new Color(50, 50, 50);
         HoverColor = new Color(70, 70, 70);
@@ -87,7 +88,6 @@ public class ToolboxItem : Button, IDraggable {
     public string GetDragLabel() => Text;
     public void OnDragStart(Vector2 grabOffset) {
         Opacity = 0.5f;
-        Shell.Notifications.Show("Designer", $"Dragging {Text}...");
     }
     public void OnDragEnd() => Opacity = 1.0f;
     public void OnDragCancel() => Opacity = 1.0f;

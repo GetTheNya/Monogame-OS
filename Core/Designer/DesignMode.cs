@@ -14,6 +14,7 @@ public static class DesignMode {
     public static void SetEnabled(bool enabled) {
         if (IsEnabled != enabled) {
             IsEnabled = enabled;
+            DebugLogger.Log($"DesignMode: {(enabled ? "ENABLED" : "DISABLED")}");
             OnModeChanged?.Invoke(enabled);
         }
     }
@@ -35,8 +36,10 @@ public static class DesignMode {
     }
     
     public static bool IsDesignableElement(UIElement element) {
+        // Exclude internal chrome components
+        if (element.Name != null && element.Name.StartsWith("__chrome_")) return false;
+        
         // For now, most things are designable.
-        // We might want to exclude certain internal layers.
         return true;
     }
 }

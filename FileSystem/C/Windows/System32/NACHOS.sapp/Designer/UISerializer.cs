@@ -23,13 +23,27 @@ public static class UISerializer {
         return JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
     }
 
+    public static UIElement CloneElement(UIElement element) {
+        string json = Serialize(element);
+        return Deserialize(json);
+    }
+
     private static UIElementData SerializeElement(UIElement element) {
+        var type = element.GetType();
+        string typeName = type.AssemblyQualifiedName;
+
+        // Redirect DesignerWindow to Window for serialization compatibility
+        if (element is DesignerWindow) {
+            typeName = typeof(Window).AssemblyQualifiedName;
+        }
+
         var data = new UIElementData {
-            Type = element.GetType().AssemblyQualifiedName,
+            Type = typeName,
             Name = element.Name
         };
 
         var props = element.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => !Attribute.IsDefined(p, typeof(DesignerIgnoreJsonSerialization)))
             .Where(p => p.CanRead && p.CanWrite && !ShouldSkipProperty(p));
 
         foreach (var prop in props) {
@@ -55,7 +69,14 @@ public static class UISerializer {
     }
 
     private static UIElement DeserializeElement(UIElementData data) {
-        var type = Type.GetType(data.Type);
+        string typeName = data.Type;
+        
+        // Redirect Window to DesignerWindow for the designer
+        if (typeName.Contains("TheGame.Core.UI.Window") && !typeName.Contains("DesignerWindow")) {
+            typeName = typeof(DesignerWindow).AssemblyQualifiedName;
+        }
+
+        var type = Type.GetType(typeName);
         if (type == null) return null;
 
         var element = Activator.CreateInstance(type) as UIElement;

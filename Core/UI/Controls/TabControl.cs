@@ -90,7 +90,7 @@ public class TabControl : UIElement {
         _tabBar.AddChild(btn);
         _contentArea.AddChild(page.Content);
 
-        UpdateLayout(); // Recalculate horizontal positions
+        UpdateTabButtons(); // Recalculate horizontal positions
 
         if (_selectedIndex == -1) SelectedIndex = 0;
         
@@ -109,12 +109,12 @@ public class TabControl : UIElement {
              _selectedIndex = _pages.Count - 1;
         }
         
-        UpdateLayout();
+        UpdateTabButtons();
         UpdateTabs();
         OnTabClosed?.Invoke(index);
     }
 
-    private void UpdateLayout() {
+    private void UpdateTabButtons() {
         float x = 0;
         foreach (var page in _pages) {
             page.TabButton.Position = new Vector2(x, 0);
@@ -127,6 +127,20 @@ public class TabControl : UIElement {
             }
             x += 150;
         }
+    }
+
+    public void RefreshLayout() {
+        if (_tabBar == null || _contentArea == null) return;
+        
+        _tabBar.Size = new Vector2(Size.X, TabBarHeight);
+        _contentArea.Position = new Vector2(0, TabBarHeight);
+        _contentArea.Size = new Vector2(Size.X, Size.Y - TabBarHeight);
+
+        foreach (var page in _pages) {
+            page.Content.Size = _contentArea.Size;
+        }
+
+        UpdateTabButtons();
     }
 
     public int SelectedIndex {
@@ -170,15 +184,7 @@ public class TabControl : UIElement {
     public Panel GetPageContent(int index) => _pages[index].Content;
 
     public override void Update(GameTime gameTime) {
-        // Layout maintenance
-        _tabBar.Size = new Vector2(Size.X, TabBarHeight);
-        _contentArea.Position = new Vector2(0, TabBarHeight);
-        _contentArea.Size = new Vector2(Size.X, Size.Y - TabBarHeight);
-
-        foreach (var page in _pages) {
-            page.Content.Size = _contentArea.Size;
-        }
-
+        RefreshLayout();
         base.Update(gameTime);
     }
 

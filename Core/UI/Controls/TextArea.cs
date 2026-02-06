@@ -8,6 +8,8 @@ using System.Linq;
 using TheGame.Core.Input;
 using TheGame.Core.OS;
 using TheGame.Graphics;
+using System.ComponentModel;
+using TheGame.Core.Designer;
 
 namespace TheGame.Core.UI.Controls;
 
@@ -41,6 +43,7 @@ public class TextArea : ValueControl<string> {
     protected float _targetScrollOffsetX = 0f;
     protected float _cursorTimer = 0f;
     protected bool _showCursor = true;
+    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public bool UseInternalScrolling { get; set; } = true;
     public Action OnCursorMoved;
     protected bool _isWordSelecting = false;
@@ -52,6 +55,7 @@ public class TextArea : ValueControl<string> {
     protected bool _maxWidthDirty = true;
     protected static readonly RasterizerState _scissorRasterizer = new RasterizerState { ScissorTestEnable = true, CullMode = CullMode.None };
 
+    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public virtual Vector2 TextOffset => new Vector2(10, 10);
 
     protected virtual bool CanEditAt(int line, int col) => true;
@@ -143,6 +147,7 @@ public class TextArea : ValueControl<string> {
     }
     
     // Backwards compatibility alias
+    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public string Text {
         get => Value;
         set => Value = value;
@@ -153,6 +158,10 @@ public class TextArea : ValueControl<string> {
     public Color FocusedBorderColor { get; set; } = new Color(0, 120, 215);
     public int FontSize { get; set; } = 16;
     public bool DrawBackground { get; set; } = true;
+
+    [Obsolete("For Designer/Serialization use only", error: true)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public TextArea() : this(Vector2.Zero, Vector2.Zero) { }
 
     // OnTextChanged is now inherited as OnValueChanged from ValueControl<string>
 
@@ -172,6 +181,8 @@ public class TextArea : ValueControl<string> {
     }
 
     protected override void UpdateInput() {
+        if (DesignMode.SuppressNormalInput(this)) return;
+
         base.UpdateInput();
 
         if (InputManager.IsAnyMouseButtonJustPressed(MouseButton.Left)) {

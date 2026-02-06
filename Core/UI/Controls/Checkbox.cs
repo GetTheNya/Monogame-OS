@@ -1,3 +1,5 @@
+using System;
+using System.ComponentModel;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TheGame.Graphics;
@@ -7,6 +9,10 @@ namespace TheGame.Core.UI.Controls;
 public class Checkbox : ValueControl<bool> {
     public string Label { get; set; }
     public Color TextColor { get; set; } = Color.White;
+
+    [Obsolete("For Designer/Serialization use only", error: true)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public Checkbox() : this(Vector2.Zero, "Checkbox") { }
 
     public Checkbox(Vector2 position, string label = "") : base(position, new Vector2(20, 20)) {
         Label = label;

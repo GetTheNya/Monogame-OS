@@ -13,7 +13,8 @@ public enum HandlePosition {
 
 public class ResizeHandle {
     public HandlePosition Position { get; }
-    public Rectangle Bounds { get; set; }
+    public Vector2 LocalPosition { get; set; }
+    public float Size { get; set; } = 7f;
     public Vector2 ResizeDirection { get; }
     public CursorType Cursor { get; }
     
@@ -56,11 +57,17 @@ public class ResizeHandle {
         }
     }
     
-    public bool ContainsPoint(Vector2 point) => Bounds.Contains(point.ToPoint());
+    public bool ContainsPoint(Vector2 point, Vector2 parentAbsPos) {
+        Vector2 absCenter = parentAbsPos + LocalPosition;
+        float half = Size / 2f + 5f; // More generous margin (5px extra)
+        return point.X >= absCenter.X - half && point.X <= absCenter.X + half &&
+               point.Y >= absCenter.Y - half && point.Y <= absCenter.Y + half;
+    }
     
-    public void Draw(ShapeBatch batch, Color color) {
-        batch.FillRectangle(Bounds.Location.ToVector2(), Bounds.Size.ToVector2(), color);
-        batch.BorderRectangle(Bounds.Location.ToVector2(), Bounds.Size.ToVector2(), Color.White * 0.5f, 1f);
+    public void Draw(ShapeBatch batch, Vector2 parentAbsPos, Color color) {
+        Vector2 pos = parentAbsPos + LocalPosition - new Vector2(Size / 2f);
+        batch.FillRectangle(pos, new Vector2(Size), color);
+        batch.BorderRectangle(pos, new Vector2(Size), Color.White * 0.5f, 1f);
     }
     
     public void ApplyCursor() {

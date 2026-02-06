@@ -17,7 +17,7 @@ public class DesignerAdorner : UIElement {
     
     public DesignerAdorner(UIElement target) {
         Target = target;
-        ConsumesInput = true;
+        ConsumesInput = false;
         
         // Initialize handles
         var positions = (HandlePosition[])System.Enum.GetValues(typeof(HandlePosition));
@@ -41,36 +41,46 @@ public class DesignerAdorner : UIElement {
     
     private void UpdateHandleBounds() {
         var targetBounds = Target.Bounds;
-        // The adorner itself should cover the target plus handles
-        Position = targetBounds.Location.ToVector2() - new Vector2(HandleSize);
+        
+        // The adorner itself should follow the target
+        // Calculate position relative to parent
+        Vector2 parentAbsPos = Parent?.AbsolutePosition ?? Vector2.Zero;
+        Position = targetBounds.Location.ToVector2() - parentAbsPos - new Vector2(HandleSize);
         Size = targetBounds.Size.ToVector2() + new Vector2(HandleSize * 2);
         
         foreach (var handle in _handles) {
-            handle.Bounds = CalculateHandleRect(handle.Position, targetBounds);
+            handle.LocalPosition = CalculateHandleOffset(handle.Position, Target.Size);
         }
     }
     
-    private Rectangle CalculateHandleRect(HandlePosition pos, Rectangle target) {
-        int half = HandleSize / 2;
-        int x = 0, y = 0;
+    private Vector2 CalculateHandleOffset(HandlePosition pos, Vector2 targetSize) {
+        // The adorner is sized TargetSize + HandleSize * 2
+        // The target starts at local (HandleSize, HandleSize) relative to this adorner's Position
+        float tx = HandleSize; 
+        float ty = HandleSize;
+        float tw = targetSize.X;
+        float th = targetSize.Y;
+
+        float hx = 0, hy = 0;
         
         switch (pos) {
-            case HandlePosition.TopLeft: x = target.Left; y = target.Top; break;
-            case HandlePosition.Top: x = target.Center.X; y = target.Top; break;
-            case HandlePosition.TopRight: x = target.Right; y = target.Top; break;
-            case HandlePosition.Left: x = target.Left; y = target.Center.Y; break;
-            case HandlePosition.Right: x = target.Right; y = target.Center.Y; break;
-            case HandlePosition.BottomLeft: x = target.Left; y = target.Bottom; break;
-            case HandlePosition.Bottom: x = target.Center.X; y = target.Bottom; break;
-            case HandlePosition.BottomRight: x = target.Right; y = target.Bottom; break;
+            case HandlePosition.TopLeft: hx = tx; hy = ty; break;
+            case HandlePosition.Top: hx = tx + tw/2; hy = ty; break;
+            case HandlePosition.TopRight: hx = tx + tw; hy = ty; break;
+            case HandlePosition.Left: hx = tx; hy = ty + th/2; break;
+            case HandlePosition.Right: hx = tx + tw; hy = ty + th/2; break;
+            case HandlePosition.BottomLeft: hx = tx; hy = ty + th; break;
+            case HandlePosition.Bottom: hx = tx + tw/2; hy = ty + th; break;
+            case HandlePosition.BottomRight: hx = tx + tw; hy = ty + th; break;
         }
         
-        return new Rectangle(x - half, y - half, HandleSize, HandleSize);
+        return new Vector2(hx, hy);
     }
     
     public ResizeHandle GetHandleAt(Vector2 mousePos) {
+        var absPos = AbsolutePosition;
         foreach (var handle in _handles) {
-            if (handle.ContainsPoint(mousePos)) return handle;
+            if (handle.ContainsPoint(mousePos, absPos)) return handle;
         }
         return null;
     }
@@ -78,15 +88,15 @@ public class DesignerAdorner : UIElement {
     protected override void DrawSelf(SpriteBatch spriteBatch, ShapeBatch batch) {
         if (!IsSelected) return;
         
-        var targetBounds = Target.Bounds;
+        var absPos = AbsolutePosition;
         var color = new Color(0, 120, 215); // Designer Blue
         
-        // Draw selection border
-        batch.BorderRectangle(targetBounds.Location.ToVector2(), targetBounds.Size.ToVector2(), color, 1f);
+        // Draw selection border (Target starts at absPos + HandleSize)
+        batch.BorderRectangle(absPos + new Vector2(HandleSize), Target.Size, color, 1f);
         
         // Draw handles
         foreach (var handle in _handles) {
-            handle.Draw(batch, Color.White);
+            handle.Draw(batch, absPos, Color.White);
         }
     }
     

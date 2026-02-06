@@ -1,4 +1,5 @@
 using Microsoft.Xna.Framework;
+using TheGame.Core.Designer;
 
 namespace TheGame.Core.UI.Controls;
 
@@ -16,6 +17,7 @@ public abstract class ValueControl<T> : UIControl {
         if (notify) OnValueChanged?.Invoke(_value);
     }
 
+    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public System.Action<T> OnValueChanged { get; set; }
 
     protected ValueControl(Vector2 position, Vector2 size, T defaultValue = default) : base(position, size) {

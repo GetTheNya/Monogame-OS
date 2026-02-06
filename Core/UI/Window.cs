@@ -35,6 +35,7 @@ public class Window : WindowBase {
 
     public bool IsMaximized => _isMaximized;
     public Rectangle RestoreBounds => _restoreRect;
+    [DesignerIgnoreJsonSerialization]
     public bool LayoutDirty { get; set; }
 
     // Animation / Minimize state
@@ -64,7 +65,6 @@ public class Window : WindowBase {
 
     public bool CanResize { get; set; } = true;
     public bool ShowTitleBar { get; set; } = true;
-    public bool ShowChromeButtons { get; set; } = true;
     public Color BackgroundColor { get; set; } = new Color(30, 30, 30, 240); // Dark semi-transparent
     public Color BorderColor { get; set; } = Color.White;
 
@@ -103,6 +103,7 @@ public class Window : WindowBase {
     public Window(Vector2 position, Vector2 size) : base(position, size) {
         // Initialize Buttons
         _closeButton = new Button(Vector2.Zero, new Vector2(20, 20), "X") {
+            Name = "__chrome_close",
             BackgroundColor = Color.Transparent,
             BorderColor = Color.Transparent,
             HoverColor = new Color(200, 50, 50),
@@ -111,6 +112,7 @@ public class Window : WindowBase {
         AddChild(_closeButton);
 
         _maxButton = new Button(Vector2.Zero, new Vector2(20, 20), "O") {
+            Name = "__chrome_max",
             BackgroundColor = Color.Transparent,
             BorderColor = Color.Transparent,
             OnClickAction = () => {
@@ -121,6 +123,7 @@ public class Window : WindowBase {
         AddChild(_maxButton);
 
         _minButton = new Button(Vector2.Zero, new Vector2(20, 20), "_") {
+            Name = "__chrome_min",
             BackgroundColor = Color.Transparent,
             BorderColor = Color.Transparent,
             OnClickAction = () => { Minimize(); }
@@ -173,7 +176,7 @@ public class Window : WindowBase {
                     bool right = mousePos.X >= bounds.Right - ResizeEdge && mousePos.X <= bounds.Right;
                     bool top = mousePos.Y >= bounds.Top && mousePos.Y <= bounds.Top + ResizeEdge;
                     bool bottom = mousePos.Y >= bounds.Bottom - ResizeEdge && mousePos.Y <= bounds.Bottom;
-                    
+
                     if (left || right || top || bottom) {
                         InputManager.IsMouseConsumed = true;
                         _isResizing = true;
@@ -209,10 +212,9 @@ public class Window : WindowBase {
     public override UIElement GetElementAt(Vector2 pos) {
         if (!IsVisible || !Bounds.Contains(pos)) return null;
 
-        var foundChrome = (ShowChromeButtons && _closeButton.IsVisible) ? _closeButton.GetElementAt(pos) : null;
-        if (foundChrome == null && ShowChromeButtons && _maxButton.IsVisible) foundChrome = _maxButton.GetElementAt(pos);
-        if (foundChrome == null && ShowChromeButtons && _minButton.IsVisible) foundChrome = _minButton.GetElementAt(pos);
-        
+        var foundChrome = _closeButton.GetElementAt(pos) ?? 
+                          (_maxButton.IsVisible ? _maxButton.GetElementAt(pos) : null) ?? 
+                          _minButton.GetElementAt(pos);
         if (foundChrome != null) return foundChrome;
 
         Rectangle titleBarRect = new Rectangle((int)AbsolutePosition.X, (int)AbsolutePosition.Y, (int)Size.X, TitleBarHeight);
@@ -236,24 +238,14 @@ public class Window : WindowBase {
         return new Vector2(0, TitleBarHeight);
     }
 
-    protected void UpdateButtons() {
-        if (!ShowTitleBar) {
-            _closeButton.IsVisible = false;
-            _maxButton.IsVisible = false;
-            _minButton.IsVisible = false;
-            return;
-        }
+    private void UpdateButtons() {
+        float rightSide = Size.X;
+        float top = 5;
 
-        _closeButton.IsVisible = ShowChromeButtons;
-        _maxButton.IsVisible = ShowChromeButtons;
-        _minButton.IsVisible = ShowChromeButtons && CanResize;
-
-        float rightOffset = 5;
-        _closeButton.Position = new Vector2(Size.X - _closeButton.Size.X - rightOffset, (TitleBarHeight - _closeButton.Size.Y) / 2);
-        rightOffset += _closeButton.Size.X + 2;
-        _maxButton.Position = new Vector2(Size.X - _maxButton.Size.X - rightOffset, (TitleBarHeight - _maxButton.Size.Y) / 2);
-        rightOffset += _maxButton.Size.X + 2;
-        _minButton.Position = new Vector2(Size.X - _minButton.Size.X - rightOffset, (TitleBarHeight - _minButton.Size.Y) / 2);
+        _closeButton.Position = new Vector2(rightSide - 25, top);
+        _maxButton.Position = new Vector2(rightSide - 50, top);
+        _minButton.Position = new Vector2(rightSide - 75, top);
+        _maxButton.IsVisible = CanResize;
     }
 
     public void Minimize() {
@@ -363,13 +355,6 @@ public class Window : WindowBase {
     }
 
     protected override void UpdateInput() {
-        if (DesignMode.SuppressNormalInput(this)) {
-            // Update children but skip internal drag/resize logic
-            base.UpdateInput();
-            UpdateButtons(); // Keep buttons updated for layout if needed
-            return;
-        }
-
         if (LayoutDirty && !InputManager.IsMouseButtonDown(MouseButton.Left)) {
             TheGame.Core.OS.Shell.UI.SaveWindowLayout(this);
             LayoutDirty = false;
@@ -570,12 +555,10 @@ public class Window : WindowBase {
     }
     
     protected override void DrawWindowToRT(SpriteBatch spriteBatch, ShapeBatch globalBatch) {
-        var gd = G.GraphicsDevice;
-        var previousRasterizerState = gd.RasterizerState;
-
         globalBatch.End();
         spriteBatch.End();
 
+        var gd = G.GraphicsDevice;
         var screenAbsPos = RawAbsolutePosition;
         var windowW = (int)Size.X;
         var windowH = (int)Size.Y;
@@ -587,7 +570,7 @@ public class Window : WindowBase {
 
         if (windowW <= 0 || windowH <= 0) {
             globalBatch.Begin();
-            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, previousRasterizerState);
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
             return;
         }
 
@@ -614,7 +597,7 @@ public class Window : WindowBase {
 
             var contentScissorRect = new Rectangle(padding, padding + TitleBarHeight, windowW, windowH - TitleBarHeight);
             var previousScissorRect = gd.ScissorRectangle;
-            var prevRaster = gd.RasterizerState;
+            var previousRasterizerState = gd.RasterizerState;
             gd.ScissorRectangle = contentScissorRect;
             
             _contentBatch.Begin(null, null);
@@ -635,7 +618,7 @@ public class Window : WindowBase {
             spriteBatch.End();
             
             gd.ScissorRectangle = previousScissorRect;
-            gd.RasterizerState = prevRaster;
+            gd.RasterizerState = previousRasterizerState;
             
             _contentBatch.Begin(null, null);
             spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
@@ -658,7 +641,7 @@ public class Window : WindowBase {
         spriteBatch.End();
 
         globalBatch.Begin();
-        spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, null, null, previousRasterizerState);
+        spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
     }
     
     private void DrawTitleBarToRT(ShapeBatch batch) {

@@ -1,5 +1,8 @@
+using System;
+using System.ComponentModel;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using TheGame.Core.Designer;
 using TheGame.Graphics;
 
 namespace TheGame.Core.UI.Controls;
@@ -7,8 +10,13 @@ namespace TheGame.Core.UI.Controls;
 public class Label : UIElement {
     public string Text { get; set; }
     public Color Color { get; set; } = Color.White;
+    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public Color TextColor { get => Color; set => Color = value; }
     public int FontSize { get; set; } = 20;
+
+    [Obsolete("For Designer/Serialization use only", error: true)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public Label() : this(Vector2.Zero, "Label") { }
 
     public Label(Vector2 position, string text) : base(position, Vector2.Zero) {
         Text = text;

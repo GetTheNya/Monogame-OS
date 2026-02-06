@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TheGame.Graphics;
 using TheGame.Core.UI;
+using System.ComponentModel;
 
 namespace TheGame.Core.UI.Controls;
 
@@ -19,6 +20,10 @@ public class ProgressBar : ValueControl<float> {
     private float _visualValue = 0f;
     private float _shimmerTimer = 0f;
     private float _shimmerOffset = 0f;
+
+    [Obsolete("For Designer/Serialization use only", error: true)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public ProgressBar() : this(Vector2.Zero, Vector2.Zero) { }
 
     public ProgressBar(Vector2 position, Vector2 size, float value = 0f) : base(position, size, value) {
         _visualValue = value;

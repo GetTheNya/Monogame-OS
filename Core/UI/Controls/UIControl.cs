@@ -1,6 +1,7 @@
 using System;
 using Microsoft.Xna.Framework;
 using TheGame.Core.Animation;
+using TheGame.Core.Designer;
 
 namespace TheGame.Core.UI.Controls;
 
@@ -29,7 +30,9 @@ public abstract class UIControl : UIElement {
     public Color BorderColor { get; set; } = Color.Gray * 0.5f;
 
     // Animated State
+    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public Color CurrentBackgroundColor { get; protected set; }
+    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public float Scale { get; private set; } = 0.98f;
     public bool EnableScaleAnimation { get; set; } = true;
     private ControlState _lastState = ControlState.Normal;

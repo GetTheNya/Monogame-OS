@@ -2,14 +2,17 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
+using System.ComponentModel;
 using TheGame.Core.Input;
 using TheGame.Core.OS;
 using TheGame.Graphics;
+using TheGame.Core.Designer;
 
 namespace TheGame.Core.UI.Controls;
 
 public class TextInput : ValueControl<string> {
     public string Placeholder { get; set; } = "Type here...";
+    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public System.Action<string> OnSubmit { get; set; }
 
     public Color FocusedBorderColor { get; set; } = new Color(0, 120, 215);
@@ -29,12 +32,17 @@ public class TextInput : ValueControl<string> {
 
     // Override Value to reset cursor/selection when changed programmatically
     public override void SetValue(string value, bool notify = true) {
+        value ??= "";
         if (Value == value) return;
         base.SetValue(value, notify);
-        _cursorPos = value?.Length ?? 0;
+        _cursorPos = value.Length;
         _selectionEnd = _cursorPos;
         _targetScrollX = 0;
     }
+
+    [Obsolete("For Designer/Serialization use only", error: true)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public TextInput() : this(Vector2.Zero, Vector2.Zero) { }
 
     public TextInput(Vector2 position, Vector2 size) : base(position, size, "") {
         ConsumesInput = true;
@@ -46,6 +54,8 @@ public class TextInput : ValueControl<string> {
     }
 
     protected override void UpdateInput() {
+        if (DesignMode.SuppressNormalInput(this)) return;
+
         base.UpdateInput(); // Update IsMouseOver first
 
         if (InputManager.IsAnyMouseButtonJustPressed(MouseButton.Left)) {
@@ -253,7 +263,7 @@ public class TextInput : ValueControl<string> {
 
     public void SelectAll() {
         _selectionEnd = 0;
-        _cursorPos = Value.Length;
+        _cursorPos = Value?.Length ?? 0;
     }
 
     private void MoveCursor(int delta, bool select) {

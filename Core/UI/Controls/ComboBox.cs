@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using TheGame.Core.Input;
 using TheGame.Graphics;
 using TheGame.Core.OS;
+using System.ComponentModel;
 
 namespace TheGame.Core.UI.Controls;
 
@@ -17,6 +18,10 @@ public class ComboBox : ValueControl<int> {
     private ComboBoxDropdown _dropdown;
 
     public Color TextColor { get; set; } = Color.White;
+
+    [Obsolete("For Designer/Serialization use only", error: true)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public ComboBox() : this(Vector2.Zero, Vector2.Zero) {}
 
     public ComboBox(Vector2 position, Vector2 size) : base(position, size, -1) {
     }

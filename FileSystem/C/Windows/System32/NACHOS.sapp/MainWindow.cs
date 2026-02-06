@@ -24,17 +24,24 @@ public class MainWindow : Window {
     private Sidebar _sidebar;
     private TabControl _tabControl;
     private TerminalControl _terminal;
+    private ClosablePanel _sidebarPanel;
+    private ClosablePanel _terminalPanel;
     private MenuBar _menuBar;
     private string _projectPath;
+    
+    private bool _sidebarVisible = true;
+    private bool _terminalVisible = true;
+    private float _sidebarWidth = 200;
+    private float _terminalHeight = 200;
     private readonly ConcurrentQueue<Action> _pendingUiActions = new();
     
     private List<OpenPage> _pages = new();
 
     private class OpenPage {
         public string Path;
-        public CodeEditor Editor;
-        public DesignerTab Designer;
+        public NachosTab Tab;
         public TabPage Page;
+        public CodeEditor Editor => (Tab as EditorTab)?.Editor;
     }
 
     public MainWindow() {
@@ -79,6 +86,11 @@ public class MainWindow : Window {
         fileMenu.AddItem("Exit", Close, "Alt+F4");
         _menuBar.AddMenu(fileMenu);
 
+        var viewMenu = new Menu("View");
+        viewMenu.AddItem("Project explorer", ToggleSidebar);
+        viewMenu.AddItem("Terminal", ToggleTerminal);
+        _menuBar.AddMenu(viewMenu);
+
         var buildMenu = new Menu("Build");
         buildMenu.AddItem("Run Project", RunProject, "F5");
         buildMenu.AddItem("Build Project", BuildProject, "Shift+F5");
@@ -96,16 +108,18 @@ public class MainWindow : Window {
         AddChild(_menuBar);
 
         // Sidebar
-        float sidebarWidth = 200;
-        _sidebar = new Sidebar(new Vector2(0, 25), new Vector2(sidebarWidth, ClientSize.Y - 200 - 25), _projectPath ?? "C:\\");
+        _sidebar = new Sidebar(Vector2.Zero, Vector2.Zero, _projectPath ?? "C:\\");
         _sidebar.OnFileSelected = OpenFile;
-        AddChild(_sidebar);
+        _sidebarPanel = new ClosablePanel(new Vector2(0, 25), new Vector2(_sidebarWidth, ClientSize.Y - _terminalHeight - 25), "PROJECT EXPLORER");
+        _sidebarPanel.SetContent(_sidebar);
+        _sidebarPanel.OnClose = ToggleSidebar;
+        AddChild(_sidebarPanel);
 
         // Tab Control
-        _tabControl = new TabControl(new Vector2(sidebarWidth, 25), new Vector2(ClientSize.X - sidebarWidth, ClientSize.Y - 200 - 25));
+        _tabControl = new TabControl(new Vector2(_sidebarWidth, 25), new Vector2(ClientSize.X - _sidebarWidth, ClientSize.Y - _terminalHeight - 25));
         _tabControl.OnTabClosed += (index) => {
             if (index >= 0 && index < _pages.Count) {
-                _pages[index].Editor?.Dispose(); 
+                _pages[index].Tab.Dispose();
                 _pages.RemoveAt(index);
                 
                 // Update sidebar highlight to new active tab or null
@@ -132,31 +146,60 @@ public class MainWindow : Window {
         AddChild(_tabControl);
 
         // Terminal
-        _terminal = new TerminalControl(new Vector2(0, ClientSize.Y - 200), new Vector2(ClientSize.X, 200));
+        _terminal = new TerminalControl(Vector2.Zero, Vector2.Zero);
         _terminal.Backend.WorkingDirectory = _projectPath ?? "C:\\";
-        AddChild(_terminal);
+        
+        _terminalPanel = new ClosablePanel(new Vector2(0, ClientSize.Y - _terminalHeight), new Vector2(ClientSize.X, _terminalHeight), "TERMINAL");
+        _terminalPanel.SetContent(_terminal);
+        _terminalPanel.OnClose = ToggleTerminal;
+        AddChild(_terminalPanel);
 
         // Welcome Message
         _terminal.Execute("echo \"Welcome to NACHOS!\"");
 
-        OnResize += () => {
-             _menuBar.Size = new Vector2(ClientSize.X, 25);
-             _sidebar.Size = new Vector2(sidebarWidth, ClientSize.Y - 200 - 25);
-             _tabControl.Position = new Vector2(sidebarWidth, 25);
-             _tabControl.Size = new Vector2(ClientSize.X - sidebarWidth, ClientSize.Y - 200 - 25);
-             _terminal.Position = new Vector2(0, ClientSize.Y - 200);
-             _terminal.Size = new Vector2(ClientSize.X, 200);
-             _sidebar.UpdateLayout();
+        OnResize += RefreshLayout;
+    }
 
-             foreach (var p in _pages) {
-                 if (p.Editor != null) {
-                     p.Editor.Size = new Vector2(
-                         Math.Max(_tabControl.ContentArea.Size.X, p.Editor.GetTotalWidth()), 
-                         Math.Max(_tabControl.ContentArea.Size.Y, p.Editor.GetTotalHeight())
-                     );
-                 }
-             }
-        };
+    private void RefreshLayout() {
+        if (_menuBar == null) return;
+
+        float top = 25;
+        float effSidebarWidth = _sidebarVisible ? _sidebarWidth : 0;
+        float effTerminalHeight = _terminalVisible ? _terminalHeight : 0;
+
+        _menuBar.Size = new Vector2(ClientSize.X, top);
+
+        _sidebarPanel.IsVisible = _sidebarVisible;
+        if (_sidebarVisible) {
+            _sidebarPanel.Position = new Vector2(0, top);
+            _sidebarPanel.Size = new Vector2(_sidebarWidth, ClientSize.Y - effTerminalHeight - top);
+            _sidebar.UpdateLayout();
+        }
+
+        _terminalPanel.IsVisible = _terminalVisible;
+        if (_terminalVisible) {
+            _terminalPanel.Position = new Vector2(0, ClientSize.Y - _terminalHeight);
+            _terminalPanel.Size = new Vector2(ClientSize.X, _terminalHeight);
+        }
+
+        _tabControl.Position = new Vector2(effSidebarWidth, top);
+        _tabControl.Size = new Vector2(ClientSize.X - effSidebarWidth, ClientSize.Y - effTerminalHeight - top);
+        _tabControl.RefreshLayout();
+
+        foreach (var p in _pages) {
+            p.Tab.Size = _tabControl.ContentArea.Size;
+            p.Tab.UpdateLayout();
+        }
+    }
+
+    private void ToggleSidebar() {
+        _sidebarVisible = !_sidebarVisible;
+        RefreshLayout();
+    }
+
+    private void ToggleTerminal() {
+        _terminalVisible = !_terminalVisible;
+        RefreshLayout();
     }
 
     private void OpenFile(string path) {
@@ -171,41 +214,24 @@ public class MainWindow : Window {
         TabPage page;
         OpenPage pageInfo;
 
-        if (path.EndsWith(".uilayout")) {
-            var designer = new DesignerTab(Vector2.Zero, _tabControl.ContentArea.Size, path);
-            var icon = FileIconHelper.GetIcon(path);
-            page = _tabControl.AddTab(Path.GetFileName(path), icon);
-            page.Content.AddChild(designer);
-            pageInfo = new OpenPage { Path = path, Designer = designer, Page = page };
-            
-            designer.OnDirtyChanged = () => {
-                page.Title = Path.GetFileName(path) + (designer.IsDirty ? "*" : "");
-                page.TabButton.Text = page.Title;
-            };
-        } else {
-            var editor = new CodeEditor(Vector2.Zero, _tabControl.ContentArea.Size, path);
-            var icon = FileIconHelper.GetIcon(path);
-            page = _tabControl.AddTab(editor.FileName, icon);
-            page.Content.AddChild(editor);
-            pageInfo = new OpenPage { Path = path, Editor = editor, Page = page };
+        NachosTab tab = path.EndsWith(".uilayout") 
+            ? new DesignerTab(Vector2.Zero, _tabControl.ContentArea.Size, path)
+            : new EditorTab(Vector2.Zero, _tabControl.ContentArea.Size, path);
 
-            editor.OnDirtyChanged = () => {
-                page.Title = editor.FileName + (editor.IsDirty ? "*" : "");
-                page.TabButton.Text = page.Title;
-            };
+        var icon = FileIconHelper.GetIcon(path);
+        page = _tabControl.AddTab(tab.DisplayTitle, icon);
+        page.Content.AddChild(tab);
+        pageInfo = new OpenPage { Path = path, Tab = tab, Page = page };
 
-            editor.UseInternalScrolling = false;
-            editor.Size = new Vector2(
-                Math.Max(_tabControl.ContentArea.Size.X, editor.GetTotalWidth()), 
-                Math.Max(_tabControl.ContentArea.Size.Y, editor.GetTotalHeight())
-            );
+        tab.OnDirtyChanged = () => {
+            page.Title = tab.DisplayTitle;
+            page.TabButton.Text = page.Title;
+        };
 
-            editor.OnValueChanged += (val) => {
-                // ... (rest of editor.OnValueChanged logic)
-                UpdateEditorSizeAndAnalysis(editor, pageInfo);
-            };
-            
-            editor.OnCursorMoved += () => {
+        if (tab is EditorTab editorTab) {
+            var editor = editorTab.Editor;
+            editorTab.OnContentChanged = () => UpdateEditorSizeAndAnalysis(editor, pageInfo);
+            editorTab.OnSelectionChanged = () => {
                 if (_activePopup != null && _tabControl.SelectedPage == page) {
                     var caretPos = editor.GetCaretPosition();
                     if (caretPos != null) {
@@ -214,6 +240,7 @@ public class MainWindow : Window {
                 }
                 ShowSignatureHelp(pageInfo);
             };
+            editorTab.UpdateLayout();
         }
         
         _pages.Add(pageInfo);
@@ -338,9 +365,7 @@ public class MainWindow : Window {
 
     private void SaveActiveFile() {
         if (_tabControl.SelectedIndex >= 0 && _tabControl.SelectedIndex < _pages.Count) {
-            var active = _pages[_tabControl.SelectedIndex];
-            if (active.Editor != null) active.Editor.Save();
-            else if (active.Designer != null) active.Designer.Save();
+            _pages[_tabControl.SelectedIndex].Tab.Save();
         }
     }
 
@@ -359,11 +384,13 @@ public class MainWindow : Window {
 
     private void BuildProject() {
         if (string.IsNullOrEmpty(_projectPath)) return;
+        if (!_terminalVisible) ToggleTerminal();
         _terminal.Execute($"sappc \"{_projectPath}\"");
     }
  
     private void RunProject() {
         if (string.IsNullOrEmpty(_projectPath)) return;
+        if (!_terminalVisible) ToggleTerminal();
         _terminal.Execute($"sappc \"{_projectPath}\" -run");
     }
 

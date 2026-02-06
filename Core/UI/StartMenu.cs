@@ -147,7 +147,7 @@ public class StartMenu : Panel {
             BackgroundColor = Color.Transparent,
             HoverColor = new Color(255, 255, 255, 25),
             TextAlign = TextAlign.Left,
-            Padding = new Vector2(10, 0)
+            Padding = new Vector4(10, 0, 10, 0)
         };
         btn.OnClickAction = () => onClick(btn);
         _scrollPanel.AddChild(btn);

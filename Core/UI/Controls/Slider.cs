@@ -1,13 +1,20 @@
+using System;
+using System.ComponentModel;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TheGame.Core.Input;
 using TheGame.Graphics;
+using TheGame.Core.Designer;
 
 namespace TheGame.Core.UI.Controls;
 
 public class Slider : ValueControl<float> {
     private bool _isDraggingSlider;
     public bool IsDragging => _isDraggingSlider;
+
+    [Obsolete("For Designer/Serialization use only", error: true)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public Slider() : this(Vector2.Zero, 0) {}
 
     public Slider(Vector2 position, float width) : base(position, new Vector2(width, 20)) {
     }
@@ -27,6 +34,8 @@ public class Slider : ValueControl<float> {
     }
 
     protected override void UpdateInput() {
+        if (DesignMode.SuppressNormalInput(this)) return;
+
         if (IsMouseOver && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
             _isDraggingSlider = true;
             // First click on track - update value immediately so it starts sliding

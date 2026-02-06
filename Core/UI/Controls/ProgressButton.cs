@@ -41,14 +41,16 @@ public class ProgressButton : Button {
     }
 
     protected virtual void DrawContent(SpriteBatch spriteBatch, ShapeBatch batch, Vector2 drawPos, Vector2 size) {
-        float pX = Padding.X * Scale;
-        float pY = Padding.Y * Scale;
+        float pL = Padding.X * Scale;
+        float pT = Padding.Y * Scale;
+        float pR = Padding.Z * Scale;
+        float pB = Padding.W * Scale;
         float iconSize = 0f;
 
         // Draw Icon if present
         if (Icon != null) {
-            iconSize = size.Y - (pY * 2);
-            var iconPos = new Vector2(drawPos.X + pX, drawPos.Y + pY);
+            iconSize = size.Y - (pT + pB);
+            var iconPos = new Vector2(drawPos.X + pL, drawPos.Y + pT);
             float scale = iconSize / Icon.Width;
             batch.DrawTexture(Icon, iconPos, Color.White * AbsoluteOpacity, scale);
         }
@@ -58,8 +60,8 @@ public class ProgressButton : Button {
             var fontSystem = UseBoldFont ? GameContent.BoldFontSystem : GameContent.FontSystem;
             var font = fontSystem?.GetFont((int)(FontSize * Scale));
             if (font != null) {
-                float contentStartX = drawPos.X + pX + iconSize + (iconSize > 0 ? pX : 0);
-                float remainingWidth = size.X - (contentStartX - drawPos.X) - pX;
+                float contentStartX = drawPos.X + pL + iconSize + (iconSize > 0 ? pL : 0);
+                float remainingWidth = size.X - (contentStartX - drawPos.X) - pR;
 
                 if (remainingWidth > 5) {
                     // We only use the fancy scissored scrolling if hovered AND it's actually overflowing

@@ -4,6 +4,7 @@ using Microsoft.Xna.Framework.Graphics;
 using System.Collections.Generic;
 using TheGame.Core.Input;
 using TheGame.Graphics;
+using System.ComponentModel;
 
 namespace TheGame.Core.UI.Controls;
 
@@ -42,6 +43,10 @@ public class ScrollPanel : Panel {
     // Cached RasterizerStates to avoid per-frame allocations
     private static readonly RasterizerState _scissorRasterizer = new RasterizerState { ScissorTestEnable = true };
     private static readonly RasterizerState _noScissorRasterizer = new RasterizerState { ScissorTestEnable = false };
+
+    [Obsolete("For Designer/Serialization use only", error: true)]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public ScrollPanel() : this(Vector2.Zero, Vector2.Zero) { }
 
     public ScrollPanel(Vector2 position, Vector2 size) : base(position, size) {
         BackgroundColor = Color.Transparent;
