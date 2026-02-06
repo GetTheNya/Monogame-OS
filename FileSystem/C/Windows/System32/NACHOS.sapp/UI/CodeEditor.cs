@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.IO;
 using System.Linq;
 using TheGame.Core.OS;
@@ -15,7 +16,6 @@ namespace NACHOS;
 
 public class CodeEditor : TextArea {
     private Gutter _gutter;
-    private bool _isDirty = false;
     private string _filePath;
 
     private Stack<SnippetSession> _snippetSessions = new();
@@ -30,7 +30,7 @@ public class CodeEditor : TextArea {
         }
     }
 
-    public bool IsDirty => _isDirty;
+    public bool IsDirty => History?.IsDirty ?? false;
     public string FilePath => _filePath;
     public string FileName => string.IsNullOrEmpty(_filePath) ? "Untitled" : Path.GetFileName(_filePath);
     public bool IsFetchingCompletions { get; set; } = false;
@@ -67,7 +67,7 @@ public class CodeEditor : TextArea {
         
         if (!string.IsNullOrEmpty(_filePath) && VirtualFileSystem.Instance.Exists(_filePath)) {
             Value = VirtualFileSystem.Instance.ReadAllText(_filePath);
-            _isDirty = false;
+            History?.MarkAsSaved();
         }
 
         _charEnteredHandler = (c) => {
@@ -124,12 +124,6 @@ public class CodeEditor : TextArea {
 
         OnResize += UpdateLayout;
 
-        OnValueChanged += (val) => {
-            if (!_isDirty) {
-                _isDirty = true;
-                OnDirtyChanged?.Invoke();
-            }
-        };
     }
 
     private Action<char> _charEnteredHandler;
@@ -163,7 +157,7 @@ public class CodeEditor : TextArea {
     }
 
     protected override void OnEnterPressed() {
-        if (HasSelection()) DeleteSelection();
+        GetSelectionRange(out int sl, out int sc, out int el, out int ec);
         
         // Auto-indent: copy leading whitespace from current line
         string currentLine = _lines[_cursorLine];
@@ -174,16 +168,10 @@ public class CodeEditor : TextArea {
         }
 
         bool needsExtraIndent = currentLine.TrimEnd().EndsWith("{");
-
-        string remainder = _lines[_cursorLine].Substring(_cursorCol);
-        _lines[_cursorLine] = _lines[_cursorLine].Substring(0, _cursorCol);
-        
         string newIndent = indent + (needsExtraIndent ? "    " : "");
-        _lines.Insert(_cursorLine + 1, newIndent + remainder);
-        _cursorLine++;
-        _cursorCol = newIndent.Length;
-        ResetSelection();
-        NotifyUserChanged();
+        
+        string replacement = "\n" + newIndent;
+        History?.Execute(new ReplaceTextCommand(this, "Enter", sl, sc, el, ec, replacement));
     }
 
     public void SwapLineUp() {
@@ -191,19 +179,15 @@ public class CodeEditor : TextArea {
             GetSelectionRange(out int sl, out int sc, out int el, out int ec);
             if (sl > 0) {
                 string lineBefore = _lines[sl - 1];
-                _lines.RemoveAt(sl - 1);
-                _lines.Insert(el, lineBefore);
-                _cursorLine--;
-                _selStartLine--;
-                NotifyUserChanged();
+                string selectedBlock = InternalGetRange(sl, 0, el, _lines[el].Length);
+                string replacement = selectedBlock + "\n" + lineBefore;
+                History?.Execute(new ReplaceTextCommand(this, "Swap Line Up", sl - 1, 0, el, _lines[el].Length, replacement));
             }
         } else if (_cursorLine > 0) {
-            string current = _lines[_cursorLine];
-            _lines[_cursorLine] = _lines[_cursorLine - 1];
-            _lines[_cursorLine - 1] = current;
-            _cursorLine--;
-            ResetSelection();
-            NotifyUserChanged();
+            string lineBefore = _lines[_cursorLine - 1];
+            string currentLine = _lines[_cursorLine];
+            string replacement = currentLine + "\n" + lineBefore;
+            History?.Execute(new ReplaceTextCommand(this, "Swap Line Up", _cursorLine - 1, 0, _cursorLine, _lines[_cursorLine].Length, replacement));
         }
     }
 
@@ -212,128 +196,79 @@ public class CodeEditor : TextArea {
             GetSelectionRange(out int sl, out int sc, out int el, out int ec);
             if (el < _lines.Count - 1) {
                 string lineAfter = _lines[el + 1];
-                _lines.RemoveAt(el + 1);
-                _lines.Insert(sl, lineAfter);
-                _cursorLine++;
-                _selStartLine++;
-                NotifyUserChanged();
+                string selectedBlock = InternalGetRange(sl, 0, el, _lines[el].Length);
+                string replacement = lineAfter + "\n" + selectedBlock;
+                History?.Execute(new ReplaceTextCommand(this, "Swap Line Down", sl, 0, el + 1, _lines[el + 1].Length, replacement));
             }
         } else if (_cursorLine < _lines.Count - 1) {
             string current = _lines[_cursorLine];
-            _lines[_cursorLine] = _lines[_cursorLine + 1];
-            _lines[_cursorLine + 1] = current;
-            _cursorLine++;
-            ResetSelection();
-            NotifyUserChanged();
+            string lineAfter = _lines[_cursorLine + 1];
+            string replacement = lineAfter + "\n" + current;
+            History?.Execute(new ReplaceTextCommand(this, "Swap Line Down", _cursorLine, 0, _cursorLine + 1, _lines[_cursorLine + 1].Length, replacement));
         }
     }
 
     public void DuplicateCurrentLine() {
         if (HasSelection()) {
             GetSelectionRange(out int sl, out int sc, out int el, out int ec);
-            List<string> linesToDup = new();
-            for (int i = sl; i <= el; i++) linesToDup.Add(_lines[i]);
-            _lines.InsertRange(el + 1, linesToDup);
-            _cursorLine += linesToDup.Count;
-            _selStartLine += linesToDup.Count;
+            string block = InternalGetRange(sl, 0, el, _lines[el].Length);
+            History?.Execute(new ReplaceTextCommand(this, "Duplicate", el, _lines[el].Length, el, _lines[el].Length, "\n" + block));
         } else {
-            _lines.Insert(_cursorLine + 1, _lines[_cursorLine]);
-            _cursorLine++;
+            string line = _lines[_cursorLine];
+            History?.Execute(new ReplaceTextCommand(this, "Duplicate Line", _cursorLine, _lines[_cursorLine].Length, _cursorLine, _lines[_cursorLine].Length, "\n" + line));
         }
-        NotifyUserChanged();
     }
 
     public void ToggleComment() {
-        if (!HasSelection()) {
-            // Line based toggle for current line
-            string line = _lines[_cursorLine];
-            int indent = 0;
-            while (indent < line.Length && char.IsWhiteSpace(line[indent])) indent++;
+        GetSelectionRange(out int sl, out int sc, out int el, out int ec);
+        
+        // Block comment for partial line selection
+        if (sl == el && sc != ec && (sc != 0 || ec != _lines[sl].Length)) {
+            string line = _lines[sl];
+            string selectedText = line.Substring(sc, ec - sc);
             
-            string trimmed = line.TrimStart();
-            if (trimmed.StartsWith("// ")) {
-                _lines[_cursorLine] = line.Remove(line.IndexOf("// "), 3);
-                _cursorCol = Math.Max(indent, _cursorCol - 3);
-            } else if (trimmed.StartsWith("//")) {
-                _lines[_cursorLine] = line.Remove(line.IndexOf("//"), 2);
-                _cursorCol = Math.Max(indent, _cursorCol - 2);
+            if (selectedText.StartsWith("/*") && selectedText.EndsWith("*/")) {
+                string uncomented = selectedText.Substring(2, selectedText.Length - 4);
+                History?.Execute(new ReplaceTextCommand(this, "Uncomment", sl, sc, el, ec, uncomented));
             } else {
-                _lines[_cursorLine] = line.Insert(indent, "// ");
-                _cursorCol += 3;
+                string commented = "/*" + selectedText + "*/";
+                History?.Execute(new ReplaceTextCommand(this, "Comment", sl, sc, el, ec, commented));
             }
-            // Ensure no ghost selection remains
-            ResetSelection();
-        } else {
-            GetSelectionRange(out int sl, out int sc, out int el, out int ec);
-            
-            // Check if it's an "inline" selection (partial line)
-            bool isFullLineSelection = sc == 0 && ec == _lines[el].Length;
-            
-            if (!isFullLineSelection && sl == el) {
-                // Block comment for single-line partial selection
-                string line = _lines[sl];
-                string selectedText = line.Substring(sc, ec - sc);
-                
-                if (selectedText.StartsWith("/*") && selectedText.EndsWith("*/")) {
-                    // Uncomment
-                    _lines[sl] = line.Remove(ec - 2, 2).Remove(sc, 2);
-                    
-                    // Maintain selection on the content
-                    if (_cursorCol == ec) {
-                        _cursorCol -= 4;
-                        _selStartCol = sc;
-                    } else {
-                        _cursorCol = sc;
-                        _selStartCol = ec - 4;
-                    }
-                } else {
-                    // Comment
-                    _lines[sl] = line.Insert(ec, "*/").Insert(sc, "/*");
-                    
-                    // Maintain selection on the original content (now wrapped)
-                    if (_cursorCol == ec) {
-                        _cursorCol += 2;
-                        _selStartCol = sc + 2;
-                    } else {
-                        _cursorCol = sc + 2;
-                        _selStartCol = ec + 2;
-                    }
-                }
-            } else {
-                // Line based toggle for multiple lines
-                bool allCommented = true;
-                for (int i = sl; i <= el; i++) {
-                    string trimmed = _lines[i].TrimStart();
-                    if (!trimmed.StartsWith("//")) {
-                        allCommented = false;
-                        break;
-                    }
-                }
+            return;
+        }
 
-                for (int i = sl; i <= el; i++) {
-                    string line = _lines[i];
-                    if (allCommented) {
-                        int idx = line.IndexOf("//");
-                        int len = 2;
-                        if (line.Length > idx + 2 && line[idx + 2] == ' ') len = 3;
-                        _lines[i] = line.Remove(idx, len);
-                        
-                        if (i == _cursorLine) _cursorCol = Math.Max(0, _cursorCol - len);
-                        if (i == _selStartLine) _selStartCol = Math.Max(0, _selStartCol - len);
-                    } else {
-                        int indent = 0;
-                        while (indent < line.Length && char.IsWhiteSpace(line[indent])) indent++;
-                        _lines[i] = line.Insert(indent, "// ");
-                        
-                        // Shift cursor/selection start if they were after the insert point
-                        if (i == _cursorLine && _cursorCol >= indent) _cursorCol += 3;
-                        if (i == _selStartLine && _selStartCol >= indent) _selStartCol += 3;
-                    }
-                }
+        // Line-based toggle for single or multiple lines
+        bool allCommented = true;
+        for (int i = sl; i <= el; i++) {
+            if (string.IsNullOrWhiteSpace(_lines[i])) continue;
+            string trimmed = _lines[i].TrimStart();
+            if (!trimmed.StartsWith("//")) {
+                allCommented = false;
+                break;
             }
         }
 
-        NotifyUserChanged();
+        StringBuilder sb = new();
+        for (int i = sl; i <= el; i++) {
+            string line = _lines[i];
+            if (allCommented) {
+                int idx = line.IndexOf("//");
+                if (idx != -1) {
+                    int len = 2;
+                    if (line.Length > idx + 2 && line[idx + 2] == ' ') len = 3;
+                    sb.Append(line.Remove(idx, len));
+                } else {
+                    sb.Append(line);
+                }
+            } else {
+                int indent = 0;
+                while (indent < line.Length && char.IsWhiteSpace(line[indent])) indent++;
+                sb.Append(line.Insert(indent, "// "));
+            }
+            if (i < el) sb.Append("\n");
+        }
+
+        History?.Execute(new ReplaceTextCommand(this, "Toggle Comment", sl, 0, el, _lines[el].Length, sb.ToString()));
     }
 
     protected override void NotifyUserChanged() {
@@ -344,7 +279,7 @@ public class CodeEditor : TextArea {
     public void Save() {
         if (string.IsNullOrEmpty(_filePath)) return;
         VirtualFileSystem.Instance.WriteAllText(_filePath, Value);
-        _isDirty = false;
+        History?.MarkAsSaved();
         OnDirtyChanged?.Invoke();
     }
 
@@ -708,32 +643,22 @@ public class CodeEditor : TextArea {
 
     public void InsertText(string text) {
         if (string.IsNullOrEmpty(text)) return;
-        
-        if (HasSelection()) DeleteSelection();
-        
-        string lineContent = _lines[_cursorLine];
-        _lines[_cursorLine] = lineContent.Insert(_cursorCol, text);
-        _cursorCol += text.Length;
-        
-        ResetSelection();
-        NotifyUserChanged();
+        GetSelectionRange(out int sl, out int sc, out int el, out int ec);
+        History?.Execute(new ReplaceTextCommand(this, "Insert Text", sl, sc, el, ec, text));
     }
 
     public void ReplaceCurrentWord(string newWord) {
-        if (HasSelection()) DeleteSelection();
-
-        string currentLine = _lines[_cursorLine];
-        int start = _cursorCol;
-        while (start > 0 && (char.IsLetterOrDigit(currentLine[start - 1]) || currentLine[start - 1] == '_')) start--;
+        GetSelectionRange(out int sl, out int sc, out int el, out int ec);
         
-        // Remove old word part
-        _lines[_cursorLine] = currentLine.Remove(start, _cursorCol - start);
-        _cursorCol = start;
-        ResetSelection(); // Reset selection to avoid eating following characters (like brackets)
+        // If no selection, find the start of the current word
+        if (sl == el && sc == ec) {
+            string currentLine = _lines[_cursorLine];
+            int start = _cursorCol;
+            while (start > 0 && (char.IsLetterOrDigit(currentLine[start - 1]) || currentLine[start - 1] == '_')) start--;
+            sc = start;
+        }
 
-        // Insert new word
-        InsertText(newWord);
-        ResetSelection();
+        History?.Execute(new ReplaceTextCommand(this, "Completion", sl, sc, el, ec, newWord));
     }
 
     public override void Update(GameTime gameTime) {
@@ -758,13 +683,12 @@ public class CodeEditor : TextArea {
             if (isHungry || isPair) {
                 if (InputManager.IsKeyRepeated(Keys.Back)) {
                     if (isHungry) {
-                        _lines[_cursorLine] = line.Remove(_cursorCol - 4, 4);
-                        _cursorCol -= 4;
+                        string deleted = line.Substring(_cursorCol - 4, 4);
+                        History?.Execute(new DeleteTextCommand(this, _cursorLine, _cursorCol - 4, deleted, true));
                     } else {
-                        _lines[_cursorLine] = line.Remove(_cursorCol - 1, 2);
-                        _cursorCol--;
+                        // Deleting a pair like (), {}, etc.
+                        History?.Execute(new ReplaceTextCommand(this, "Backspace", _cursorLine, _cursorCol - 1, _cursorLine, _cursorCol + 1, ""));
                     }
-                    NotifyUserChanged();
                     InputManager.IsKeyboardConsumed = true; // Block base backspace
                 }
             }
@@ -816,10 +740,19 @@ public class CodeEditor : TextArea {
         }
 
         if (_pendingAutoClose != '\0') {
-            string line = _lines[_cursorLine];
-            _lines[_cursorLine] = line.Insert(_cursorCol, _pendingAutoClose.ToString());
+            char closeChar = _pendingAutoClose;
             _pendingAutoClose = '\0';
-            NotifyUserChanged();
+            
+            int line = _cursorLine;
+            int col = _cursorCol;
+            
+            History?.Execute(new InsertTextCommand(this, closeChar.ToString(), line, col));
+            
+            // Move cursor back inside the brackets
+            _cursorLine = line;
+            _cursorCol = col;
+            ResetSelection();
+            EnsureCursorVisible();
         }
     }
 
@@ -839,25 +772,26 @@ public class CodeEditor : TextArea {
     }
 
     public void InsertSnippet(SnippetItem snippet) {
-        if (HasSelection()) DeleteSelection();
+        GetSelectionRange(out int sl, out int sc, out int el, out int ec);
+        
+        // If no selection, replace the word before cursor (trigger word)
+        if (sl == el && sc == ec) {
+            string line = _lines[_cursorLine];
+            int wordStart = _cursorCol;
+            while (wordStart > 0 && (char.IsLetterOrDigit(line[wordStart - 1]) || line[wordStart - 1] == '_')) wordStart--;
+            sc = wordStart;
+        }
 
-        string line = _lines[_cursorLine];
+        // We'll replace the range [sl, sc] to [el, ec] with the snippet body.
+        int startLine = sl;
+        int startCol = sc;
+
+        string currentLine = _lines[startLine];
         string indent = "";
-        for (int i = 0; i < _cursorCol && i < line.Length && char.IsWhiteSpace(line[i]); i++) indent += line[i];
-
-        // Replace current word if any (for example if user typed 'cw' then selected the snippet)
-        int wordStart = _cursorCol;
-        while (wordStart > 0 && (char.IsLetterOrDigit(line[wordStart - 1]) || line[wordStart - 1] == '_')) wordStart--;
-        
-        string prefix = line.Substring(0, wordStart);
-        string suffix = line.Substring(_cursorCol);
-        
-        _lines[_cursorLine] = prefix;
-        _cursorCol = prefix.Length;
-        int startCol = _cursorCol;
+        for (int i = 0; i < currentLine.Length && char.IsWhiteSpace(currentLine[i]); i++) indent += currentLine[i];
 
         string body = snippet.Body;
-        body = body.Replace("$CLASSNAME$", CodeEditorHelper.GetEnclosingClassName(_lines, FileName, _cursorLine));
+        body = body.Replace("$CLASSNAME$", CodeEditorHelper.GetEnclosingClassName(_lines, FileName, startLine));
         body = body.Replace("$NAMESPACE$", CodeEditorHelper.GetNamespace(_lines));
 
         // Parse placeholders ${1:default}, $0 etc
@@ -865,9 +799,8 @@ public class CodeEditor : TextArea {
         var regex = new System.Text.RegularExpressions.Regex(@"\${(\d+)(?::([^}]+))?}|\$(\d+)");
         
         var snippetLines = body.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
-        int startLine = _cursorLine;
-
         var processedSnippetLines = new List<string>();
+
         for (int i = 0; i < snippetLines.Length; i++) {
             string currentSnippetLine = snippetLines[i];
             string processedLine = "";
@@ -902,45 +835,18 @@ public class CodeEditor : TextArea {
             processedSnippetLines.Add(processedLine);
         }
 
-        // Apply lines back to editor
-        _lines[_cursorLine] = prefix + processedSnippetLines[0];
-        if (snippetLines.Length == 1) {
-            _lines[_cursorLine] += suffix;
-        } else {
-            var intermediate = new List<string>();
-            for (int i = 1; i < processedSnippetLines.Count - 1; i++) {
-                intermediate.Add(indent + processedSnippetLines[i]);
-            }
-            // Last line gets the suffix
-            intermediate.Add(indent + processedSnippetLines.Last() + suffix);
-            
-            _lines.InsertRange(_cursorLine + 1, intermediate);
-
-            // Notify existing sessions about the new lines and column shifts
-            if (intermediate.Count > 0) {
-                int lastLinePrefixLen = indent.Length + processedSnippetLines.Last().Length;
-                int colShift = lastLinePrefixLen - startCol;
-
-                foreach (var session in _snippetSessions.ToList()) {
-                    // UpdateMarkers handles line shift, but we need to manually adjust columns 
-                    // for markers that moved to the new line (the suffix part)
-                    foreach (var m in session.MarkersInternal) {
-                        if (m.Line == startLine && m.StartCol >= startCol) {
-                            m.StartCol += colShift;
-                            m.EndCol += colShift;
-                        }
-                    }
-                    session.UpdateMarkers(startLine, startCol, 0, intermediate.Count);
-                }
-            }
+        // Build the final replacement text
+        StringBuilder replacement = new StringBuilder();
+        for (int i = 0; i < processedSnippetLines.Count; i++) {
+            if (i > 0) replacement.Append("\n" + indent);
+            replacement.Append(processedSnippetLines[i]);
         }
+
+        // Execute as a single replacement command
+        History?.Execute(new ReplaceTextCommand(this, "Insert Snippet", sl, sc, el, ec, replacement.ToString()));
 
         if (markers.Count > 0) {
             ActiveSnippetSession = new SnippetSession(this, markers);
-        } else {
-            // Just move cursor to end of snippet
-            _cursorLine = startLine + snippetLines.Length - 1;
-            _cursorCol = (snippetLines.Length == 1 ? startCol + processedSnippetLines[0].Length : indent.Length + processedSnippetLines.Last().Length);
         }
 
         NotifyUserChanged();

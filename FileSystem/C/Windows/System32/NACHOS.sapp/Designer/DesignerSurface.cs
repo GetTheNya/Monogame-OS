@@ -13,13 +13,15 @@ using TheGame.Core.UI.Controls;
 using TheGame.Core.Designer;
 
 namespace NACHOS.Designer;
+using TheGame.Core.OS.History;
 
-public class DesignerSurface : UIElement, IDesignerContext {
+public class DesignerSurface : UIElement, IDesignerContext, IDropTarget {
     public UIElement ContentLayer { get; }
     public UIElement AdornerLayer { get; }
     
     public UIElement SelectedElement { get; private set; }
     public DesignerAdorner ActiveAdorner { get; private set; }
+    public CommandHistory History { get; set; }
     
     // Interaction state
     private bool _isDragging;
@@ -31,6 +33,7 @@ public class DesignerSurface : UIElement, IDesignerContext {
     
     public event System.Action<UIElement> OnSelectionChanged;
     public event System.Action<UIElement> OnElementModified;
+    public event System.Func<object, Vector2, bool> OnDropReceived;
 
     public DesignerSurface(Vector2 position, Vector2 size) : base(position, size) {
         ConsumesInput = true;
@@ -120,6 +123,7 @@ public class DesignerSurface : UIElement, IDesignerContext {
                 _activeHandle = ActiveAdorner.GetHandleAt(mousePos);
                 if (_activeHandle != null) {
                     DebugLogger.Log($"Designer: Resizing STARTED. Handle: {_activeHandle.Position}, Mouse: {mousePos}");
+                    History?.BeginTransaction($"Resize {SelectedElement.GetType().Name}");
                     _isResizing = true;
                     _dragStartMouse = mousePos;
                     _resizeStartSize = SelectedElement.Size;
@@ -135,6 +139,7 @@ public class DesignerSurface : UIElement, IDesignerContext {
                 if (SelectedElement is DesignerWindow) {
                     InputManager.IsMouseConsumed = true;
                 } else {
+                    History?.BeginTransaction($"Move {SelectedElement.GetType().Name}");
                     _isDragging = true;
                     _dragStartMouse = mousePos;
                     _dragStartPosition = SelectedElement.Position;
@@ -150,7 +155,23 @@ public class DesignerSurface : UIElement, IDesignerContext {
                 InputManager.IsMouseConsumed = true;
             }
         }
+
+        if (Shell.Drag.IsActive && IsMouseOver) {
+            Shell.Drag.CheckDropTarget(this, mousePos);
+            if (InputManager.IsMouseButtonJustReleased(MouseButton.Left)) {
+                Shell.Drag.TryDropOn(this, mousePos);
+            }
+        }
     }
+
+    // IDropTarget
+    public bool CanAcceptDrop(object dragData) => dragData is ControlTypeDragData;
+    public DragDropEffect OnDragOver(object dragData, Vector2 position) => DragDropEffect.Copy;
+    public void OnDragLeave() { }
+    public bool OnDrop(object dragData, Vector2 position) {
+        return OnDropReceived?.Invoke(dragData, position) ?? false;
+    }
+    public Rectangle GetDropBounds() => Bounds;
 
     public void SelectElement(UIElement element) {
         if (SelectedElement == element) return;
@@ -180,6 +201,17 @@ public class DesignerSurface : UIElement, IDesignerContext {
         if (!isDown) {
             _isDragging = false;
             DebugLogger.Log($"Designer: Dragging ENDED at {SelectedElement.Position}");
+            
+            // Revert temporarily to get the initial state for the command
+            var finalPos = SelectedElement.Position;
+            if (finalPos != _dragStartPosition) {
+                SelectedElement.Position = _dragStartPosition;
+                History?.AddOrExecute(new SetPropertyCommand(SelectedElement, "Position", finalPos));
+                History?.EndTransaction();
+            } else {
+                History?.EndTransaction(); // Cancel if no move
+            }
+
             OnElementModified?.Invoke(SelectedElement);
             return;
         }
@@ -207,6 +239,24 @@ public class DesignerSurface : UIElement, IDesignerContext {
             _isResizing = false;
             _activeHandle = null;
             DebugLogger.Log($"Designer: Resizing ENDED. New Size: {SelectedElement.Size}");
+
+            var finalSize = SelectedElement.Size;
+            var finalPos = SelectedElement.Position;
+            
+            if (finalSize != _resizeStartSize || finalPos != _dragStartPosition) {
+                 // Resizing might change both pos and size if dragging top/left
+                 SelectedElement.Size = _resizeStartSize;
+                 SelectedElement.Position = _dragStartPosition;
+                 
+                 History?.AddOrExecute(new SetPropertyCommand(SelectedElement, "Size", finalSize));
+                 if (finalPos != _dragStartPosition) {
+                     History?.AddOrExecute(new SetPropertyCommand(SelectedElement, "Position", finalPos));
+                 }
+                 History?.EndTransaction();
+            } else {
+                 History?.EndTransaction();
+            }
+
             OnElementModified?.Invoke(SelectedElement);
             return;
         }

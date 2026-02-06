@@ -71,10 +71,11 @@ public static class ProjectGenerator {
             }
         }
 
+        // Initialize metadata manager (creates .nachos folder)
+        ProjectMetadataManager.Initialize(vProjectPath);
+
         // Create .nproj file
-        string vNprojPath = Path.Combine(vProjectPath, settings.Name + ".nproj");
-        string json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
-        VirtualFileSystem.Instance.WriteAllText(vNprojPath, json);
+        ProjectMetadataManager.SaveProjectFile(settings);
 
         return vProjectPath;
     }

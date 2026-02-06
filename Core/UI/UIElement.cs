@@ -207,6 +207,8 @@ public abstract class UIElement : IContextMenuProvider {
     public virtual void Copy() { }
     public virtual void Cut() { }
     public virtual void Paste() { }
+    public virtual void Undo() => Parent?.Undo();
+    public virtual void Redo() => Parent?.Redo();
     public virtual void DeleteSelection() { }
     public virtual bool HasSelection() => false;
     

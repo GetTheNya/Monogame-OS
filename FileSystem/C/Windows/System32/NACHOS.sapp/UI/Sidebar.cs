@@ -41,7 +41,9 @@ public class Sidebar : ScrollPanel, IDropTarget {
         ClearChildren();
         _rootNodes.Clear();
         
-        var dirs = VirtualFileSystem.Instance.GetDirectories(_rootPath).OrderBy(d => d);
+        var dirs = VirtualFileSystem.Instance.GetDirectories(_rootPath)
+            .Where(d => !Path.GetFileName(d).StartsWith("."))
+            .OrderBy(d => d);
         var files = VirtualFileSystem.Instance.GetFiles(_rootPath)
             .Where(f => !f.EndsWith(".nproj", StringComparison.OrdinalIgnoreCase))
             .OrderBy(f => f);

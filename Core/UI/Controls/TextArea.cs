@@ -10,6 +10,7 @@ using TheGame.Core.OS;
 using TheGame.Graphics;
 using System.ComponentModel;
 using TheGame.Core.Designer;
+using TheGame.Core.OS.History;
 
 namespace TheGame.Core.UI.Controls;
 
@@ -47,12 +48,22 @@ public class TextArea : ValueControl<string> {
     public bool UseInternalScrolling { get; set; } = true;
     public Action OnCursorMoved;
     protected bool _isWordSelecting = false;
+    public int CursorLine => _cursorLine;
+    public int CursorCol => _cursorCol;
+    public int SelStartLine => _selStartLine;
+    public int SelStartCol => _selStartCol;
     protected int _wordSelectAnchorStartLine = 0;
     protected int _wordSelectAnchorStartCol = 0;
     protected int _wordSelectAnchorEndLine = 0;
     protected int _wordSelectAnchorEndCol = 0;
     protected float _cachedMaxWidth = 0f;
     protected bool _maxWidthDirty = true;
+    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
+    public CommandHistory History { get; set; } = new();
+    
+    protected int _notifySkipCount = 0;
+    protected bool _needsNotify = false;
+    
     protected static readonly RasterizerState _scissorRasterizer = new RasterizerState { ScissorTestEnable = true, CullMode = CullMode.None };
 
     [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
@@ -60,21 +71,29 @@ public class TextArea : ValueControl<string> {
 
     protected virtual bool CanEditAt(int line, int col) => true;
     protected virtual void OnEnterPressed() {
-        if (HasSelection()) DeleteSelection();
-        string remainder = _lines[_cursorLine].Substring(_cursorCol);
-        _lines[_cursorLine] = _lines[_cursorLine].Substring(0, _cursorCol);
-        _lines.Insert(_cursorLine + 1, remainder);
-        _cursorLine++;
-        _cursorCol = 0;
-        ResetSelection();
-        NotifyUserChanged();
+        if (History != null) {
+            History.Execute(new ReplaceTextCommand(this, "New Line", _selStartLine, _selStartCol, _cursorLine, _cursorCol, "\n"));
+        } else {
+            if (HasSelection()) DeleteSelection();
+            string remainder = _lines[_cursorLine].Substring(_cursorCol);
+            _lines[_cursorLine] = _lines[_cursorLine].Substring(0, _cursorCol);
+            _lines.Insert(_cursorLine + 1, remainder);
+            _cursorLine++;
+            _cursorCol = 0;
+            ResetSelection();
+            NotifyUserChanged();
+        }
     }
     protected virtual void OnTabPressed() {
-        if (HasSelection()) DeleteSelection();
-        _lines[_cursorLine] = _lines[_cursorLine].Insert(_cursorCol, "    ");
-        _cursorCol += 4;
-        ResetSelection();
-        NotifyUserChanged();
+        if (History != null) {
+             History.Execute(new ReplaceTextCommand(this, "Tab", _selStartLine, _selStartCol, _cursorLine, _cursorCol, "    "));
+        } else {
+            if (HasSelection()) DeleteSelection();
+            _lines[_cursorLine] = _lines[_cursorLine].Insert(_cursorCol, "    ");
+            _cursorCol += 4;
+            ResetSelection();
+            NotifyUserChanged();
+        }
     }
 
     public override void SetValue(string value, bool notify = true) {
@@ -94,7 +113,12 @@ public class TextArea : ValueControl<string> {
     }
 
     protected virtual void NotifyUserChanged() {
+        if (_notifySkipCount > 0) {
+            _needsNotify = true;
+            return;
+        }
         _maxWidthDirty = true;
+        _needsNotify = false;
         UpdateVisualLines();
         base.SetValue(string.Join("\n", _lines), true);
         EnsureCursorVisible();
@@ -183,6 +207,18 @@ public class TextArea : ValueControl<string> {
     protected override void UpdateInput() {
         if (DesignMode.SuppressNormalInput(this)) return;
 
+        _notifySkipCount++;
+        try {
+            InternalUpdateInput();
+        } finally {
+            _notifySkipCount--;
+            if (_notifySkipCount == 0 && _needsNotify) {
+                NotifyUserChanged();
+            }
+        }
+    }
+
+    private void InternalUpdateInput() {
         base.UpdateInput();
 
         if (InputManager.IsAnyMouseButtonJustPressed(MouseButton.Left)) {
@@ -276,22 +312,16 @@ public class TextArea : ValueControl<string> {
             // Backspace
             if (InputManager.IsKeyRepeated(Keys.Back)) {
                 if (HasSelection()) {
-                    DeleteSelection();
+                    GetSelectionRange(out int sl, out int sc, out int el, out int ec);
+                    History?.Execute(new ReplaceTextCommand(this, "Backspace", sl, sc, el, ec, ""));
                 } else if (_cursorCol > 0) {
                     if (CanEditAt(_cursorLine, _cursorCol - 1)) {
-                        _lines[_cursorLine] = _lines[_cursorLine].Remove(_cursorCol - 1, 1);
-                        _cursorCol--;
-                        ResetSelection();
-                        NotifyUserChanged();
+                        string text = _lines[_cursorLine].Substring(_cursorCol - 1, 1);
+                        History?.Execute(new DeleteTextCommand(this, _cursorLine, _cursorCol - 1, text, true));
                     }
                 } else if (_cursorLine > 0) {
                     if (CanEditAt(_cursorLine - 1, _lines[_cursorLine - 1].Length)) {
-                        _cursorCol = _lines[_cursorLine - 1].Length;
-                        _lines[_cursorLine - 1] += _lines[_cursorLine];
-                        _lines.RemoveAt(_cursorLine);
-                        _cursorLine--;
-                        ResetSelection();
-                        NotifyUserChanged();
+                        History?.Execute(new DeleteTextCommand(this, _cursorLine - 1, _lines[_cursorLine - 1].Length, "\n", true));
                     }
                 }
             }
@@ -299,17 +329,16 @@ public class TextArea : ValueControl<string> {
             // Delete
             if (InputManager.IsKeyRepeated(Keys.Delete)) {
                 if (HasSelection()) {
-                    DeleteSelection();
+                    GetSelectionRange(out int sl, out int sc, out int el, out int ec);
+                    History?.Execute(new ReplaceTextCommand(this, "Delete", sl, sc, el, ec, ""));
                 } else if (_cursorCol < _lines[_cursorLine].Length) {
                     if (CanEditAt(_cursorLine, _cursorCol)) {
-                        _lines[_cursorLine] = _lines[_cursorLine].Remove(_cursorCol, 1);
-                        NotifyUserChanged();
+                        string text = _lines[_cursorLine].Substring(_cursorCol, 1);
+                        History?.Execute(new DeleteTextCommand(this, _cursorLine, _cursorCol, text, false));
                     }
                 } else if (_cursorLine < _lines.Count - 1) {
                     if (CanEditAt(_cursorLine, _cursorCol)) {
-                        _lines[_cursorLine] += _lines[_cursorLine + 1];
-                        _lines.RemoveAt(_cursorLine + 1);
-                        NotifyUserChanged();
+                        History?.Execute(new DeleteTextCommand(this, _cursorLine, _lines[_cursorLine].Length, "\n", false));
                     }
                 }
             }
@@ -324,16 +353,24 @@ public class TextArea : ValueControl<string> {
                 OnTabPressed();
             }
 
-            // Character input
+            string typingBatch = "";
             foreach (var c in InputManager.GetTypedChars()) {
                 if (char.IsControl(c)) continue;
                 if (CanEditAt(_cursorLine, _cursorCol)) {
-                    if (HasSelection()) DeleteSelection();
-                    _lines[_cursorLine] = _lines[_cursorLine].Insert(_cursorCol, c.ToString());
-                    _cursorCol++;
-                    ResetSelection();
-                    NotifyUserChanged();
+                    if (HasSelection()) {
+                        if (typingBatch.Length > 0) {
+                            History?.Execute(new InsertTextCommand(this, typingBatch, _cursorLine, _cursorCol));
+                            typingBatch = "";
+                        }
+                        GetSelectionRange(out int sl, out int sc, out int el, out int ec);
+                        History?.Execute(new ReplaceTextCommand(this, "Typing", sl, sc, el, ec, c.ToString()));
+                    } else {
+                        typingBatch += c;
+                    }
                 }
+            }
+            if (typingBatch.Length > 0) {
+                History?.Execute(new InsertTextCommand(this, typingBatch, _cursorLine, _cursorCol));
             }
 
             InputManager.IsKeyboardConsumed = true;
@@ -433,6 +470,101 @@ public class TextArea : ValueControl<string> {
         ClipboardManager.Instance.SetData(sb.ToString(), ClipboardContentType.Text, appId);
     }
 
+    public void SetCursorAndSelection(int cursorLine, int cursorCol, int selLine, int selCol) {
+        _cursorLine = Math.Clamp(cursorLine, 0, _lines.Count - 1);
+        _cursorCol = Math.Clamp(cursorCol, 0, _lines[_cursorLine].Length);
+        _selStartLine = Math.Clamp(selLine, 0, _lines.Count - 1);
+        _selStartCol = Math.Clamp(selCol, 0, _lines[_selStartLine].Length);
+        EnsureCursorVisible();
+        NotifyUserChanged();
+    }
+
+    internal void InternalInsertText(int line, int col, string text) {
+        if (string.IsNullOrEmpty(text)) return;
+        string[] newLines = text.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
+        
+        string currentLine = _lines[line];
+        string before = currentLine.Substring(0, col);
+        string after = currentLine.Substring(col);
+
+        if (newLines.Length == 1) {
+            _lines[line] = before + newLines[0] + after;
+            _cursorLine = line;
+            _cursorCol = col + newLines[0].Length;
+        } else {
+            _lines[line] = before + newLines[0];
+            for (int i = 1; i < newLines.Length - 1; i++) {
+                _lines.Insert(line + i, newLines[i]);
+            }
+            _lines.Insert(line + newLines.Length - 1, newLines[^1] + after);
+            _cursorLine = line + newLines.Length - 1;
+            _cursorCol = newLines[^1].Length;
+        }
+        ResetSelection();
+        NotifyUserChanged();
+    }
+
+    internal void InternalDeleteRange(int sl, int sc, int el, int ec) {
+        if (sl == el) {
+            _lines[sl] = _lines[sl].Remove(sc, ec - sc);
+        } else {
+            string before = _lines[sl].Substring(0, sc);
+            string after = _lines[el].Substring(ec);
+            _lines[sl] = before + after;
+            _lines.RemoveRange(sl + 1, el - sl);
+        }
+        _cursorLine = sl;
+        _cursorCol = sc;
+        ResetSelection();
+        NotifyUserChanged();
+    }
+
+    internal void InternalDeleteRange(int line, int col, int count) {
+        // Find end position for count characters
+        int el = line;
+        int ec = col;
+        int remaining = count;
+        while (remaining > 0 && el < _lines.Count) {
+            int lineLeft = _lines[el].Length - ec;
+            if (remaining <= lineLeft) {
+                ec += remaining;
+                remaining = 0;
+            } else {
+                remaining -= (lineLeft + 1); // +1 for newline
+                el++;
+                ec = 0;
+            }
+        }
+        InternalDeleteRange(line, col, el, ec);
+    }
+
+    public string InternalGetRange(int sl, int sc, int el, int ec) {
+        StringBuilder sb = new();
+        for (int i = sl; i <= el; i++) {
+            int start = (i == sl) ? sc : 0;
+            int end = (i == el) ? ec : _lines[i].Length;
+            sb.Append(_lines[i].Substring(start, end - start));
+            if (i < el) sb.Append("\n");
+        }
+        return sb.ToString();
+    }
+
+    internal void InternalReplaceRange(int sl, int sc, int el, int ec, string newText) {
+        InternalDeleteRange(sl, sc, el, ec);
+        InternalInsertText(sl, sc, newText);
+    }
+
+    internal void InternalGetPositionAfter(int sl, int sc, string text, out int el, out int ec) {
+        string[] lines = text.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
+        if (lines.Length == 1) {
+            el = sl;
+            ec = sc + lines[0].Length;
+        } else {
+            el = sl + lines.Length - 1;
+            ec = lines[^1].Length;
+        }
+    }
+
     public override void Cut() {
         if (!HasSelection()) return;
         Copy();
@@ -442,30 +574,13 @@ public class TextArea : ValueControl<string> {
     public override void Paste() {
         string text = Shell.Clipboard.GetText();
         if (string.IsNullOrEmpty(text)) return;
-
-        if (HasSelection()) DeleteSelection();
-
-        string[] newLines = text.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
-        string currentLine = _lines[_cursorLine];
-        string before = currentLine.Substring(0, _cursorCol);
-        string after = currentLine.Substring(_cursorCol);
-
-        if (newLines.Length == 1) {
-            _lines[_cursorLine] = before + newLines[0] + after;
-            _cursorCol += newLines[0].Length;
-        } else {
-            _lines[_cursorLine] = before + newLines[0];
-            for (int i = 1; i < newLines.Length - 1; i++) {
-                _lines.Insert(_cursorLine + i, newLines[i]);
-            }
-            _lines.Insert(_cursorLine + newLines.Length - 1, newLines[^1] + after);
-            _cursorLine += newLines.Length - 1;
-            _cursorCol = newLines[^1].Length;
-        }
-
-        ResetSelection();
-        NotifyUserChanged();
+        
+        GetSelectionRange(out int sl, out int sc, out int el, out int ec);
+        History?.Execute(new ReplaceTextCommand(this, "Paste", sl, sc, el, ec, text));
     }
+
+    public override void Undo() => History?.Undo();
+    public override void Redo() => History?.Redo();
 
     private void SelectWordAtCursor() {
         string line = _lines[_cursorLine];

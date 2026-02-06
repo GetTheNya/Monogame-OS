@@ -85,6 +85,11 @@ public class MainWindow : Window {
         fileMenu.AddItem("Save", SaveActiveFile, "Ctrl+S");
         fileMenu.AddItem("Exit", Close, "Alt+F4");
         _menuBar.AddMenu(fileMenu);
+ 
+        var editMenu = new Menu("Edit");
+        editMenu.AddItem("Undo", () => GetActiveTab()?.History?.Undo(), "Ctrl+Z");
+        editMenu.AddItem("Redo", () => GetActiveTab()?.History?.Redo(), "Ctrl+Y");
+        _menuBar.AddMenu(editMenu);
 
         var viewMenu = new Menu("View");
         viewMenu.AddItem("Project explorer", ToggleSidebar);
@@ -104,6 +109,8 @@ public class MainWindow : Window {
         Shell.Hotkeys.RegisterLocal(OwnerProcess, "Ctrl+D", () => GetActiveEditor()?.DuplicateCurrentLine());
         Shell.Hotkeys.RegisterLocal(OwnerProcess, "Shift+Alt+Down", () => GetActiveEditor()?.DuplicateCurrentLine());
         Shell.Hotkeys.RegisterLocal(OwnerProcess, "Ctrl+/", () => GetActiveEditor()?.ToggleComment());
+        
+        Shell.Hotkeys.RegisterLocal(OwnerProcess, "Ctrl+Shift+Z", () => GetActiveTab()?.History?.Redo());
 
         AddChild(_menuBar);
 
@@ -358,8 +365,11 @@ public class MainWindow : Window {
             if (_terminal != null) _terminal.Execute($"cd \"{path}\""); // Use command to update prompt folder correctly
             AddToRecent(path);
             
+            // Initialize metadata manager
+            ProjectMetadataManager.Initialize(path);
+            
             // Initialize usage tracker for this project
-            UsageTracker.Initialize(path);
+            UsageTracker.Initialize();
         }
     }
 
@@ -477,68 +487,72 @@ public class MainWindow : Window {
                             
                             var popup = new CompletionPopup(popupPos, items, (item) => {
                                 _isCompleting = true;
-                                 if (item.Kind == "M") {
-                                    // ... existing method logic ...
-                                    string line = page.Editor.Lines[page.Editor.CursorLine];
-                                    int col = page.Editor.CursorCol;
-                                    
-                                    // Heuristic: check if inside an expression (unmatched opening paren before cursor)
-                                    int parens = 0;
-                                    for (int i = 0; i < col; i++) {
-                                        if (line[i] == '(') parens++;
-                                        else if (line[i] == ')') parens--;
-                                    }
-                                    bool inExpression = parens > 0;
-
-                                    // Check if followed by ( or ;
-                                    bool hasParenAfter = false;
-                                    bool hasSemicolonAfter = false;
-                                    for (int i = col; i < line.Length; i++) {
-                                        if (char.IsWhiteSpace(line[i])) continue;
-                                        if (line[i] == '(') hasParenAfter = true;
-                                        if (line[i] == ';') hasSemicolonAfter = true;
-                                        break;
-                                    }
-
-                                    string suffix = "";
-                                    int back = 0;
-                                    if (!hasParenAfter) {
-                                        suffix += "()";
-                                        back = 1;
-                                    }
-                                    if (!inExpression && !hasSemicolonAfter) {
-                                        suffix += ";";
-                                        if (back > 0) back++;
-                                    }
-
-                                    page.Editor.ReplaceCurrentWord(item.Label + suffix);
-                                    if (back > 0) page.Editor.MoveCursor(-back, 0, false);
-                                 } else if (item.Kind == "SN") {
-                                    var snippet = SnippetManager.GetSnippets().FirstOrDefault(s => s.Shortcut == item.Label);
-                                    if (snippet != null) {
-                                        page.Editor.InsertSnippet(snippet);
-                                    }
-                                } else {
-                                    // Handle generic types (e.g. List -> List<>)
-                                    bool isGeneric = (item.Kind == "C" || item.Kind == "S" || item.Kind == "I" || item.Kind == "D") && 
-                                                     (item.Detail.Contains("<") || item.Detail.Contains(">"));
-                                    
-                                    if (isGeneric) {
-                                        page.Editor.ReplaceCurrentWord(item.Label + "<>");
-                                        page.Editor.MoveCursor(-1, 0, false);
+                                page.Editor.History?.BeginTransaction("Completion: " + item.Label);
+                                try {
+                                     if (item.Kind == "M") {
+                                        // Heuristic: check if inside an expression (unmatched opening paren before cursor)
+                                        string line = page.Editor.Lines[page.Editor.CursorLine];
+                                        int col = page.Editor.CursorCol;
+                                        
+                                        int parens = 0;
+                                        for (int i = 0; i < col; i++) {
+                                            if (line[i] == '(') parens++;
+                                            else if (line[i] == ')') parens--;
+                                        }
+                                        bool inExpression = parens > 0;
+    
+                                        // Check if followed by ( or ;
+                                        bool hasParenAfter = false;
+                                        bool hasSemicolonAfter = false;
+                                        for (int i = col; i < line.Length; i++) {
+                                            if (char.IsWhiteSpace(line[i])) continue;
+                                            if (line[i] == '(') hasParenAfter = true;
+                                            if (line[i] == ';') hasSemicolonAfter = true;
+                                            break;
+                                        }
+    
+                                        string suffix = "";
+                                        int back = 0;
+                                        if (!hasParenAfter) {
+                                            suffix += "()";
+                                            back = 1;
+                                        }
+                                        if (!inExpression && !hasSemicolonAfter) {
+                                            suffix += ";";
+                                            if (back > 0) back++;
+                                        }
+    
+                                        page.Editor.ReplaceCurrentWord(item.Label + suffix);
+                                        if (back > 0) page.Editor.MoveCursor(-back, 0, false);
+                                     } else if (item.Kind == "SN") {
+                                        var snippet = SnippetManager.GetSnippets().FirstOrDefault(s => s.Shortcut == item.Label);
+                                        if (snippet != null) {
+                                            page.Editor.InsertSnippet(snippet);
+                                        }
                                     } else {
-                                        page.Editor.ReplaceCurrentWord(item.Label); 
+                                        // Handle generic types (e.g. List -> List<>)
+                                        bool isGeneric = (item.Kind == "C" || item.Kind == "S" || item.Kind == "I" || item.Kind == "D") && 
+                                                         (item.Detail.Contains("<") || item.Detail.Contains(">"));
+                                        
+                                        if (isGeneric) {
+                                            page.Editor.ReplaceCurrentWord(item.Label + "<>");
+                                            page.Editor.MoveCursor(-1, 0, false);
+                                        } else {
+                                            page.Editor.ReplaceCurrentWord(item.Label); 
+                                        }
                                     }
+                                    
+                                    // Immediate update for color/diagnostics
+                                    QueueAnalysis(page);
+    
+                                     if (_activePopup != null) {
+                                         Shell.RemoveOverlayElement(_activePopup);
+                                         _activePopup = null;
+                                     }
+                                } finally {
+                                    page.Editor.History?.EndTransaction();
+                                    _isCompleting = false; 
                                 }
-                                _isCompleting = false; 
-                                
-                                // Immediate update for color/diagnostics
-                                QueueAnalysis(page);
-
-                                 if (_activePopup != null) {
-                                     Shell.RemoveOverlayElement(_activePopup);
-                                     _activePopup = null;
-                                 }
                             }, initialSearch);
 
                             if (popup.VisibleItemsCount == 0) {
@@ -718,7 +732,9 @@ public class MainWindow : Window {
             }
         }, token);
     }
- 
+    public override void Undo() => GetActiveTab()?.Undo();
+    public override void Redo() => GetActiveTab()?.Redo();
+
     protected override void ExecuteClose() {
         // Save IntelliSense usage tracking data
         UsageTracker.Shutdown();
@@ -743,5 +759,11 @@ public class MainWindow : Window {
         if (_tabControl == null || _tabControl.SelectedPage == null) return null;
         var active = _pages.FirstOrDefault(p => p.Page == _tabControl.SelectedPage);
         return active?.Editor;
+    }
+    
+    private NachosTab GetActiveTab() {
+        if (_tabControl == null || _tabControl.SelectedPage == null) return null;
+        var active = _pages.FirstOrDefault(p => p.Page == _tabControl.SelectedPage);
+        return active?.Tab;
     }
 }

@@ -7,6 +7,7 @@ using TheGame.Core.Input;
 using TheGame.Core.OS;
 using TheGame.Graphics;
 using TheGame.Core.Designer;
+using TheGame.Core.OS.History;
 
 namespace TheGame.Core.UI.Controls;
 
@@ -26,6 +27,11 @@ public class TextInput : ValueControl<string> {
 
     private int _cursorPos = 0;
     private int _selectionEnd = 0; // If != _cursorPos, we have a selection
+    
+    public int CursorPos => _cursorPos;
+    public int SelectionEnd => _selectionEnd;
+    public CommandHistory History { get; set; } = new();
+
     private float _scrollX = 0f;
     private float _targetScrollX = 0f;
     private static readonly RasterizerState _scissorRasterizer = new RasterizerState { ScissorTestEnable = true, CullMode = CullMode.None };
@@ -130,21 +136,25 @@ public class TextInput : ValueControl<string> {
 
             // Handle Backspace
             if (InputManager.IsKeyRepeated(Keys.Back)) {
-                if (HasSelection()) DeleteSelection();
-                else if (_cursorPos > 0) {
-                    string newValue = Value.Remove(_cursorPos - 1, 1);
-                    base.SetValue(newValue, true);
-                    _cursorPos--;
-                    _selectionEnd = _cursorPos;
+                if (HasSelection()) {
+                    int start = Math.Min(_cursorPos, _selectionEnd);
+                    int length = Math.Abs(_cursorPos - _selectionEnd);
+                    History.Execute(new TextInputReplaceCommand(this, "Backspace", start, length, ""));
+                } else if (_cursorPos > 0) {
+                    string charToDelete = Value.Substring(_cursorPos - 1, 1);
+                    History.Execute(new TextInputDeleteCommand(this, _cursorPos - 1, charToDelete, true));
                 }
             }
 
             // Handle Delete
             if (InputManager.IsKeyRepeated(Keys.Delete)) {
-                if (HasSelection()) DeleteSelection();
-                else if (_cursorPos < Value.Length) {
-                    string newValue = Value.Remove(_cursorPos, 1);
-                    base.SetValue(newValue, true);
+                if (HasSelection()) {
+                    int start = Math.Min(_cursorPos, _selectionEnd);
+                    int length = Math.Abs(_cursorPos - _selectionEnd);
+                    History.Execute(new TextInputReplaceCommand(this, "Delete", start, length, ""));
+                } else if (_cursorPos < Value.Length) {
+                    string charToDelete = Value.Substring(_cursorPos, 1);
+                    History.Execute(new TextInputDeleteCommand(this, _cursorPos, charToDelete, false));
                 }
             }
 
@@ -157,11 +167,14 @@ public class TextInput : ValueControl<string> {
             // Handle Character Input
             foreach (var c in InputManager.GetTypedChars()) {
                 if (char.IsControl(c)) continue;
-                if (HasSelection()) DeleteSelection();
-                string newVal = Value.Insert(_cursorPos, c.ToString());
-                base.SetValue(newVal, true);
-                _cursorPos++;
-                _selectionEnd = _cursorPos;
+                
+                if (HasSelection()) {
+                    int start = Math.Min(_cursorPos, _selectionEnd);
+                    int length = Math.Abs(_cursorPos - _selectionEnd);
+                    History.Execute(new TextInputReplaceCommand(this, "Typing", start, length, c.ToString()));
+                } else {
+                    History.Execute(new TextInputInsertCommand(this, c.ToString(), _cursorPos));
+                }
                 TheGame.Core.DebugLogger.Log($"TextInput Char: {c} (Total: {Value})");
             }
 
@@ -202,35 +215,22 @@ public class TextInput : ValueControl<string> {
 
     public override bool HasSelection() => _cursorPos != _selectionEnd;
 
+    public override void Undo() {
+        History.Undo();
+        InputManager.IsKeyboardConsumed = true;
+    }
+
+    public override void Redo() {
+        History.Redo();
+        InputManager.IsKeyboardConsumed = true;
+    }
+
     public override void DeleteSelection() {
-        if (string.IsNullOrEmpty(Value)) {
-            _cursorPos = 0;
-            _selectionEnd = 0;
-            return;
-        }
-        
-        // Clamp selection indices to valid range
-        _cursorPos = Math.Clamp(_cursorPos, 0, Value.Length);
-        _selectionEnd = Math.Clamp(_selectionEnd, 0, Value.Length);
-        
         int start = Math.Min(_cursorPos, _selectionEnd);
         int length = Math.Abs(_cursorPos - _selectionEnd);
-        
-        // Ensure we don't exceed string bounds
-        if (start >= Value.Length) {
-            _cursorPos = Value.Length;
-            _selectionEnd = _cursorPos;
-            return;
-        }
-        
-        length = Math.Min(length, Value.Length - start);
-        
         if (length > 0) {
-            string newVal = Value.Remove(start, length);
-            base.SetValue(newVal, true);
+            History.Execute(new TextInputReplaceCommand(this, "Delete", start, length, ""));
         }
-        _cursorPos = start;
-        _selectionEnd = _cursorPos;
     }
 
     public override void Copy() {
@@ -246,18 +246,50 @@ public class TextInput : ValueControl<string> {
     public override void Cut() {
         if (!HasSelection()) return;
         Copy();
-        DeleteSelection();
+        int start = Math.Min(_cursorPos, _selectionEnd);
+        int length = Math.Abs(_cursorPos - _selectionEnd);
+        History.Execute(new TextInputReplaceCommand(this, "Cut", start, length, ""));
     }
 
     public override void Paste() {
         string text = Shell.Clipboard.GetText();
         if (string.IsNullOrEmpty(text)) return;
 
-        if (HasSelection()) DeleteSelection();
-        
-        string newVal = Value.Insert(_cursorPos, text);
+        if (HasSelection()) {
+            int start = Math.Min(_cursorPos, _selectionEnd);
+            int length = Math.Abs(_cursorPos - _selectionEnd);
+            History.Execute(new TextInputReplaceCommand(this, "Paste", start, length, text));
+        } else {
+            History.Execute(new TextInputInsertCommand(this, text, _cursorPos));
+        }
+    }
+
+    public void SetCursorAndSelection(int cursorPos, int selectionEnd) {
+        _cursorPos = Math.Clamp(cursorPos, 0, Value?.Length ?? 0);
+        _selectionEnd = Math.Clamp(selectionEnd, 0, Value?.Length ?? 0);
+        EnsureCursorVisible();
+    }
+
+    internal void InternalInsert(int pos, string text) {
+        string newVal = Value.Insert(Math.Min(pos, Value.Length), text);
         base.SetValue(newVal, true);
-        _cursorPos += text.Length;
+        _cursorPos = pos + text.Length;
+        _selectionEnd = _cursorPos;
+    }
+
+    internal void InternalDelete(int pos, int length) {
+        if (pos < 0 || pos + length > Value.Length) return;
+        string newVal = Value.Remove(pos, length);
+        base.SetValue(newVal, true);
+        _cursorPos = pos;
+        _selectionEnd = _cursorPos;
+    }
+
+    internal void InternalReplace(int pos, int length, string newText) {
+        if (pos < 0 || pos + length > Value.Length) return;
+        string newVal = Value.Remove(pos, length).Insert(pos, newText);
+        base.SetValue(newVal, true);
+        _cursorPos = pos + newText.Length;
         _selectionEnd = _cursorPos;
     }
 

@@ -10,12 +10,11 @@ public static class UsageTracker {
     private static Dictionary<string, int> _sessionUsage = new();
     private static Dictionary<string, int> _persistentUsage = new();
     private static int _selectionsSinceLastSave = 0;
-    private static string _projectPath = null;
     private const int SaveThreshold = 10;
     
     // Call this when a project is opened
-    public static void Initialize(string projectPath) {
-        _projectPath = projectPath;
+    // Call this when a project is opened
+    public static void Initialize() {
         _sessionUsage.Clear();
         _persistentUsage.Clear();
         LoadPersistent();
@@ -68,23 +67,11 @@ public static class UsageTracker {
         return _persistentUsage.TryGetValue(label, out int count) ? count : 0;
     }
     
-    private static string GetUsageFilePath() {
-        if (string.IsNullOrEmpty(_projectPath)) {
-            return @"C:\Windows\System32\NACHOS.sapp\Data\intellisense_usage.json";
-        }
-        
-        // Store in the project directory as .nachos_usage.json
-        return Path.Combine(_projectPath, ".nachos_usage.json");
-    }
-    
     private static void LoadPersistent() {
         try {
-            string usageFile = GetUsageFilePath();
-            if (!VirtualFileSystem.Instance.Exists(usageFile)) {
-                return;
-            }
+            if (!ProjectMetadataManager.Exists("usage.json")) return;
             
-            string json = VirtualFileSystem.Instance.ReadAllText(usageFile);
+            string json = ProjectMetadataManager.ReadMetadata("usage.json");
             if (!string.IsNullOrWhiteSpace(json)) {
                 _persistentUsage = JsonSerializer.Deserialize<Dictionary<string, int>>(json) 
                     ?? new Dictionary<string, int>();
@@ -97,12 +84,10 @@ public static class UsageTracker {
     
     private static void SavePersistent() {
         try {
-            string usageFile = GetUsageFilePath();
-            
             string json = JsonSerializer.Serialize(_persistentUsage, new JsonSerializerOptions { 
                 WriteIndented = true 
             });
-            VirtualFileSystem.Instance.WriteAllText(usageFile, json);
+            ProjectMetadataManager.WriteMetadata("usage.json", json);
         } catch (Exception ex) {
             TheGame.Core.DebugLogger.Log($"UsageTracker: Failed to save persistent data: {ex.Message}");
         }

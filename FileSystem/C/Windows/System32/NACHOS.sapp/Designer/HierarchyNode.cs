@@ -66,8 +66,20 @@ public class HierarchyNode : Panel, IDraggable, IDropTarget {
     }
 
     private string GetDisplayName() {
-        string typeName = TargetElement.GetType().Name;
-        return string.IsNullOrEmpty(TargetElement.Name) ? typeName : $"{TargetElement.Name} ({typeName})";
+        string typeName = TargetElement.GetType().Name.Replace("Designer", ""); // Clean up DesignerWindow etc
+        string name = TargetElement.Name;
+        
+        // If no name, try to use 'Text' property if available (for Labels/Buttons)
+        if (string.IsNullOrEmpty(name)) {
+            var textProp = TargetElement.GetType().GetProperty("Text");
+            if (textProp != null) {
+                var textVal = textProp.GetValue(TargetElement) as string;
+                if (!string.IsNullOrEmpty(textVal)) return $"{textVal} ({typeName})";
+            }
+            return typeName;
+        }
+        
+        return $"{name} ({typeName})";
     }
 
     protected override void UpdateInput() {
@@ -182,32 +194,36 @@ public class HierarchyNode : Panel, IDraggable, IDropTarget {
         if (dragData is HierarchyNode node) {
             var el = node.TargetElement;
             var oldParent = el.Parent;
-            if (oldParent != null) oldParent.RemoveChild(el);
 
             if (_dropHitY < 0.25f) {
                 // Insert Before
                 var parent = TargetElement.Parent;
                 if (parent != null) {
                     int idx = parent.Children.ToList().IndexOf(TargetElement);
-                    DebugLogger.Log($"Hierarchy: Inserting {el.GetType().Name} BEFORE {TargetElement.GetType().Name} at index {idx}");
-                    parent.InsertChild(idx, el);
+                    Panel.History?.BeginTransaction($"Move {el.GetType().Name}");
+                    if (oldParent != null) Panel.History?.AddOrExecute(new RemoveElementCommand(oldParent, el));
+                    Panel.History?.AddOrExecute(new InsertElementCommand(parent, idx, el));
+                    Panel.History?.EndTransaction();
                 }
             } else if (_dropHitY > 0.75f) {
                 // Insert After
                 var parent = TargetElement.Parent;
                 if (parent != null) {
                     int idx = parent.Children.ToList().IndexOf(TargetElement);
-                    DebugLogger.Log($"Hierarchy: Inserting {el.GetType().Name} AFTER {TargetElement.GetType().Name} at index {idx + 1}");
-                    parent.InsertChild(idx + 1, el);
+                    Panel.History?.BeginTransaction($"Move {el.GetType().Name}");
+                    if (oldParent != null) Panel.History?.AddOrExecute(new RemoveElementCommand(oldParent, el));
+                    Panel.History?.AddOrExecute(new InsertElementCommand(parent, idx + 1, el));
+                    Panel.History?.EndTransaction();
                 }
             } else {
                 // Add as Child
-                DebugLogger.Log($"Hierarchy: Adding {el.GetType().Name} as CHILD OF {TargetElement.GetType().Name}");
-                TargetElement.AddChild(el);
+                Panel.History?.BeginTransaction($"Move {el.GetType().Name}");
+                if (oldParent != null) Panel.History?.AddOrExecute(new RemoveElementCommand(oldParent, el));
+                Panel.History?.AddOrExecute(new AddElementCommand(TargetElement, el));
+                Panel.History?.EndTransaction();
             }
 
             Surface.NotifyElementModified(el);
-            // Refresh is already triggered by NotifyElementModified event in HierarchyPanel
             return true;
         }
         return false;
@@ -228,9 +244,13 @@ public class HierarchyNode : Panel, IDraggable, IDropTarget {
         base.PopulateContextMenu(context, items);
 
         items.Add(new MenuItem { Text = "Rename", Action = () => {
-            var dialog = new InputDialog("Rename Element", "Enter new name:", TargetElement.Name ?? "", (newName) => {
+            string currentName = TargetElement.Name;
+            string typeName = TargetElement.GetType().Name.Replace("Designer", "");
+            string placeholder = string.IsNullOrEmpty(currentName) ? typeName : currentName;
+
+            var dialog = new InputDialog("Rename Element", "Enter new name:", placeholder, (newName) => {
                 if (newName != null) {
-                    TargetElement.Name = newName;
+                    Panel.History?.Execute(new SetPropertyCommand(TargetElement, "Name", newName));
                     Surface.NotifyElementModified(TargetElement);
                 }
             });
@@ -281,7 +301,9 @@ public class HierarchyNode : Panel, IDraggable, IDropTarget {
     }
 
     private void PerformDelete() {
-        TargetElement.Parent?.RemoveChild(TargetElement);
+        if (TargetElement.Parent != null) {
+            Panel.History?.Execute(new RemoveElementCommand(TargetElement.Parent, TargetElement));
+        }
         Surface.SelectElement(null);
         Surface.NotifyElementModified(null);
     }

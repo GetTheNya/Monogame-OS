@@ -50,7 +50,7 @@ public static class InputManager {
     private static bool _isRightDoubleClickFrame;
 
     private static Dictionary<Keys, float> _keyRepeatTimers = new();
-    private static float _initialRepeatDelay = 0.5f;
+    private static float _initialRepeatDelay = 0.4f;
     private static float _repeatRate = 0.05f;
 
     public static void Update(GameTime gameTime) {

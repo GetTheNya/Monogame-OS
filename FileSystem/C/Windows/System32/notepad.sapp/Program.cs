@@ -64,7 +64,8 @@ public class NotepadWindow : Window {
         });
 
         _menuBar.AddMenu("Edit", m => {
-            m.AddItem("Undo", () => { /* TODO */ }, "Ctrl+Z");
+            m.AddItem("Undo", () => _textArea.History.Undo(), "Ctrl+Z");
+            m.AddItem("Redo", () => _textArea.History.Redo(), "Ctrl+Y");
             m.AddSeparator();
             m.AddItem("Cut", () => _textArea.Cut(), "Ctrl+X");
             m.AddItem("Copy", () => _textArea.Copy(), "Ctrl+C");
@@ -96,11 +97,9 @@ public class NotepadWindow : Window {
             DrawBackground = false  // Allow window blur to show through
         };
         _textArea.OnValueChanged += (text) => {
-            if (!_isModified) {
-                _isModified = true;
-                UpdateTitle();
-            }
+            UpdateTitle();
         };
+        _textArea.History.OnHistoryChanged += UpdateTitle;
         AddChild(_textArea);
     }
 
@@ -113,13 +112,14 @@ public class NotepadWindow : Window {
         string filename = string.IsNullOrEmpty(_currentFilePath)
             ? "Untitled"
             : System.IO.Path.GetFileName(_currentFilePath);
-        Title = (_isModified ? "*" : "") + filename + " - Notepad";
+        bool dirty = _textArea.History.IsDirty;
+        Title = (dirty ? "*" : "") + filename + " - Notepad";
     }
 
     private void NewFile() {
         _currentFilePath = null;
         _textArea.Text = "";
-        _isModified = false;
+        _textArea.History.Clear();
         UpdateTitle();
     }
 
@@ -128,7 +128,7 @@ public class NotepadWindow : Window {
             string content = VirtualFileSystem.Instance.ReadAllText(path);
             _textArea.Text = content ?? "";
             _currentFilePath = path;
-            _isModified = false;
+            _textArea.History.MarkAsSaved();
             UpdateTitle();
         } catch (Exception ex) {
             Shell.Notifications.Show("Error", $"Failed to open file: {ex.Message}");
@@ -180,7 +180,7 @@ public class NotepadWindow : Window {
         try {
             VirtualFileSystem.Instance.WriteAllText(path, _textArea.Text);
             _currentFilePath = path;
-            _isModified = false;
+            _textArea.History.MarkAsSaved();
             UpdateTitle();
             Shell.Notifications.Show("Notepad", $"Saved: {System.IO.Path.GetFileName(path)}");
         } catch (Exception ex) {

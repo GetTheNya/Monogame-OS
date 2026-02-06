@@ -158,10 +158,12 @@ public class DesktopScene : Core.Scenes.Scene {
             _clipboardPanel?.Toggle();
         });
 
-        // Global Copy/Cut/Paste (Standard fallback)
+        // Global Copy/Cut/Paste/Undo/Redo (Standard fallback)
         Shell.Hotkeys.RegisterGlobal(Keys.C, HotkeyModifiers.Ctrl, () => UIManager.FocusedElement?.Copy());
         Shell.Hotkeys.RegisterGlobal(Keys.X, HotkeyModifiers.Ctrl, () => UIManager.FocusedElement?.Cut());
         Shell.Hotkeys.RegisterGlobal(Keys.V, HotkeyModifiers.Ctrl, () => UIManager.FocusedElement?.Paste());
+        Shell.Hotkeys.RegisterGlobal(Keys.Z, HotkeyModifiers.Ctrl, () => (UIManager.FocusedElement ?? Window.ActiveWindow)?.Undo());
+        Shell.Hotkeys.RegisterGlobal(Keys.Y, HotkeyModifiers.Ctrl, () => (UIManager.FocusedElement ?? Window.ActiveWindow)?.Redo());
     }
 
     private void LoadDesktopIcons() {

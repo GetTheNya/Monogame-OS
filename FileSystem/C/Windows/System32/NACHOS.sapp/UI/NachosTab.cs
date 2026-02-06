@@ -1,6 +1,7 @@
 using System;
 using Microsoft.Xna.Framework;
 using TheGame.Core.UI.Controls;
+using TheGame.Core.OS.History;
 
 namespace NACHOS;
 
@@ -13,6 +14,8 @@ public abstract class NachosTab : UIControl, IDisposable {
 
     public Action OnContentChanged { get; set; }
     public Action OnSelectionChanged { get; set; }
+    
+    public abstract CommandHistory History { get; }
 
     protected NachosTab(Vector2 position, Vector2 size, string filePath) : base(position, size) {
         FilePath = filePath;

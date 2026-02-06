@@ -7,6 +7,7 @@ using Microsoft.Xna.Framework.Graphics;
 using TheGame.Core.UI;
 using TheGame.Core.UI.Controls;
 using TheGame.Core.OS;
+using TheGame.Core.OS.History;
 using TheGame.Core;
 using TheGame.Core.Input;
 using TheGame.Core.Designer;
@@ -24,12 +25,13 @@ public class DesignerTab : NachosTab {
     private HierarchyPanel _hierarchy;
     private Panel _toolbar;
     
-    private bool _isDirty;
-    public override bool IsDirty => _isDirty;
+    private Action<bool> _modeChangedHandler;
+
+    public override CommandHistory History { get; } = new();
+    public override bool IsDirty => History.IsDirty;
     public new Action OnDirtyChanged { get; set; }
     public override string DisplayTitle => Path.GetFileName(FilePath) + (IsDirty ? "*" : "");
 
-    private Action<bool> _modeChangedHandler;
 
     public DesignerTab(Vector2 position, Vector2 size, string filePath) : base(position, size, filePath) {
         FilePath = filePath;
@@ -66,21 +68,27 @@ public class DesignerTab : NachosTab {
  
         _surfaceScrollPanel = new ScrollPanel(new Vector2(sidebarWidth, toolbarHeight), new Vector2(size.X - sidebarWidth - propertyWidth, size.Y - toolbarHeight));
         _surface = new DesignerSurface(Vector2.Zero, _surfaceScrollPanel.Size);
+        _surface.History = History;
         _surfaceScrollPanel.AddChild(_surface);
         AddChild(_surfaceScrollPanel);
         
-        _hierarchy = new HierarchyPanel(new Vector2(0, toolbarHeight + _toolbox.Size.Y), new Vector2(sidebarWidth, size.Y - (toolbarHeight + _toolbox.Size.Y)), _surface);
+        _hierarchy = new HierarchyPanel(new Vector2(0, toolbarHeight + _toolbox.Size.Y), new Vector2(sidebarWidth, size.Y - (toolbarHeight + _toolbox.Size.Y)), _surface, History);
         AddChild(_hierarchy);
         
         _propertyGrid = new PropertyGrid(new Vector2(size.X - propertyWidth, toolbarHeight), new Vector2(propertyWidth, size.Y - toolbarHeight));
+        _propertyGrid.History = History;
         AddChild(_propertyGrid);
         
         _surface.OnSelectionChanged += (el) => _propertyGrid.Inspect(el);
         _surface.OnElementModified += (el) => {
-            _isDirty = true;
-            OnDirtyChanged?.Invoke();
+            History.NotifyChanged(); // Trigger dirty check
             _propertyGrid.Inspect(el);
             _hierarchy.Refresh();
+        };
+
+        History.OnHistoryChanged += () => {
+             OnDirtyChanged?.Invoke();
+             _hierarchy?.Refresh();
         };
         
         OnResize += () => {
@@ -101,6 +109,23 @@ public class DesignerTab : NachosTab {
         };
         
         Load();
+
+        // Handle toolbox drops
+        _surface.OnDropReceived += (data, pos) => {
+            if (data is ControlTypeDragData toolData) {
+                var instance = Activator.CreateInstance(toolData.ControlType) as UIControl;
+                if (instance != null) {
+                    instance.Position = pos;
+                    var root = _surface.ContentLayer.Children.FirstOrDefault() as UIControl;
+                    if (root != null) {
+                        History.Execute(new AddElementCommand(root, instance));
+                        _surface.SelectElement(instance);
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
     }
     
     public override void Save() {
@@ -111,7 +136,7 @@ public class DesignerTab : NachosTab {
             if (root != null) {
                 string json = UISerializer.Serialize(root);
                 VirtualFileSystem.Instance.WriteAllText(FilePath, json);
-                _isDirty = false;
+                History.MarkAsSaved();
                 OnDirtyChanged?.Invoke();
                 Shell.Notifications.Show("Designer", "UI Layout saved successfully.");
             }
@@ -120,6 +145,9 @@ public class DesignerTab : NachosTab {
             Shell.Notifications.Show("Designer", "Error saving layout: " + ex.Message);
         }
     }
+
+    public override void Undo() => History.Undo();
+    public override void Redo() => History.Redo();
     
     public void Load() {
         if (VirtualFileSystem.Instance.Exists(FilePath)) {
@@ -129,6 +157,7 @@ public class DesignerTab : NachosTab {
                 if (root != null) {
                     _surface.ContentLayer.ClearChildren();
                     _surface.ContentLayer.AddChild(root);
+                    _hierarchy.Refresh();
                 }
             } catch (Exception ex) {
                 DebugLogger.Log($"Error loading UI from {FilePath}: {ex.Message}");
@@ -144,8 +173,8 @@ public class DesignerTab : NachosTab {
             _surface.ContentLayer.AddChild(defaultWindow);
             _surface.SelectElement(defaultWindow);
             
-            // Mark as dirty since we just added a base component
-            _isDirty = true;
+            History.Clear(); // Don't want adding default to be undoable at start
+            History.MarkAsSaved();
             OnDirtyChanged?.Invoke();
         }
     }

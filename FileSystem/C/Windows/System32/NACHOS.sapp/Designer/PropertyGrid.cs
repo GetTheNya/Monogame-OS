@@ -10,12 +10,14 @@ using TheGame.Core.UI;
 using TheGame.Core.Designer;
 using TheGame.Core.OS;
 using TheGame.Core.Input;
+using TheGame.Core.OS.History;
 
 namespace NACHOS.Designer;
 
 public class PropertyGrid : ScrollPanel {
     private UIElement _target;
     private readonly List<UIElement> _editorRows = new();
+    public CommandHistory History { get; set; }
     
     public PropertyGrid(Vector2 position, Vector2 size) : base(position, size) {
         BackgroundColor = new Color(45, 45, 45);
@@ -102,8 +104,12 @@ public class PropertyGrid : ScrollPanel {
     
     private UIElement CreateStringEditor(PropertyInfo prop, UIElement target, PropertyRow row) {
         var editor = new TextInput(Vector2.Zero, Vector2.Zero) { Value = prop.GetValue(target)?.ToString() ?? "" };
-        editor.OnSubmit += (val) => prop.SetValue(target, val);
-        editor.OnLostFocus += () => prop.SetValue(target, editor.Value);
+        editor.OnSubmit += (val) => History?.Execute(new SetPropertyCommand(target, prop.Name, val));
+        editor.OnLostFocus += () => {
+            if (editor.Value != prop.GetValue(target)?.ToString()) {
+                History?.Execute(new SetPropertyCommand(target, prop.Name, editor.Value));
+            }
+        };
         
         row.OnRefresh = () => {
             if (!editor.IsFocused)
@@ -119,7 +125,9 @@ public class PropertyGrid : ScrollPanel {
         
         Action apply = () => {
             if (float.TryParse(editor.Value, out float val)) {
-                prop.SetValue(target, val);
+                if (val != (float)prop.GetValue(target)) {
+                    History?.Execute(new SetPropertyCommand(target, prop.Name, val));
+                }
                 lastValid = editor.Value;
                 editor.BorderColor = Color.Transparent;
             } else {
@@ -150,7 +158,9 @@ public class PropertyGrid : ScrollPanel {
         
         Action apply = () => {
             if (int.TryParse(editor.Value, out int val)) {
-                prop.SetValue(target, val);
+                if (val != (int)prop.GetValue(target)) {
+                    History?.Execute(new SetPropertyCommand(target, prop.Name, val));
+                }
                 lastValid = editor.Value;
                 editor.BorderColor = Color.Transparent;
             } else {
@@ -177,7 +187,7 @@ public class PropertyGrid : ScrollPanel {
 
     private UIElement CreateBoolEditor(PropertyInfo prop, UIElement target, PropertyRow row) {
         var editor = new Checkbox(Vector2.Zero) { Value = (bool)prop.GetValue(target) };
-        editor.OnValueChanged += (val) => prop.SetValue(target, val);
+        editor.OnValueChanged += (val) => History?.Execute(new SetPropertyCommand(target, prop.Name, val));
         
         row.OnRefresh = () => {
             editor.Value = (bool)prop.GetValue(target);
@@ -195,7 +205,10 @@ public class PropertyGrid : ScrollPanel {
         Action apply = () => {
             var parts = editor.Value.Split(',');
             if (parts.Length == 2 && float.TryParse(parts[0], out float x) && float.TryParse(parts[1], out float y)) {
-                prop.SetValue(target, new Vector2(x, y));
+                var newVal = new Vector2(x, y);
+                if (newVal != (Vector2)prop.GetValue(target)) {
+                    History?.Execute(new SetPropertyCommand(target, prop.Name, newVal));
+                }
                 lastValid = editor.Value;
                 editor.BorderColor = Color.Transparent;
             } else {
@@ -241,7 +254,7 @@ public class PropertyGrid : ScrollPanel {
             
             popup = new ColorPickerPopup(popupPos, (Color)prop.GetValue(target), 
                 (newColor) => {
-                    prop.SetValue(target, newColor);
+                    History?.Execute(new SetPropertyCommand(target, prop.Name, newColor));
                     editor.BackgroundColor = newColor;
                     editor.HoverColor = newColor * 1.1f;
                     editor.PressedColor = newColor * 0.9f;
@@ -276,7 +289,10 @@ public class PropertyGrid : ScrollPanel {
         
         editor.OnValueChanged += (idx) => {
             if (idx >= 0 && idx < values.Length) {
-                prop.SetValue(target, Enum.Parse(prop.PropertyType, values[idx]));
+                var newVal = Enum.Parse(prop.PropertyType, values[idx]);
+                if (!newVal.Equals(prop.GetValue(target))) {
+                    History?.Execute(new SetPropertyCommand(target, prop.Name, newVal));
+                }
             }
         };
 

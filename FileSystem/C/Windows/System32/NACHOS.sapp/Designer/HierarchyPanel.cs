@@ -9,6 +9,7 @@ using TheGame.Core;
 using TheGame.Core.OS;
 using TheGame.Core.Input;
 using TheGame.Core.OS.DragDrop;
+using TheGame.Core.OS.History;
 
 namespace NACHOS.Designer;
 
@@ -17,9 +18,11 @@ public class HierarchyPanel : Panel, IDropTarget {
     private List<HierarchyNode> _rootNodes = new();
     private ScrollPanel _scroll;
     private Label _headerLabel;
+    public CommandHistory History { get; set; }
 
-    public HierarchyPanel(Vector2 position, Vector2 size, DesignerSurface surface) : base(position, size) {
+    public HierarchyPanel(Vector2 position, Vector2 size, DesignerSurface surface, CommandHistory history) : base(position, size) {
         Surface = surface;
+        History = history;
         BackgroundColor = new Color(30, 30, 30);
         
         _headerLabel = new Label(new Vector2(5, 4), "HIERARCHY") {
@@ -32,9 +35,10 @@ public class HierarchyPanel : Panel, IDropTarget {
         AddChild(_scroll);
         
         Surface.OnElementModified += (el) => Refresh();
-        Surface.OnSelectionChanged += (el) => {
-            // Optional: Auto-expand to selection?
-        };
+        
+        if (History != null) {
+            History.OnHistoryChanged += Refresh;
+        }
         
         Refresh();
     }
@@ -109,8 +113,14 @@ public class HierarchyPanel : Panel, IDropTarget {
             if (root != null && root.GetType().Name == "DesignerWindow") {
                 DebugLogger.Log($"Hierarchy: Reparenting {el.GetType().Name} to Root Window");
                 // Reparent to window
-                if (el.Parent != null) el.Parent.RemoveChild(el);
-                root.AddChild(el);
+                if (el.Parent != null) {
+                    History?.BeginTransaction($"Reparent {el.GetType().Name}");
+                    History?.AddOrExecute(new RemoveElementCommand(el.Parent, el));
+                    History?.AddOrExecute(new AddElementCommand(root, el));
+                    History?.EndTransaction();
+                } else {
+                    History?.Execute(new AddElementCommand(root, el));
+                }
                 Surface.NotifyElementModified(el);
                 Refresh();
                 return true;
