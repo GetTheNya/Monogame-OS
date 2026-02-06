@@ -136,7 +136,6 @@ public abstract class UIElement : IContextMenuProvider {
 
     // Tooltip properties
     public string Tooltip { get; set; }
-    [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public float TooltipDelay { get; set; } = 0.5f;
 
     protected UIElement() {
@@ -194,7 +193,10 @@ public abstract class UIElement : IContextMenuProvider {
             if (_isFocused == value) return;
             _isFocused = value;
             if (_isFocused) OnFocused();
-            else OnUnfocused();
+            else {
+                OnUnfocused();
+                OnLostFocus?.Invoke();
+            }
         }
     }
 

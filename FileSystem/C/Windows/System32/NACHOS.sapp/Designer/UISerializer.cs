@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Xna.Framework;
+using TheGame.Core;
 using TheGame.Core.UI;
 using TheGame.Core.Designer;
 
@@ -48,6 +49,7 @@ public static class UISerializer {
 
         foreach (var prop in props) {
             var val = prop.GetValue(element);
+            DebugLogger.Log($"Property found: {prop.Name}, Value: {val ?? "NULL"}");
             if (val != null) {
                 data.Properties[prop.Name] = ConvertToSerializable(val);
             }
