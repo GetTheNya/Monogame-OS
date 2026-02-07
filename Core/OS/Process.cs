@@ -294,6 +294,9 @@ public class Process {
             // Remove tray icons owned by this process
             Shell.SystemTray.RemoveIconsForProcess(this);
 
+            // Cancel all pending network operations and cleanup
+            Shell.Network.UnregisterFromNetwork(this);
+
             // Remove media owned by this process
             AudioManager.Instance.CleanupProcess(this);
             

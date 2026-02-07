@@ -199,6 +199,15 @@ public class VirtualFileSystem {
     }
 
     /// <summary>
+    /// Opens a stream for reading from a virtual file.
+    /// </summary>
+    public Stream OpenRead(string virtualPath) {
+        string hostPath = ToHostPath(virtualPath);
+        if (string.IsNullOrEmpty(hostPath) || !File.Exists(hostPath)) return null;
+        return File.OpenRead(hostPath);
+    }
+
+    /// <summary>
     /// Opens a stream for writing to a virtual file. Creates the directory if it doesn't exist.
     /// </summary>
     public Stream OpenWrite(string virtualPath) {

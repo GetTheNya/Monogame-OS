@@ -22,7 +22,8 @@ public class SystemTray : Panel, ITooltipSubElementProvider {
     private Button _notificationButton;
     private VolumeMixerPanel _volumeMixerPanel;
     private TrayIcon _volumeIcon;
-    private TrayIcon _powerIcon;
+    // private TrayIcon _powerIcon;
+    private NetworkTrayIcon _networkTrayIcon;
     
     // Tray Icons
     private List<TrayIcon> _appIcons = new();
@@ -68,17 +69,21 @@ public class SystemTray : Panel, ITooltipSubElementProvider {
         };
         _systemIcons.Add(_volumeIcon);
 
-        // 2. Power Icon
-        _powerIcon = new TrayIcon(GameContent.PowerIcon, "Power") {
-            OnClick = () => {
-                Shell.ContextMenu.Show(InputManager.MousePosition.ToVector2(), new List<MenuItem> {
-                    new MenuItem { Text = "Restart", Action = () => {/*TODO*/} },
-                    new MenuItem { Text = "Shut down", Action = () => {/*TODO*/} },
-                    new MenuItem { Text = "Sign out", Action = () => {/*TODO*/} }
-                });
-            }
-        };
-        _systemIcons.Add(_powerIcon);
+        // // 2. Power Icon
+        // _powerIcon = new TrayIcon(GameContent.PowerIcon, "Power") {
+        //     OnClick = () => {
+        //         Shell.ContextMenu.Show(InputManager.MousePosition.ToVector2(), new List<MenuItem> {
+        //             new MenuItem { Text = "Restart", Action = () => {/*TODO*/} },
+        //             new MenuItem { Text = "Shut down", Action = () => {/*TODO*/} },
+        //             new MenuItem { Text = "Sign out", Action = () => {/*TODO*/} }
+        //         });
+        //     }
+        // };
+        // _systemIcons.Add(_powerIcon);
+
+        // 3. Network Icon
+        _networkTrayIcon = new NetworkTrayIcon();
+        _systemIcons.Add(_networkTrayIcon.TrayIcon);
     }
 
     private void ToggleVolumeMixer() {
@@ -213,6 +218,7 @@ public class SystemTray : Panel, ITooltipSubElementProvider {
         }
 
         UpdateVolumeIcon();
+        _networkTrayIcon?.Update(gameTime);
         
         // Update button position based on current size
         _notificationButton.Position = new Vector2(Size.X - 35, 4);

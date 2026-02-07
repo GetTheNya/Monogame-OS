@@ -1,0 +1,10 @@
+{
+    "appId": "NETWORK_TEST",
+    "name": "Network Utility",
+    "entryClass": "NetworkTestApp.Program",
+    "entryMethod": "Main",
+    "singleInstance": true,
+    "references": [
+        "FontStashSharp"
+    ]
+}
