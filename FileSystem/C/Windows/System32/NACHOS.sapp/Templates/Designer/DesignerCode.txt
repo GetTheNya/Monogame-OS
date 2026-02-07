@@ -10,7 +10,7 @@ using TheGame.Core.UI.Controls;
 
 namespace {namespace};
 
-public partial class {className} {
+public partial class {className} : Window {
 {fields}
 
     protected override void OnLoad() {

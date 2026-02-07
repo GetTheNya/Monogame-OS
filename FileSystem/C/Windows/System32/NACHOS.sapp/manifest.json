@@ -15,6 +15,7 @@
     "System.Text.Json",
     "System.Memory",
     "System.Runtime.Loader",
-    "System.Text.RegularExpressions"
+    "System.Text.RegularExpressions",
+    "System.IO.FileSystem.Watcher"
   ]
 }

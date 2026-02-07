@@ -20,26 +20,26 @@ public class SplashScreen : BorderlessWindow {
 
     public SplashScreen() : base(Vector2.Zero, new Vector2(600, 320)) {
         Title = "NACHOS - Loading...";
-
-        // Load image using the helper provided by the user
-        _banner = Shell.Images.LoadAppImage("splash.png");
-        
-        if (_banner != null) {
-            Size = new Vector2(_banner.Width, _banner.Height);
-        }
-
-        // Center on screen
-        var viewport = G.GraphicsDevice.Viewport;
-        Position = new Vector2(
-            (viewport.Width - Size.X) / 2,
-            (viewport.Height - Size.Y) / 2
-        );
         
         BackgroundColor = Color.Transparent;
         ShowInTaskbar = false;
     }
 
     protected override void OnLoad() {
+        // Load image using the helper provided by the user
+        _banner = Shell.Images.LoadAppImage(OwnerProcess, "splash.png");
+        
+        if (_banner != null) {
+            Size = new Vector2(_banner.Width, _banner.Height);
+
+            // Center on screen again now that size is known
+            var viewport = G.GraphicsDevice.Viewport;
+            Position = new Vector2(
+                (viewport.Width - Size.X) / 2,
+                (viewport.Height - Size.Y) / 2
+            );
+        }
+
         _progressBar = new ProgressBar(new Vector2(10, Size.Y - 30), new Vector2(Size.X - 20, 20)) {
             ProgressColor = new Color(0, 150, 255), // Nice blue
             BackgroundColor = new Color(20, 20, 20, 150),

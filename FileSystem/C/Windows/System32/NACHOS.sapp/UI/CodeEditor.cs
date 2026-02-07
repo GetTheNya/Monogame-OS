@@ -31,10 +31,10 @@ public class CodeEditor : TextArea {
     }
 
     public bool IsDirty => History?.IsDirty ?? false;
-    public string FilePath => _filePath;
+    public string FilePath { get => _filePath; set => _filePath = value; }
     public string FileName => string.IsNullOrEmpty(_filePath) ? "Untitled" : Path.GetFileName(_filePath);
     public bool IsFetchingCompletions { get; set; } = false;
-    public bool IsReadOnly { get; set; } = false;
+    public CodeIntelligenceManager Intelligence { get; private set; }
 
     public List<TokenSegment> Tokens { get; set; } = new();
     public List<DiagnosticInfo> Diagnostics { get; set; } = new();
@@ -72,7 +72,7 @@ public class CodeEditor : TextArea {
         }
 
         _charEnteredHandler = (c) => {
-            if (!IsFocused) return;
+            if (!IsFocused || IsReadOnly) return;
             
             // 1. Wrap Selection
             if (HasSelection()) {
@@ -125,14 +125,18 @@ public class CodeEditor : TextArea {
 
         OnResize += UpdateLayout;
 
+        Intelligence = new CodeIntelligenceManager(this);
+        Intelligence.TriggerAnalysis();
     }
 
     private Action<char> _charEnteredHandler;
     public void Dispose() {
         InputManager.OnCharEntered -= _charEnteredHandler;
+        Intelligence?.Shutdown();
     }
 
     public void WrapSelectionBy(char opening, char closing) {
+        if (IsReadOnly) return;
         GetSelectionRange(out int sl, out int sc, out int el, out int ec);
         
         // Single line wrap is easiest
@@ -663,7 +667,7 @@ public class CodeEditor : TextArea {
     }
 
     public override void Update(GameTime gameTime) {
-        if (IsFocused) {
+        if (IsFocused && !IsReadOnly) {
         // Hungry Backspace & Auto-delete brackets
         // Use IsKeyDown check first to avoid calling IsKeyRepeated for regular backspaces
         if (InputManager.IsKeyDown(Keys.Back) && !HasSelection()) {
@@ -697,7 +701,8 @@ public class CodeEditor : TextArea {
     }
 
         // Handle auto-brackets on typing
-        foreach (var c in InputManager.GetTypedChars()) {
+        if (!IsReadOnly) {
+            foreach (var c in InputManager.GetTypedChars()) {
             char close = '\0';
             if (c == '(') close = ')';
             else if (c == '{') close = '}';
@@ -711,6 +716,7 @@ public class CodeEditor : TextArea {
                 _pendingAutoClose = close;
             }
         }
+    }
         
         if (ActiveSnippetSession != null && ActiveSnippetSession.IsEnded) {
             _snippetSessions.Pop();
@@ -754,6 +760,15 @@ public class CodeEditor : TextArea {
             _cursorCol = col;
             ResetSelection();
             EnsureCursorVisible();
+        }
+
+        Intelligence?.Update();
+        
+        if (IsFocused) {
+            if (InputManager.IsKeyDown(Keys.LeftControl) && InputManager.IsKeyJustPressed(Microsoft.Xna.Framework.Input.Keys.Space)) {
+                Intelligence?.RequestCompletions(true);
+                InputManager.IsKeyboardConsumed = true;
+            }
         }
     }
 

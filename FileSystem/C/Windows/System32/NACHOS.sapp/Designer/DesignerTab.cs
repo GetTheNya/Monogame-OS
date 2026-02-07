@@ -129,6 +129,8 @@ public class DesignerTab : NachosTab {
         _codeViewContainer.AddChild(_userCodeEditor);
         _codeViewContainer.AddChild(_designerCodeEditor);
         AddChild(_codeViewContainer);
+
+        SetupEditorIntelligence();
         
         _surface.OnSelectionChanged += (el) => _propertyGrid.Inspect(el);
         _surface.OnElementModified += (el) => {
@@ -256,7 +258,7 @@ public class DesignerTab : NachosTab {
             elementToVar[root] = "this";
 
             // 1. Set properties of the root (this)
-            var rootProps = GetDesignableProperties(root);
+            var rootProps = UISerializer.GetSerializableProperties(root);
             foreach (var prop in rootProps) {
                 if (prop.Name == "Name") continue;
                 var val = prop.GetValue(root);
@@ -304,7 +306,7 @@ public class DesignerTab : NachosTab {
         }
 
         // Set properties
-        var props = GetDesignableProperties(el);
+        var props = UISerializer.GetSerializableProperties(el);
         foreach (var prop in props) {
             var val = prop.GetValue(el);
             string valCode = GetValueCode(val);
@@ -330,19 +332,12 @@ public class DesignerTab : NachosTab {
         return sb.ToString();
     }
 
-    private IEnumerable<PropertyInfo> GetDesignableProperties(UIElement el) {
-        string[] skip = { "Parent", "Children", "Tag", "ActiveWindow", "OwnerProcess" };
-        return el.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => !Attribute.IsDefined(p, typeof(DesignerIgnoreJsonSerialization)))
-            .Where(p => p.CanRead && p.CanWrite && !skip.Contains(p.Name))
-            .Where(p => p.PropertyType != typeof(System.Action));
-    }
 
     private string GetValueCode(object val) {
         if (val == null) return "null";
         if (val is string s) return $"\"{s.Replace("\"", "\\\"")}\"";
         if (val is bool b) return b ? "true" : "false";
-        if (val is float f) return $"{f}f";
+        if (val is float f) return $"{f}f".Replace(",", ".");
         if (val is int i) return i.ToString();
         if (val is Vector2 v) return $"new Vector2({v.X}f, {v.Y}f)";
         if (val is Vector4 v4) return $"new Vector4({v4.X}f, {v4.Y}f, {v4.Z}f, {v4.W}f)";
@@ -513,6 +508,38 @@ public class DesignerTab : NachosTab {
         if (_modeChangedHandler != null) {
             DesignMode.OnModeChanged -= _modeChangedHandler;
         }
+        _userCodeEditor?.Dispose();
+        _designerCodeEditor?.Dispose();
         base.Dispose();
+    }
+
+    private void SetupEditorIntelligence() {
+        _userCodeEditor.FilePath = _userCodePath;
+        _designerCodeEditor.FilePath = _designerCodePath;
+
+        Func<Dictionary<string, string>> getSources = () => {
+            // Priority:
+            // 1. Current editors in THIS tab (might be unsaved in this specific designer session)
+            // 2. Other open tabs in MainWindow
+            // 3. Project on disk
+            
+            return ProjectWorkspace.GetSources(ProjectPath, () => {
+                var list = new List<(string Path, string Content)>();
+                if (!string.IsNullOrEmpty(_userCodePath)) list.Add((_userCodePath, _userCodeEditor.Value));
+                if (!string.IsNullOrEmpty(_designerCodePath)) list.Add((_designerCodePath, _designerCodeEditor.Value));
+                
+                // Try to get from MainWindow if possible
+                if (GetOwnerWindow() is MainWindow mw) {
+                    list.AddRange(mw.GetOpenSources());
+                }
+                
+                return list;
+            });
+        };
+
+        Func<IEnumerable<string>> getRefs = () => ProjectWorkspace.GetReferences(ProjectPath);
+
+        _userCodeEditor.Intelligence.SetWorkspaceContext(getSources, getRefs);
+        _designerCodeEditor.Intelligence.SetWorkspaceContext(getSources, getRefs);
     }
 }

@@ -32,6 +32,7 @@ public class AppCompiler {
             MetadataReference.CreateFromFile(Assembly.Load("System.Linq").Location),
             MetadataReference.CreateFromFile(Assembly.Load("netstandard").Location),
             MetadataReference.CreateFromFile(Assembly.Load("System.Runtime.Loader").Location),
+            
             // MonoGame
             MetadataReference.CreateFromFile(typeof(Microsoft.Xna.Framework.Game).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(Microsoft.Xna.Framework.Graphics.SpriteBatch).Assembly.Location),
@@ -53,7 +54,8 @@ public class AppCompiler {
             { "System.Text.Json", MetadataReference.CreateFromFile(typeof(JsonSerializer).Assembly.Location)},
             { "System.Text.Encodings.Web", MetadataReference.CreateFromFile(Assembly.Load("System.Text.Encodings.Web").Location)},
             { "System.Memory", MetadataReference.CreateFromFile(Assembly.Load("System.Memory").Location)},
-            { "System.Text.RegularExpressions", MetadataReference.CreateFromFile(Assembly.Load("System.Text.RegularExpressions").Location)}
+            { "System.Text.RegularExpressions", MetadataReference.CreateFromFile(Assembly.Load("System.Text.RegularExpressions").Location)},
+            { "System.IO.FileSystem.Watcher", MetadataReference.CreateFromFile(typeof(FileSystemWatcher).Assembly.Location) }
         };
     }
 

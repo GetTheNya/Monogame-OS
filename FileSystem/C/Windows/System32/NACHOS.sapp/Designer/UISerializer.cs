@@ -43,10 +43,7 @@ public static class UISerializer {
             Name = element.Name
         };
 
-        var props = element.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => !Attribute.IsDefined(p, typeof(DesignerIgnoreJsonSerialization)))
-            .Where(p => p.CanRead && p.CanWrite && !ShouldSkipProperty(p));
-
+        var props = GetSerializableProperties(element);
         foreach (var prop in props) {
             var val = prop.GetValue(element);
             DebugLogger.Log($"Property found: {prop.Name}, Value: {val ?? "NULL"}");
@@ -116,6 +113,18 @@ public static class UISerializer {
         }
 
         return element;
+    }
+
+    public static IEnumerable<PropertyInfo> GetSerializableProperties(UIElement element) {
+        var props = element.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => !Attribute.IsDefined(p, typeof(DesignerIgnoreJsonSerialization)))
+            .Where(p => p.CanRead && p.CanWrite && !ShouldSkipProperty(p));
+
+        foreach (var prop in props) {
+            // Skip Panel-specific properties for DesignerWindow as it serializes as Window
+            if (element is DesignerWindow && (prop.Name == "BorderThickness" || prop.Name == "CornerRadius")) continue;
+            yield return prop;
+        }
     }
 
     private static bool ShouldSkipProperty(PropertyInfo prop) {

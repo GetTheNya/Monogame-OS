@@ -620,12 +620,14 @@ public class TextArea : ValueControl<string> {
     }
 
     public override void Cut() {
+        if (IsReadOnly) return;
         if (!HasSelection()) return;
         Copy();
         DeleteSelection();
     }
 
     public override void Paste() {
+        if (IsReadOnly) return;
         string text = Shell.Clipboard.GetText();
         if (string.IsNullOrEmpty(text)) return;
         
@@ -634,13 +636,17 @@ public class TextArea : ValueControl<string> {
     }
 
     public override void Undo() {
+        if (IsReadOnly) return;
         if (History == null) DebugLogger.Log("TextArea.Undo: History is null");
         else {
             DebugLogger.Log($"TextArea.Undo: Undoing last command. History count: {History.CanUndo}");
             History.Undo();
         }
     }
-    public override void Redo() => History?.Redo();
+    public override void Redo() {
+        if (IsReadOnly) return;
+        History?.Redo();
+    }
 
     private void SelectWordAtCursor() {
         string line = _lines[_cursorLine];
@@ -698,6 +704,7 @@ public class TextArea : ValueControl<string> {
     }
 
     public override void DeleteSelection() {
+        if (IsReadOnly) return;
         if (!HasSelection()) return;
         GetSelectionRange(out int startLine, out int startCol, out int endLine, out int endCol);
 

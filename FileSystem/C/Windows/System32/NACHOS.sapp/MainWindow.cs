@@ -28,12 +28,13 @@ public class MainWindow : Window {
     private ClosablePanel _terminalPanel;
     private MenuBar _menuBar;
     private string _projectPath;
+    private FileSystemWatcher _manifestWatcher;
     
     private bool _sidebarVisible = true;
     private bool _terminalVisible = true;
     private float _sidebarWidth = 200;
-    private float _terminalHeight = 200;
-    private string[] _projectReferences = Array.Empty<string>();
+    private float _terminalHeight = 250;
+    private List<string> _projectReferences = new();
     private readonly ConcurrentQueue<Action> _pendingUiActions = new();
     
     private List<OpenPage> _pages = new();
@@ -139,13 +140,8 @@ public class MainWindow : Window {
             }
         };
         _tabControl.OnTabChanged += (index) => {
-            if (_activePopup != null) {
-                Shell.RemoveOverlayElement(_activePopup);
-                _activePopup = null;
-            }
             if (index >= 0 && index < _pages.Count) {
                 var activePage = _pages[index];
-                QueueAnalysis(activePage);
                 _sidebar.SelectedPath = activePage.Path;
             } else {
                 _sidebar.SelectedPath = null;
@@ -243,116 +239,30 @@ public class MainWindow : Window {
 
         if (tab is EditorTab editorTab) {
             var editor = editorTab.Editor;
-            editorTab.OnContentChanged = () => UpdateEditorSizeAndAnalysis(editor, pageInfo);
-            editorTab.OnSelectionChanged = () => {
-                if (_activePopup != null && _tabControl.SelectedPage == page) {
-                    var caretPos = editor.GetCaretPosition();
-                    if (caretPos != null) {
-                        _activePopup.Position = caretPos.Value + new Vector2(0, 18);
-                    }
-                }
-                ShowSignatureHelp(pageInfo);
-            };
+            editor.Intelligence.SetWorkspaceContext(
+                () => ProjectWorkspace.GetSources(_projectPath, GetOpenSources),
+                () => ProjectWorkspace.GetReferences(_projectPath)
+            );
+
+            editorTab.OnContentChanged = () => UpdateEditorSize(editor);
+            editorTab.OnSelectionChanged = () => { };
             editorTab.UpdateLayout();
         }
         
         _pages.Add(pageInfo);
         _sidebar.SelectedPath = path;
         _tabControl.SelectedIndex = _pages.Count - 1;
-        
-        if (pageInfo.Editor != null) QueueAnalysis(pageInfo);
     }
 
-    private void UpdateEditorSizeAndAnalysis(CodeEditor editor, OpenPage pageInfo) {
-        if (_isCompleting) return;
-        var currentTabControl = _tabControl;
-        if (currentTabControl == null || currentTabControl.ContentArea == null) return;
+    private void UpdateEditorSize(CodeEditor editor) {
+        if (_tabControl == null || _tabControl.ContentArea == null) return;
         
         editor.Size = new Vector2(
-            Math.Max(currentTabControl.ContentArea.Size.X, editor.GetTotalWidth()), 
-            Math.Max(currentTabControl.ContentArea.Size.Y, editor.GetTotalHeight())
+            Math.Max(_tabControl.ContentArea.Size.X, editor.GetTotalWidth()), 
+            Math.Max(_tabControl.ContentArea.Size.Y, editor.GetTotalHeight())
         );
-        QueueAnalysis(pageInfo);
-        
-        // Trigger IntelliSense logic
-        int cursorIdx = editor.GetIndexFromPosition(editor.CursorLine, editor.CursorCol);
-
-        // Suppress if in a comment (Green: 87, 166, 74)
-        bool inComment = editor.Tokens.Any(t => cursorIdx > t.Start && cursorIdx <= t.Start + t.Length && t.Color == new Color(87, 166, 74));
-        
-        // Fast path: Check if current line has // before cursor (to catch it before highlighter runs)
-        if (!inComment) {
-            string line = editor.Lines[editor.CursorLine];
-            int commentIdx = line.IndexOf("//");
-            if (commentIdx != -1 && editor.CursorCol > commentIdx) inComment = true;
-        }
-
-        if (inComment) {
-            if (_activePopup != null) {
-                Shell.RemoveOverlayElement(_activePopup);
-                _activePopup = null;
-            }
-            return;
-        }
-
-        string text = editor.Value;
-        if (cursorIdx >= 0 && cursorIdx <= text.Length) {
-            char lastChar = cursorIdx > 0 ? text[cursorIdx - 1] : '\0';
-            
-            // Get current word
-            int start = editor.CursorCol;
-            var lines = editor.Lines;
-            if (lines == null || editor.CursorLine < 0 || editor.CursorLine >= lines.Count) return;
-            string currentLine = lines[editor.CursorLine];
-            while (start > 0 && start <= currentLine.Length && (char.IsLetterOrDigit(currentLine[start - 1]) || currentLine[start - 1] == '_')) start--;
-            string word = currentLine.Substring(start, Math.Min(editor.CursorCol, currentLine.Length) - start);
-
-            // Check if we're after a keyword that needs IntelliSense
-            bool afterKeyword = false;
-            if (lastChar == ' ' && start > 0) {
-                int kwStart = start - 1;
-                while (kwStart > 0 && currentLine[kwStart - 1] == ' ') kwStart--;
-                int kwEnd = kwStart;
-                while (kwStart > 0 && (char.IsLetterOrDigit(currentLine[kwStart - 1]) || currentLine[kwStart - 1] == '_')) kwStart--;
-                string previousWord = currentLine.Substring(kwStart, kwEnd - kwStart);
-                
-                if (previousWord == "override" || previousWord == "new" || previousWord == "partial") {
-                    afterKeyword = true;
-                }
-            }
-
-            var currentPopup = _activePopup;
-            if (lastChar == '.' || lastChar == '(' || lastChar == ',' || lastChar == '<' || lastChar == '{' || afterKeyword) {
-                // Always re-trigger on these chars/contexts
-                ShowIntelliSense(pageInfo);
-            } else if (word.Length > 0) {
-                // Words: trigger if just started, or update if exists
-                if (currentPopup == null && word.Length >= 1 && !editor.IsFetchingCompletions) {
-                    ShowIntelliSense(pageInfo, word);
-                } else if (currentPopup != null) {
-                    currentPopup.SearchQuery = word;
-                    
-                    // Sync position during typing
-                    var caretPos = editor.GetCaretPosition();
-                     if (caretPos != null) {
-                          currentPopup.Position = caretPos.Value + new Vector2(0, 18);
-                     }
-                  }
-            } else if (lastChar != ' ') {
-                // No word and not a space: hide
-                // Keep popup open if space after trigger chars like ", " in arguments
-                if (currentPopup != null) {
-                    Shell.RemoveOverlayElement(currentPopup);
-                    if (_activePopup == currentPopup) _activePopup = null;
-                }
-            }
-            // If lastChar == ' ' and currentPopup exists, do nothing (keep it open)
-        }
-        
-        ShowSignatureHelp(pageInfo);
     }
-
-
+        
     private void OpenNewProjectWizard() {
         var settings = new ProjectSettings();
         var wizard = new ProjectWizardWindow(settings);
@@ -366,6 +276,14 @@ public class MainWindow : Window {
     private void OpenProject(string path) {
         _projectPath = path;
         Title = "NACHOS - " + (path ?? "No Project");
+        
+        // Setup manifest watcher
+        if (_manifestWatcher != null) {
+            _manifestWatcher.EnableRaisingEvents = false;
+            _manifestWatcher.Dispose();
+            _manifestWatcher = null;
+        }
+
         if (!string.IsNullOrEmpty(path)) {
             if (_sidebar != null) _sidebar.RootPath = path;
             if (_terminal != null) _terminal.Execute($"cd \"{path}\""); // Use command to update prompt folder correctly
@@ -377,20 +295,41 @@ public class MainWindow : Window {
             // Initialize usage tracker for this project
             UsageTracker.Initialize();
 
-            // Load project references
-            try {
-                string manifestPath = Path.Combine(path, "manifest.json");
-                if (VirtualFileSystem.Instance.Exists(manifestPath)) {
-                    string json = VirtualFileSystem.Instance.ReadAllText(manifestPath);
-                    var manifest = AppManifest.FromJson(json);
-                    _projectReferences = manifest.References ?? Array.Empty<string>();
-                } else {
-                    _projectReferences = Array.Empty<string>();
-                }
-            } catch (Exception ex) {
-                DebugLogger.Log("Failed to load project references: " + ex.Message);
-                _projectReferences = Array.Empty<string>();
+            ReloadProjectReferences();
+
+            // Watch manifest for changes
+            var hostProjectPath = VirtualFileSystem.Instance.ToHostPath(path);
+            if (!string.IsNullOrEmpty(hostProjectPath) && Directory.Exists(hostProjectPath)) {
+                _manifestWatcher = new FileSystemWatcher(hostProjectPath, "manifest.json");
+                _manifestWatcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName;
+                _manifestWatcher.Changed += (s, e) => {
+                    _pendingUiActions.Enqueue(() => {
+                        DebugLogger.Log("Manifest changed, reloading references...");
+                        ReloadProjectReferences();
+                        foreach (var p in _pages.Where(pg => pg.Editor != null)) {
+                            p.Editor.Intelligence.TriggerAnalysis();
+                        }
+                    });
+                };
+                _manifestWatcher.EnableRaisingEvents = true;
             }
+        }
+    }
+
+    private void ReloadProjectReferences() {
+        if (string.IsNullOrEmpty(_projectPath)) return;
+        try {
+            string manifestPath = Path.Combine(_projectPath, "manifest.json");
+            if (VirtualFileSystem.Instance.Exists(manifestPath)) {
+                string json = VirtualFileSystem.Instance.ReadAllText(manifestPath);
+                var manifest = AppManifest.FromJson(json);
+                _projectReferences = manifest.References?.ToList() ?? new List<string>();
+            } else {
+                _projectReferences = new List<string>();
+            }
+        } catch (Exception ex) {
+            DebugLogger.Log("Failed to load project references: " + ex.Message);
+            _projectReferences = new List<string>();
         }
     }
 
@@ -467,368 +406,27 @@ public class MainWindow : Window {
         _terminal.Execute($"sappc \"{_projectPath}\" -run");
     }
 
-    private CompletionPopup _activePopup;
-    private SignaturePopup _activeSignaturePopup;
-    private bool _isCompleting = false;
-    private CancellationTokenSource _intelliSenseCts;
-    private CancellationTokenSource _signatureCts;
-
     public override void Update(GameTime gameTime) {
-        // Process UI actions from background threads
-        while (_pendingUiActions.TryDequeue(out var action)) action?.Invoke();
-
-        // Check for Ctrl+Space BEFORE base.Update so we can consume it before children see it
-        if (_tabControl.SelectedIndex >= 0 && _tabControl.SelectedIndex < _pages.Count) {
-            var page = _pages[_tabControl.SelectedIndex];
-            
-            // Sync IntelliSense position if window moved (dragging) or hide if minimized
-            var currentPopup = _activePopup;
-            if (currentPopup != null) {
-                if (IsVisible) {
-                    var caretPos = page.Editor?.GetCaretPosition();
-                    if (caretPos != null) {
-                        currentPopup.Position = caretPos.Value + new Vector2(0, 18);
-                    }
-                } else {
-                    Shell.RemoveOverlayElement(currentPopup);
-                    if (_activePopup == currentPopup) _activePopup = null;
-                }
-            }
-
-            if (page.Editor != null && page.Editor.IsFocused) {
-                if (page.Editor.ActiveSnippetSession != null) {
-                    page.Editor.ActiveSnippetSession.HandleInput();
-                    
-                    if (InputManager.IsKeyboardConsumed && (InputManager.IsKeyJustPressed(Microsoft.Xna.Framework.Input.Keys.Enter) || InputManager.IsKeyJustPressed(Microsoft.Xna.Framework.Input.Keys.Tab))) {
-                        if (_activePopup != null) {
-                            Shell.RemoveOverlayElement(_activePopup);
-                            _activePopup = null;
-                        }
-                    }
-                }
-
-                if (InputManager.IsKeyDown(Microsoft.Xna.Framework.Input.Keys.LeftControl) && InputManager.IsKeyJustPressed(Microsoft.Xna.Framework.Input.Keys.Space)) {
-                    ShowIntelliSense(page);
-                    InputManager.IsKeyboardConsumed = true;
-                }
+        while (_pendingUiActions.TryDequeue(out var action)) {
+            try {
+                action();
+            } catch (Exception ex) {
+                DebugLogger.Log("Error executing pending action: " + ex.Message);
             }
         }
-
         base.Update(gameTime);
     }
 
-    private void ShowIntelliSense(OpenPage page, string initialSearch = "") {
-        _intelliSenseCts?.Cancel();
-        _intelliSenseCts = new CancellationTokenSource();
-        var token = _intelliSenseCts.Token;
-
-        page.Editor.IsFetchingCompletions = true;
-
-        var sourceFiles = new Dictionary<string, string>();
-        var pagesSnapshot = _pages.Where(p => p.Editor != null).ToList();
-        foreach (var p in pagesSnapshot) sourceFiles[p.Path] = p.Editor.Value;
-
-        int pos = page.Editor.GetIndexFromPosition(page.Editor.CursorLine, page.Editor.CursorCol);
-        
-        Task.Run(async () => {
-            try {
-                // Small delay to allow auto-brackets or multiple fast keystrokes to settle
-                await Task.Delay(20, token);
-                if (token.IsCancellationRequested) return;
-
-                var items = await IntelliSenseProvider.GetCompletionsAsync(sourceFiles, page.Path, pos, _projectReferences);
-                if (token.IsCancellationRequested) return;
-                
-                // Back to UI thread-sh (actually just add child)
-                if (items.Count > 0) {
-                    _pendingUiActions.Enqueue(() => {
-                        if (token.IsCancellationRequested) return;
-                        
-                        var caretPos = page.Editor.GetCaretPosition();
-                        if (caretPos != null) {
-                            Vector2 popupPos = caretPos.Value + new Vector2(0, 18);
-                            
-                            var popup = new CompletionPopup(popupPos, items, (item) => {
-                                _isCompleting = true;
-                                page.Editor.History?.BeginTransaction("Completion: " + item.Label);
-                                try {
-                                     if (item.Kind == "M") {
-                                        // Heuristic: check if inside an expression (unmatched opening paren before cursor)
-                                        string line = page.Editor.Lines[page.Editor.CursorLine];
-                                        int col = page.Editor.CursorCol;
-                                        
-                                        int parens = 0;
-                                        for (int i = 0; i < col; i++) {
-                                            if (line[i] == '(') parens++;
-                                            else if (line[i] == ')') parens--;
-                                        }
-                                        bool inExpression = parens > 0;
-    
-                                        // Check if followed by ( or ;
-                                        bool hasParenAfter = false;
-                                        bool hasSemicolonAfter = false;
-                                        for (int i = col; i < line.Length; i++) {
-                                            if (char.IsWhiteSpace(line[i])) continue;
-                                            if (line[i] == '(') hasParenAfter = true;
-                                            if (line[i] == ';') hasSemicolonAfter = true;
-                                            break;
-                                        }
-    
-                                        string suffix = "";
-                                        int back = 0;
-                                        if (!hasParenAfter) {
-                                            suffix += "()";
-                                            back = 1;
-                                        }
-                                        if (!inExpression && !hasSemicolonAfter) {
-                                            suffix += ";";
-                                            if (back > 0) back++;
-                                        }
-    
-                                        page.Editor.ReplaceCurrentWord(item.Label + suffix);
-                                        if (back > 0) page.Editor.MoveCursor(-back, 0, false);
-                                     } else if (item.Kind == "SN") {
-                                        var snippet = SnippetManager.GetSnippets().FirstOrDefault(s => s.Shortcut == item.Label);
-                                        if (snippet != null) {
-                                            page.Editor.InsertSnippet(snippet);
-                                        }
-                                    } else {
-                                        // Handle generic types (e.g. List -> List<>)
-                                        bool isGeneric = (item.Kind == "C" || item.Kind == "S" || item.Kind == "I" || item.Kind == "D") && 
-                                                         (item.Detail.Contains("<") || item.Detail.Contains(">"));
-                                        
-                                        if (isGeneric) {
-                                            page.Editor.ReplaceCurrentWord(item.Label + "<>");
-                                            page.Editor.MoveCursor(-1, 0, false);
-                                        } else {
-                                            page.Editor.ReplaceCurrentWord(item.Label); 
-                                        }
-                                    }
-                                    
-                                    // Immediate update for color/diagnostics
-                                    QueueAnalysis(page);
-    
-                                     if (_activePopup != null) {
-                                         Shell.RemoveOverlayElement(_activePopup);
-                                         _activePopup = null;
-                                     }
-                                } finally {
-                                    page.Editor.History?.EndTransaction();
-                                    _isCompleting = false; 
-                                }
-                            }, initialSearch);
-
-                            if (popup.VisibleItemsCount == 0) {
-                                return;
-                            }
-
-                            popup.OnClosed = () => {
-                                if (_activePopup == popup) _activePopup = null;
-                            };
-
-                             if (_activePopup != null) {
-                                 Shell.RemoveOverlayElement(_activePopup);
-                             }
-                             _activePopup = popup;
-                             Shell.AddOverlayElement(popup);
-                         }
-                    });
-                 } else {
-                     _pendingUiActions.Enqueue(() => {
-                         if (_activePopup != null) {
-                             Shell.RemoveOverlayElement(_activePopup);
-                             _activePopup = null;
-                         }
-                     });
-                 }
-            } catch (OperationCanceledException) { 
-            } catch (Exception ex) {
-                DebugLogger.Log("IntelliSense Task Error: " + ex.Message);
-            } finally {
-                if (!token.IsCancellationRequested) {
-                    _pendingUiActions.Enqueue(() => page.Editor.IsFetchingCompletions = false);
-                }
-            }
-        }, token);
-    }
-
-    private void ShowSignatureHelp(OpenPage page) {
-        _signatureCts?.Cancel();
-        _signatureCts = new CancellationTokenSource();
-        var token = _signatureCts.Token;
-
-        var sourceFiles = new Dictionary<string, string>();
-        foreach (var p in _pages.Where(pg => pg.Editor != null)) sourceFiles[p.Path] = p.Editor.Value;
-
-        int pos = page.Editor.GetIndexFromPosition(page.Editor.CursorLine, page.Editor.CursorCol);
-
-        Task.Run(async () => {
-            try {
-                var sig = await IntelliSenseProvider.GetSignatureHelpAsync(sourceFiles, page.Path, pos, _projectReferences);
-                if (token.IsCancellationRequested) return;
-
-                _pendingUiActions.Enqueue(() => {
-                    if (token.IsCancellationRequested) return;
-
-                    if (sig == null) {
-                        if (_activeSignaturePopup != null) {
-                            Shell.RemoveOverlayElement(_activeSignaturePopup);
-                            _activeSignaturePopup = null;
-                        }
-                        return;
-                    }
-
-                    var caretPos = page.Editor.GetCaretPosition();
-                    if (caretPos != null) {
-                        Vector2 popupPos = caretPos.Value - new Vector2(0, 35); // Show ABOVE the line
-                        
-                        if (_activeSignaturePopup == null) {
-                            _activeSignaturePopup = new SignaturePopup(popupPos, sig.Value.MethodName, sig.Value.Parameters);
-                            _activeSignaturePopup.ActiveIndex = sig.Value.ActiveIndex;
-                            Shell.AddOverlayElement(_activeSignaturePopup);
-                        } else {
-                            // Update existing
-                            _activeSignaturePopup.Position = popupPos;
-                            _activeSignaturePopup.SetSignature(sig.Value.MethodName, sig.Value.Parameters);
-                            _activeSignaturePopup.UpdateParameters(sig.Value.ActiveIndex);
-                        }
-                    }
-                });
-            } catch (Exception ex) {
-                DebugLogger.Log("SignatureHelp Task Error: " + ex.Message);
-            }
-        }, token);
-    }
-    // --- Background Analysis ---
-
-    private CancellationTokenSource _analysisCts;
-    private Dictionary<string, System.Timers.Timer> _highlightTimers = new();
-
-    private void QueueAnalysis(OpenPage page) {
-        if (page.Editor == null) return;
-        // Debounced Highlighter (Background then UI Update)
-        if (!_highlightTimers.TryGetValue(page.Path, out var timer)) {
-            timer = new System.Timers.Timer(500);
-            timer.AutoReset = false;
-            timer.Elapsed += (s, e) => {
-                string text = "";
-                // We need the UI thread to safely get the value, but timer elapsed is on a pool thread.
-                _pendingUiActions.Enqueue(() => {
-                    text = page.Editor.Value;
-                    Task.Run(() => {
-                        var tokens = CSharpHighlighter.Highlight(text);
-                        _pendingUiActions.Enqueue(() => {
-                            page.Editor.Tokens = tokens;
-                        });
-                    });
-                });
-            };
-            _highlightTimers[page.Path] = timer;
-        }
-        timer.Stop();
-        timer.Start();
-
-        // Project-wide Diagnostics (Background task)
-        _analysisCts?.Cancel();
-        _analysisCts = new CancellationTokenSource();
-        var token = _analysisCts.Token;
-
-        // Snapshot current values on UI thread
-        var sourceFiles = new Dictionary<string, string>();
-        var pagesSnapshot = _pages.Where(p => p.Editor != null).ToList();
-        foreach (var p in pagesSnapshot) {
-            sourceFiles[p.Path] = p.Editor.Value;
-        }
-
-        Task.Run(async () => {
-            try {
-                await Task.Delay(1000, token); // Wait a bit longer for diagnostics
-                if (token.IsCancellationRequested) return;
-
-                if (string.IsNullOrEmpty(_projectPath)) return;
-
-                // Sync manifest references if manifest is open
-                var currentReferences = _projectReferences;
-                var manifestFile = sourceFiles.Keys.FirstOrDefault(k => k.EndsWith("manifest.json", StringComparison.OrdinalIgnoreCase));
-                if (manifestFile != null) {
-                    try {
-                        var manifest = AppManifest.FromJson(sourceFiles[manifestFile]);
-                        if (manifest != null && manifest.References != null) {
-                            currentReferences = manifest.References;
-                            _pendingUiActions.Enqueue(() => _projectReferences = currentReferences);
-                        }
-                    } catch { /* Ignore malformed JSON during typing */ }
-                }
-
-                var compilation = AppCompiler.Instance.Validate(sourceFiles, "NACHOS_ANALYSIS", out var diagnostics, currentReferences);
-                
-                // Group diagnostics by file
-                var diagsByFile = diagnostics.GroupBy(d => d.Location.SourceTree?.FilePath).ToList();
-
-                _pendingUiActions.Enqueue(() => {
-                    if (token.IsCancellationRequested) return;
-                    
-                    foreach (var p in pagesSnapshot) {
-                        // Semantic Highlighting
-                        var tree = compilation.SyntaxTrees.FirstOrDefault(t => t.FilePath == p.Path);
-                        if (tree != null) {
-                            var semanticModel = compilation.GetSemanticModel(tree);
-                            var content = sourceFiles[p.Path];
-                            Task.Run(() => {
-                                var semanticTokens = CSharpHighlighter.Highlight(content, semanticModel);
-                                _pendingUiActions.Enqueue(() => {
-                                    if (p.Editor.Value == content) { // Ensure content hasn't changed since highlight started
-                                        p.Editor.Tokens = semanticTokens;
-                                    }
-                                });
-                            });
-                        }
-
-                        // Diagnostics
-                        var fileDiags = diagsByFile.FirstOrDefault(g => g.Key == p.Path);
-                        if (fileDiags != null) {
-                            p.Editor.Diagnostics = fileDiags.Select(d => {
-                                var span = d.Location.SourceSpan;
-                                return new DiagnosticInfo(
-                                    span.Start, 
-                                    span.Length, 
-                                    d.GetMessage(), 
-                                    (DiagnosticSeverity)d.Severity
-                                );
-                            }).ToList();
-                        } else {
-                            p.Editor.Diagnostics.Clear();
-                        }
-                    }
-                });
-            } catch (TaskCanceledException) { }
-            catch (Exception ex) {
-                // Background errors shouldn't crash IDE
-                DebugLogger.Log("Analysis Error: " + ex.Message);
-            }
-        }, token);
-    }
     public override void Undo() => GetActiveTab()?.Undo();
     public override void Redo() => GetActiveTab()?.Redo();
 
     protected override void ExecuteClose() {
+        _manifestWatcher?.Dispose();
+        _manifestWatcher = null;
+
         // Save IntelliSense usage tracking data
         UsageTracker.Shutdown();
         
-        if (_activeSignaturePopup != null) {
-            Shell.RemoveOverlayElement(_activeSignaturePopup);
-            _activeSignaturePopup = null;
-        }
-        if (_activePopup != null) {
-            Shell.RemoveOverlayElement(_activePopup);
-            _activePopup = null;
-        }
-        foreach (var p in _pages) {
-            if (p.Editor != null) {
-                p.Editor.OnValueChanged = null;
-                p.Editor.OnCursorMoved = null;
-            }
-        }
         base.ExecuteClose();
     }
     private CodeEditor GetActiveEditor() {
@@ -841,5 +439,9 @@ public class MainWindow : Window {
         if (_tabControl == null || _tabControl.SelectedPage == null) return null;
         var active = _pages.FirstOrDefault(p => p.Page == _tabControl.SelectedPage);
         return active?.Tab;
+    }
+
+    public IEnumerable<(string Path, string Content)> GetOpenSources() {
+        return _pages.Where(p => p.Editor != null).Select(p => (p.Path, p.Editor.Value));
     }
 }
