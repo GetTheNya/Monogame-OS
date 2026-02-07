@@ -321,6 +321,7 @@ public class Window : WindowBase {
     }
 
     protected override void ExecuteClose() {
+        IsClosing = true;
         Tweener.CancelAll(this);
         Tweener.To(this, v => Opacity = v, Opacity, 0f, 0.15f, Easing.Linear).OnComplete = () => {
             base.ExecuteClose();

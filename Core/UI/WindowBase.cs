@@ -24,6 +24,11 @@ public abstract class WindowBase : UIElement {
     public event Action OnClosed;
 
     /// <summary>
+    /// Gets whether the window is currently in the process of closing (e.g. animating out).
+    /// </summary>
+    public bool IsClosing { get; protected set; }
+
+    /// <summary>
     /// Called when a close is requested. Call the provided callback with 'true' to proceed with closing.
     /// </summary>
     public event Action<Action<bool>> OnCloseRequested;
@@ -232,6 +237,7 @@ public abstract class WindowBase : UIElement {
     }
 
     protected virtual void ExecuteClose() {
+        IsClosing = true;
         foreach (var child in ChildWindows.ToList()) {
             child.ExecuteClose();
         }

@@ -427,7 +427,6 @@ public class DesktopScene : Core.Scenes.Scene {
         AppHotReloadManager.Instance.Update();
         
         _uiManager.Update(gameTime);
-        Core.Animation.Tweener.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
 
         // Update toast positions
         UpdateToastPositions();
@@ -783,7 +782,7 @@ public class DesktopScene : Core.Scenes.Scene {
                 DragDropManager.Instance.CancelDrag();
             }
 
-            if (isHovered && InputManager.IsMouseButtonJustPressed(MouseButton.Right)) {
+            if (!alreadyConsumed && isHovered && InputManager.IsMouseButtonJustPressed(MouseButton.Right)) {
                 // Centralized context menu logic in UIElement already triggered ContextMenuManager.Show
                 // We just consume the input and handled = true in PopulateContextMenu if we don't want bubbling.
                 InputManager.IsMouseConsumed = true;

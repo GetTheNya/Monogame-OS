@@ -83,6 +83,7 @@ public class DesktopIcon : UIElement {
     }
     
     protected override void UpdateInput() {
+        bool alreadyConsumed = InputManager.IsMouseConsumed;
         base.UpdateInput();
         if (!IsVisible || _isRenaming) return;
 
@@ -93,9 +94,9 @@ public class DesktopIcon : UIElement {
         // Use IsMouseOver (strict) and ignoreConsumed: true for the click check 
         // because base.UpdateInput() already consumed the mouse for us if we are hovered.
         bool isHovering = IsMouseOver;
-        bool isJustPressed = isHovering && InputManager.IsMouseButtonJustPressed(MouseButton.Left);
-        bool isRightPressed = isHovering && InputManager.IsMouseButtonJustPressed(MouseButton.Right);
-        bool isDoubleClick = isHovering && InputManager.IsDoubleClick(MouseButton.Left, ignoreConsumed: true);
+        bool isJustPressed = isHovering && !alreadyConsumed && InputManager.IsMouseButtonJustPressed(MouseButton.Left);
+        bool isRightPressed = isHovering && !alreadyConsumed && InputManager.IsMouseButtonJustPressed(MouseButton.Right);
+        bool isDoubleClick = isHovering && !alreadyConsumed && InputManager.IsDoubleClick(MouseButton.Left, ignoreConsumed: true);
 
         if (isHovering && ConsumesInput && !_isDragging)
             InputManager.IsMouseConsumed = true;

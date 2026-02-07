@@ -44,8 +44,8 @@ public class NotificationServiceProcess : Process {
         // Show initial notification
         Shell.Notifications.Show("Background Service", "Notification service started! You'll receive a notification every 10 seconds.");
 
-        _trayIconHeart1 = Shell.Images.LoadAppImage("heart\\heart1.png");
-        _trayIconHeart2 = Shell.Images.LoadAppImage("heart\\heart2.png");
+        _trayIconHeart1 = Shell.Images.LoadAppImage(this, "heart\\heart1.png");
+        _trayIconHeart2 = Shell.Images.LoadAppImage(this, "heart\\heart2.png");
 
         var trayIcon = new TrayIcon(_trayIconHeart1, "Service");
 

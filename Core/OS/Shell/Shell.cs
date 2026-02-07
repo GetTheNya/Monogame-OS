@@ -24,6 +24,11 @@ public static partial class Shell {
     public static void DrawDrag(SpriteBatch sb, ShapeBatch sbatch) => DragDropManager.Instance.DrawDragVisual(sb, sbatch);
 
     public static void Update(GameTime gameTime) {
+        float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
+        
+        // Update Tweener for global animations (OS-level)
+        TheGame.Core.Animation.Tweener.Update(dt);
+
         // Update DragDropManager for snap-back animation
         DragDropManager.Instance.Update(gameTime);
         

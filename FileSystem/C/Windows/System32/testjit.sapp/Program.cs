@@ -49,7 +49,7 @@ public class JitApp : Window {
         };
         AddChild(btn);
 
-        Texture2D icon = Shell.Images.LoadAppImage("tray_icon.png");
+        Texture2D icon = Shell.Images.LoadAppImage(OwnerProcess, "tray_icon.png");
 
         string trayIconId = "";
 

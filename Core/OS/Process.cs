@@ -40,7 +40,24 @@ public class Process {
     public string AppId { get; set; }
     
     /// <summary>Current state of the process.</summary>
-    public ProcessState State { get; set; } = ProcessState.Starting;
+    public ProcessState State {
+        get => _state;
+        set {
+            if (_state == value) return;
+            var oldState = _state;
+            _state = value;
+
+            // Notify application
+            if (Application != null) {
+                if (_state == ProcessState.Background && oldState != ProcessState.Background) {
+                    Application.TriggerOnBackground();
+                } else if (_state == ProcessState.Running && oldState == ProcessState.Background) {
+                    Application.TriggerOnForeground();
+                }
+            }
+        }
+    }
+    private ProcessState _state = ProcessState.Starting;
     
     /// <summary>Update priority when running in background.</summary>
     public ProcessPriority Priority { get; set; } = ProcessPriority.Normal;
@@ -137,6 +154,8 @@ public class Process {
         } else {
             OnStart(args);
         }
+
+        UpdateState();
     }
 
     private async System.Threading.Tasks.Task RunAsync(string[] args) {
@@ -146,6 +165,8 @@ public class Process {
             } else {
                 OnStart(args);
             }
+
+            UpdateState();
 
             // Auto-terminate when logic finishes
             if (State != ProcessState.Terminated) {
@@ -309,7 +330,7 @@ public class Process {
             // Don't terminate, just go to background
             if (Windows.Count == 0) {
                 DebugLogger.Log($"Process.OnWindowClosed: {AppId} - Going to background (ExitOnMainWindowClose=false)");
-                State = ProcessState.Background;
+                GoToBackground();
             }
             return;
         }
@@ -329,10 +350,7 @@ public class Process {
     internal void UpdateState() {
         if (State == ProcessState.Terminated) return;
         
-        // Don't update state if we have no windows - let OnWindowClosed handle termination
-        if (Windows.Count == 0) return;
-        
-        bool hasVisibleWindows = Windows.Any(w => w.IsVisible && w.Opacity > 0.1f);
+        bool hasVisibleWindows = Windows.Any(w => !w.IsClosing && w.IsVisible && w.Opacity > 0.1f);
         State = hasVisibleWindows ? ProcessState.Running : ProcessState.Background;
     }
 }

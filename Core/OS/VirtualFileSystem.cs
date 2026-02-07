@@ -147,15 +147,20 @@ public class VirtualFileSystem {
     }
 
     public void CreateFile(string virtualPath) {
+        using (var s = OpenWrite(virtualPath)) { }
+    }
+
+    /// <summary>
+    /// Opens a stream for writing to a virtual file. Creates the directory if it doesn't exist.
+    /// </summary>
+    public Stream OpenWrite(string virtualPath) {
         string hostPath = ToHostPath(virtualPath);
-        if (string.IsNullOrEmpty(hostPath)) return;
+        if (string.IsNullOrEmpty(hostPath)) return null;
 
         string dir = Path.GetDirectoryName(hostPath);
         if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
 
-        if (!File.Exists(hostPath)) {
-            File.Create(hostPath).Dispose();
-        }
+        return File.Create(hostPath);
     }
 
     public bool IsDirectory(string virtualPath) {

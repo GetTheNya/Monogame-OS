@@ -7,8 +7,9 @@ using TheGame.Core.Input;
 using TheGame.Core.Scenes;
 using TheGame.Graphics;
 using TheGame.Core.OS;
-using System.IO;
 using System;
+using System.IO;
+using System.Threading.Tasks;
 
 namespace TheGame;
 
@@ -23,6 +24,9 @@ public class Game1 : Game {
     private WindowsKeyHook _winKeyHook;
 
     private Fps _fps;
+
+    private static bool _screenshotRequested;
+    private static TaskCompletionSource<Texture2D> _screenshotTcs;
 
     public Game1() {
         Instance = this;
@@ -88,13 +92,15 @@ public class Game1 : Game {
         InputManager.Update(gameTime);
         CustomCursor.Instance.BeginFrame();
 
+        // Update Shell and Processes FIRST so they can consume input for the frame
+        Shell.Update(gameTime);
+        
         _sceneManager.Update(gameTime);
         _fps.Update(gameTime);
 
         AudioManager.Instance.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
         Registry.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
         DebugLogger.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
-        Shell.Update(gameTime);
 
         // The drag cleanup is now handled by DragDropManager through Shell.DraggedItem wrapper
 
@@ -129,6 +135,34 @@ public class Game1 : Game {
         CustomCursor.Instance.Draw();
 
         base.Draw(gameTime);
+
+        if (_screenshotRequested) {
+            DebugLogger.Log("Screenshot requested!");
+            _screenshotRequested = false;
+            
+            int width = GraphicsDevice.PresentationParameters.BackBufferWidth;
+            int height = GraphicsDevice.PresentationParameters.BackBufferHeight;
+            
+            Color[] data = new Color[width * height];
+            GraphicsDevice.GetBackBufferData(data);
+            
+            Texture2D screenshot = new Texture2D(GraphicsDevice, width, height);
+            screenshot.SetData(data);
+            
+            DebugLogger.Log("Screenshot made!");
+            
+            _screenshotTcs?.SetResult(screenshot);
+            _screenshotTcs = null;
+        }
+
+    }
+
+    public static Task<Texture2D> CaptureScreenshotAsync() {
+        if (_screenshotRequested) return _screenshotTcs.Task;
+        
+        _screenshotRequested = true;
+        _screenshotTcs = new TaskCompletionSource<Texture2D>();
+        return _screenshotTcs.Task;
     }
 
     protected override void OnExiting(object sender, EventArgs args) {

@@ -14,9 +14,8 @@ public static partial class Shell {
         /// Loads a texture from an app-relative path (inside the .sapp folder).
         /// Automatically detects the calling application.
         /// </summary>
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static Texture2D LoadAppImage(string fileName) {
-            string appId = AppLoader.Instance.GetAppIdFromAssembly(Assembly.GetCallingAssembly());
+        public static Texture2D LoadAppImage(TheGame.Core.OS.Process process, string fileName) {
+            string appId = process.AppId;
             if (appId == null) return null;
             string virtualPath = VirtualFileSystem.Instance.GetAppResourcePath(appId, fileName);
             if (virtualPath == null) return null;

@@ -1,0 +1,8 @@
+{
+    "appId": "SLICE",
+    "name": "Screen Capture",
+    "entryClass": "ScreenCapture.Program",
+    "entryMethod": "Main",
+    "singleInstance": false,
+    "references": []
+}

@@ -118,8 +118,8 @@ public class ProcessManager {
             // Update process state based on window visibility
             process.UpdateState();
             
-            // Foreground processes (with visible windows) always update at full rate
-            if (process.State == ProcessState.Running) {
+            // Foreground processes (with visible windows) or Starting processes always update at full rate
+            if (process.State == ProcessState.Running || process.State == ProcessState.Starting) {
                 try {
                     process.Update(gameTime);
                 } catch (Exception ex) {
@@ -196,15 +196,20 @@ public class ProcessManager {
     /// </summary>
     public void LoadStartupApps() {
         try {
-            var startupApps = Registry.GetAllValues<bool>(Shell.Registry.Startup);
+            var startupApps = TheGame.Core.OS.Registry.GetAllValues<bool>(Shell.Registry.Startup);
             foreach (var kvp in startupApps) {
                 if (kvp.Value) {
-                    DebugLogger.Log($"Starting startup app: {kvp.Key}");
-                    StartProcess(kvp.Key);
+                    try {
+                        DebugLogger.Log($"Starting startup app: {kvp.Key}");
+                        // Pass a "startup" argument so apps can know they are starting automatically
+                        StartProcess(kvp.Key, new[] { "startup" });
+                    } catch (Exception ex) {
+                        DebugLogger.Log($"Error starting startup app {kvp.Key}: {ex.Message}");
+                    }
                 }
             }
         } catch (Exception ex) {
-            DebugLogger.Log($"Error loading startup apps: {ex.Message}");
+            DebugLogger.Log($"Error loading startup registry: {ex.Message}");
         }
     }
     

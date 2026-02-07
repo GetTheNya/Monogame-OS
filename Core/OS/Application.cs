@@ -116,6 +116,16 @@ public abstract class Application {
     /// Called when the application is about to be terminated. Use this for cleanup.
     /// </summary>
     protected virtual void OnClose() { }
+
+    /// <summary>
+    /// Called when the application enters background mode (all windows hidden).
+    /// </summary>
+    protected virtual void OnBackground() { }
+
+    /// <summary>
+    /// Called when the application returns to foreground mode (at least one window visible).
+    /// </summary>
+    protected virtual void OnForeground() { }
     
     // --- Legacy Methods (for backward compatibility) ---
     
@@ -130,6 +140,9 @@ public abstract class Application {
     
     [Obsolete("Use OnClose instead")]
     public virtual void Terminate() => OnClose();
+
+    internal void TriggerOnBackground() => OnBackground();
+    internal void TriggerOnForeground() => OnForeground();
     
     // --- Window Creation Helpers ---
 

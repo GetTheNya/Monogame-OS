@@ -24,7 +24,7 @@ public class ContextMenuTest : Window {
         Title = "Advanced Context Menu Test";
         AppId = "CONTEXTTEST";
 
-        _appIcon = Shell.Images.LoadAppImage("icon.png");
+        _appIcon = Shell.Images.LoadAppImage(OwnerProcess, "icon.png");
 
         var label = new Label(new Vector2(20, 20), "1. Priority & Sorting Test") {
             TextColor = Color.Yellow,
