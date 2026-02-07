@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using TheGame.Core.OS;
 using NACHOS;
@@ -40,6 +41,28 @@ public static class ProjectMetadataManager {
         string path = GetMetadataPath(fileName);
         if (string.IsNullOrEmpty(path)) return;
         VirtualFileSystem.Instance.WriteAllText(path, content);
+    }
+
+    public static ProjectSettings GetProjectSettings() {
+        if (string.IsNullOrEmpty(_projectPath)) return null;
+        
+        var files = VirtualFileSystem.Instance.GetFiles(_projectPath);
+        var nproj = files.FirstOrDefault(f => f.EndsWith(".nproj", StringComparison.OrdinalIgnoreCase));
+        
+        if (nproj != null) {
+            try {
+                string json = VirtualFileSystem.Instance.ReadAllText(nproj);
+                return JsonSerializer.Deserialize<ProjectSettings>(json);
+            } catch {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    public static string GetNamespace() {
+        var settings = GetProjectSettings();
+        return settings?.Namespace ?? "MyNamespace";
     }
 
     public static void SaveProjectFile(ProjectSettings settings) {

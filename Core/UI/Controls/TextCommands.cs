@@ -64,6 +64,7 @@ public class InsertTextCommand : TextCommand {
     }
 
     public override void Execute() {
+        if (_target.IsReadOnly) return;
         _target.InternalInsertText(_line, _col, _text);
         SetAfterState();
     }
@@ -105,6 +106,7 @@ public class DeleteTextCommand : TextCommand {
     }
 
     public override void Execute() {
+        if (_target.IsReadOnly) return;
         _target.InternalDeleteRange(_line, _col, _deletedText.Length);
         SetAfterState();
     }
@@ -158,6 +160,7 @@ public class ReplaceTextCommand : TextCommand {
     }
 
     public override void Execute() {
+        if (_target.IsReadOnly) return;
         _target.InternalReplaceRange(_startLine, _startCol, _endLine, _endCol, _newText);
         SetAfterState();
     }

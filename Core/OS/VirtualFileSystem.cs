@@ -130,6 +130,15 @@ public class VirtualFileSystem {
             .ToArray();
     }
 
+    public string[] GetFilesRecursive(string virtualPath, string searchPattern = "*") {
+        string hostPath = ToHostPath(virtualPath);
+        if (string.IsNullOrEmpty(hostPath) || !Directory.Exists(hostPath)) return Array.Empty<string>();
+        
+        return Directory.GetFiles(hostPath, searchPattern, SearchOption.AllDirectories)
+            .Select(ToVirtualPath)
+            .ToArray();
+    }
+
     public void CreateDirectory(string virtualPath) {
         string hostPath = ToHostPath(virtualPath);
         if (!string.IsNullOrEmpty(hostPath)) {

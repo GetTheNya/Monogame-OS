@@ -46,6 +46,7 @@ public class TextArea : ValueControl<string> {
     protected bool _showCursor = true;
     [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public bool UseInternalScrolling { get; set; } = true;
+    public bool IsReadOnly { get; set; } = false;
     public Action OnCursorMoved;
     protected bool _isWordSelecting = false;
     public int CursorLine => _cursorLine;
@@ -69,7 +70,7 @@ public class TextArea : ValueControl<string> {
     [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public virtual Vector2 TextOffset => new Vector2(10, 10);
 
-    protected virtual bool CanEditAt(int line, int col) => true;
+    protected virtual bool CanEditAt(int line, int col) => !IsReadOnly;
     protected virtual void OnEnterPressed() {
         if (History != null) {
             GetSelectionRange(out int sl, out int sc, out int el, out int ec);

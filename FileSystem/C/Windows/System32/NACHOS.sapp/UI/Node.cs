@@ -37,7 +37,7 @@ public class Node : Panel, IDraggable, IDropTarget {
         FullPath = path;
         Depth = depth;
         Sidebar = sidebar;
-        IsDirectory = VirtualFileSystem.Instance.IsDirectory(path);
+        IsDirectory = VirtualFileSystem.Instance.IsDirectory(path) && !path.EndsWith(".uilayout", StringComparison.OrdinalIgnoreCase);
         
         BackgroundColor = Color.Transparent;
         BorderThickness = 0;
@@ -414,12 +414,19 @@ public class Node : Panel, IDraggable, IDropTarget {
 
     private void LoadChildren() {
         NodeChildren.Clear();
-        var dirs = VirtualFileSystem.Instance.GetDirectories(FullPath).OrderBy(d => d);
+        var allDirs = VirtualFileSystem.Instance.GetDirectories(FullPath);
+        
+        var realDirs = allDirs.Where(d => !Path.GetExtension(d).Equals(".uilayout", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase);
+            
+        var layoutDirs = allDirs.Where(d => Path.GetExtension(d).Equals(".uilayout", StringComparison.OrdinalIgnoreCase));
+        
         var files = VirtualFileSystem.Instance.GetFiles(FullPath)
             .Where(f => !f.EndsWith(".nproj", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(f => f);
+            .Concat(layoutDirs)
+            .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase);
 
-        foreach (var d in dirs) NodeChildren.Add(new Node(d, Depth + 1, Sidebar));
+        foreach (var d in realDirs) NodeChildren.Add(new Node(d, Depth + 1, Sidebar));
         foreach (var f in files) NodeChildren.Add(new Node(f, Depth + 1, Sidebar));
     }
 

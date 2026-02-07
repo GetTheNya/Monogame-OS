@@ -41,14 +41,19 @@ public class Sidebar : ScrollPanel, IDropTarget {
         ClearChildren();
         _rootNodes.Clear();
         
-        var dirs = VirtualFileSystem.Instance.GetDirectories(_rootPath)
-            .Where(d => !Path.GetFileName(d).StartsWith("."))
-            .OrderBy(d => d);
+        var allDirs = VirtualFileSystem.Instance.GetDirectories(_rootPath);
+        
+        var realDirs = allDirs.Where(d => !Path.GetFileName(d).StartsWith(".") && !Path.GetExtension(d).Equals(".uilayout", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase);
+            
+        var layoutDirs = allDirs.Where(d => Path.GetExtension(d).Equals(".uilayout", StringComparison.OrdinalIgnoreCase));
+        
         var files = VirtualFileSystem.Instance.GetFiles(_rootPath)
             .Where(f => !f.EndsWith(".nproj", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(f => f);
+            .Concat(layoutDirs)
+            .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase);
 
-        foreach (var d in dirs) _rootNodes.Add(new Node(d, 0, this));
+        foreach (var d in realDirs) _rootNodes.Add(new Node(d, 0, this));
         foreach (var f in files) _rootNodes.Add(new Node(f, 0, this));
         
         UpdateLayout();

@@ -34,6 +34,7 @@ public class CodeEditor : TextArea {
     public string FilePath => _filePath;
     public string FileName => string.IsNullOrEmpty(_filePath) ? "Untitled" : Path.GetFileName(_filePath);
     public bool IsFetchingCompletions { get; set; } = false;
+    public bool IsReadOnly { get; set; } = false;
 
     public List<TokenSegment> Tokens { get; set; } = new();
     public List<DiagnosticInfo> Diagnostics { get; set; } = new();

@@ -222,6 +222,11 @@ public class MainWindow : Window {
         TabPage page;
         OpenPage pageInfo;
 
+        string actualLayoutFile = path;
+        if (path.EndsWith(".uilayout") && VirtualFileSystem.Instance.IsDirectory(path)) {
+            actualLayoutFile = Path.Combine(path, "layout.json");
+        }
+
         NachosTab tab = path.EndsWith(".uilayout") 
             ? new DesignerTab(Vector2.Zero, _tabControl.ContentArea.Size, path, _projectPath)
             : new EditorTab(Vector2.Zero, _tabControl.ContentArea.Size, path);
@@ -374,10 +379,9 @@ public class MainWindow : Window {
 
             // Load project references
             try {
-                string hostPath = VirtualFileSystem.Instance.ToHostPath(path);
-                string manifestPath = Path.Combine(hostPath, "manifest.json");
-                if (File.Exists(manifestPath)) {
-                    string json = File.ReadAllText(manifestPath);
+                string manifestPath = Path.Combine(path, "manifest.json");
+                if (VirtualFileSystem.Instance.Exists(manifestPath)) {
+                    string json = VirtualFileSystem.Instance.ReadAllText(manifestPath);
                     var manifest = AppManifest.FromJson(json);
                     _projectReferences = manifest.References ?? Array.Empty<string>();
                 } else {
@@ -398,12 +402,54 @@ public class MainWindow : Window {
 
     private void CreateNewUILayout() {
         if (string.IsNullOrEmpty(_projectPath)) return;
-        var fp = new FilePickerWindow("Create New UI Layout", _projectPath, "new_layout.uilayout", FilePickerMode.Save, (path) => {
+
+        var fp = new FilePickerWindow("Create New UI Layout", _projectPath, "NewLayout", FilePickerMode.Save, (path) => {
+            // Ensure path ends with .uilayout directory name
             if (!path.EndsWith(".uilayout")) path += ".uilayout";
-            // Create empty layout
-            var root = new Window { Title = "My Layout", Size = new Vector2(400, 300) };
-            string json = UISerializer.Serialize(root);
-            VirtualFileSystem.Instance.WriteAllText(path, json);
+            
+            if (VirtualFileSystem.Instance.Exists(path)) {
+                Shell.Notifications.Show("Designer", "A layout with this name already exists.");
+                return;
+            }
+
+            string layoutName = Path.GetFileNameWithoutExtension(path);
+            string projectNamespace = "App";
+
+            // Try to find project namespace from ProjectMetadataManager
+            try {
+                projectNamespace = ProjectMetadataManager.GetNamespace();
+            } catch { /* Fallback to 'App' */ }
+
+            // Create Directory
+            VirtualFileSystem.Instance.CreateDirectory(path);
+
+            // 1. layout.json
+            var root = new Window { Title = layoutName, Size = new Vector2(400, 300) };
+            string layoutJson = UISerializer.Serialize(root);
+            VirtualFileSystem.Instance.WriteAllText(Path.Combine(path, "layout.json"), layoutJson);
+
+            // 2. [Name].cs (User Code)
+            string userTemplatePath = "C:/Windows/System32/NACHOS.sapp/Templates/Designer/UserCode.txt";
+            string codeBehind = "// Template not found";
+            if (VirtualFileSystem.Instance.Exists(userTemplatePath)) {
+                codeBehind = VirtualFileSystem.Instance.ReadAllText(userTemplatePath)
+                    .Replace("{namespace}", projectNamespace)
+                    .Replace("{className}", layoutName);
+            }
+            VirtualFileSystem.Instance.WriteAllText(Path.Combine(path, layoutName + ".cs"), codeBehind);
+
+            // 3. [Name].Designer.cs (Generated Code)
+            string designerTemplatePath = "C:/Windows/System32/NACHOS.sapp/Templates/Designer/DesignerCode.txt";
+            string designerCode = "// Template not found";
+            if (VirtualFileSystem.Instance.Exists(designerTemplatePath)) {
+                designerCode = VirtualFileSystem.Instance.ReadAllText(designerTemplatePath)
+                    .Replace("{namespace}", projectNamespace)
+                    .Replace("{className}", layoutName)
+                    .Replace("{fields}", "")
+                    .Replace("{construction}", "        // UI construction will be generated here");
+            }
+            VirtualFileSystem.Instance.WriteAllText(Path.Combine(path, layoutName + ".Designer.cs"), designerCode);
+
             OpenFile(path);
         });
         Shell.UI.OpenWindow(fp);

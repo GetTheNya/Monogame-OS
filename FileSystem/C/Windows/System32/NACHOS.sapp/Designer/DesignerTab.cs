@@ -32,6 +32,14 @@ public class DesignerTab : NachosTab {
     
     private System.Runtime.Loader.AssemblyLoadContext _loadContext;
     private Action<bool> _modeChangedHandler;
+    
+    // Code View Support
+    private Panel _codeViewContainer;
+    private CodeEditor _userCodeEditor;
+    private CodeEditor _designerCodeEditor;
+    private string _userCodePath;
+    private string _designerCodePath;
+    private ComboBox _viewModeCombo;
 
     public override CommandHistory History { get; } = new();
     public override bool IsDirty => History.IsDirty;
@@ -75,6 +83,23 @@ public class DesignerTab : NachosTab {
         };
         DesignMode.OnModeChanged += _modeChangedHandler;
         
+        // Mode Selector (for folder-based layouts)
+        bool isFolderLayout = filePath.EndsWith(".uilayout", StringComparison.OrdinalIgnoreCase);
+        
+        if (isFolderLayout) {
+            string layoutName = Path.GetFileNameWithoutExtension(filePath);
+            _userCodePath = Path.Combine(filePath, layoutName + ".cs");
+            _designerCodePath = Path.Combine(filePath, layoutName + ".Designer.cs");
+
+            _viewModeCombo = new ComboBox(new Vector2(Size.X - 185, 5), new Vector2(180, 25));
+            _viewModeCombo.Items.Add("Designer");
+            _viewModeCombo.Items.Add("User Code");
+            _viewModeCombo.Items.Add("Generated Code");
+            _viewModeCombo.Value = 0;
+            _viewModeCombo.OnValueChanged = (val) => SetViewMode(val);
+            _toolbar.AddChild(_viewModeCombo);
+        }
+
         AddChild(_toolbar);
         
         _toolbox = new ToolboxPanel(new Vector2(0, toolbarHeight), new Vector2(sidebarWidth, (size.Y - toolbarHeight) * 0.4f));
@@ -92,6 +117,18 @@ public class DesignerTab : NachosTab {
         _propertyGrid = new PropertyGrid(new Vector2(size.X - propertyWidth, toolbarHeight), new Vector2(propertyWidth, size.Y - toolbarHeight));
         _propertyGrid.History = History;
         AddChild(_propertyGrid);
+
+        // Code Editors
+        _codeViewContainer = new Panel(new Vector2(0, toolbarHeight), new Vector2(size.X, size.Y - toolbarHeight)) {
+            IsVisible = false,
+            BackgroundColor = new Color(20, 20, 20)
+        };
+        _userCodeEditor = new CodeEditor(Vector2.Zero, _codeViewContainer.Size);
+        _designerCodeEditor = new CodeEditor(Vector2.Zero, _codeViewContainer.Size) { IsReadOnly = true };
+        
+        _codeViewContainer.AddChild(_userCodeEditor);
+        _codeViewContainer.AddChild(_designerCodeEditor);
+        AddChild(_codeViewContainer);
         
         _surface.OnSelectionChanged += (el) => _propertyGrid.Inspect(el);
         _surface.OnElementModified += (el) => {
@@ -117,9 +154,14 @@ public class DesignerTab : NachosTab {
             
             _surfaceScrollPanel.Position = new Vector2(sidebarWidth, toolbarHeight);
             _surfaceScrollPanel.Size = new Vector2(Size.X - sidebarWidth - propertyWidth, Size.Y - toolbarHeight);
-            
-            // Note: DesignerSurface will automatically resize itself in its Update method
-            // based on its children and the ScrollPanel's viewport size.
+
+            _codeViewContainer.Size = new Vector2(Size.X, Size.Y - toolbarHeight);
+            _userCodeEditor.Size = _codeViewContainer.Size;
+            _designerCodeEditor.Size = _codeViewContainer.Size;
+
+            if (_viewModeCombo != null) {
+                _viewModeCombo.Position = new Vector2(Size.X - 185, 5);
+            }
         };
         
         Load();
@@ -142,14 +184,52 @@ public class DesignerTab : NachosTab {
         };
     }
     
+    private void SetViewMode(int mode) {
+        bool isDesigner = mode == 0;
+        bool isUserCode = mode == 1;
+        bool isGenCode = mode == 2;
+
+        _surfaceScrollPanel.IsVisible = isDesigner;
+        _toolbox.IsVisible = isDesigner;
+        _hierarchy.IsVisible = isDesigner;
+        _propertyGrid.IsVisible = isDesigner;
+        _codeViewContainer.IsVisible = !isDesigner;
+
+        if (isUserCode && VirtualFileSystem.Instance.Exists(_userCodePath)) {
+            if (string.IsNullOrEmpty(_userCodeEditor.Value)) {
+                _userCodeEditor.Value = VirtualFileSystem.Instance.ReadAllText(_userCodePath);
+            }
+            _userCodeEditor.IsVisible = true;
+            _designerCodeEditor.IsVisible = false;
+        } else if (isGenCode && VirtualFileSystem.Instance.Exists(_designerCodePath)) {
+            _designerCodeEditor.Value = VirtualFileSystem.Instance.ReadAllText(_designerCodePath);
+            _designerCodeEditor.IsVisible = true;
+            _userCodeEditor.IsVisible = false;
+        }
+    }
+
     public override void Save() {
         if (string.IsNullOrEmpty(FilePath)) return;
         
         try {
             var root = _surface.ContentLayer.Children.FirstOrDefault();
             if (root != null) {
+                // 1. Save Layout
                 string json = UISerializer.Serialize(root);
-                VirtualFileSystem.Instance.WriteAllText(FilePath, json);
+                string layoutPath = VirtualFileSystem.Instance.IsDirectory(FilePath) ? Path.Combine(FilePath, "layout.json") : FilePath;
+                VirtualFileSystem.Instance.WriteAllText(layoutPath, json);
+                
+                // 2. Sync Code-Behind if it's a folder layout
+                if (!string.IsNullOrEmpty(_userCodePath)) {
+                    // Update designer file
+                    UpdateDesignerCode(root);
+                    
+                    // Save user code if it was ever loaded/edited
+                    if (!string.IsNullOrEmpty(_userCodeEditor.Value)) {
+                         VirtualFileSystem.Instance.WriteAllText(_userCodePath, _userCodeEditor.Value);
+                    }
+                }
+
                 History.MarkAsSaved();
                 OnDirtyChanged?.Invoke();
                 Shell.Notifications.Show("Designer", "UI Layout saved successfully.");
@@ -160,18 +240,133 @@ public class DesignerTab : NachosTab {
         }
     }
 
+    private void UpdateDesignerCode(UIElement root) {
+        if (string.IsNullOrEmpty(_designerCodePath)) return;
+
+        try {
+            string fileName = Path.GetFileNameWithoutExtension(_designerCodePath);
+            string layoutName = fileName.Replace(".Designer", "");
+            
+            // Get namespace from project settings
+            string projectNamespace = ProjectMetadataManager.GetNamespace();
+
+            var fields = new List<string>();
+            var construction = new System.Text.StringBuilder();
+            var elementToVar = new Dictionary<UIElement, string>();
+            elementToVar[root] = "this";
+
+            // 1. Set properties of the root (this)
+            var rootProps = GetDesignableProperties(root);
+            foreach (var prop in rootProps) {
+                if (prop.Name == "Name") continue;
+                var val = prop.GetValue(root);
+                string valCode = GetValueCode(val);
+                if (valCode != null) {
+                    construction.AppendLine($"        this.{prop.Name} = {valCode};");
+                }
+            }
+
+            // 2. Generate children construction
+            foreach (var child in root.Children) {
+                if (DesignMode.IsDesignableElement(child)) {
+                    construction.Append(GenerateConstructionCode(child, "this", fields, elementToVar));
+                }
+            }
+
+            // 3. Load Template
+            string templatePath = "C:/Windows/System32/NACHOS.sapp/Templates/Designer/DesignerCode.txt";
+            string designerCode = "// Template not found";
+            if (VirtualFileSystem.Instance.Exists(templatePath)) {
+                designerCode = VirtualFileSystem.Instance.ReadAllText(templatePath)
+                    .Replace("{namespace}", projectNamespace)
+                    .Replace("{className}", layoutName)
+                    .Replace("{fields}", string.Join("\n", fields))
+                    .Replace("{construction}", construction.ToString().TrimEnd('\r', '\n'));
+            }
+
+            VirtualFileSystem.Instance.WriteAllText(_designerCodePath, designerCode);
+        } catch (Exception ex) {
+            DebugLogger.Log($"Error updating designer code: {ex.Message}");
+        }
+    }
+
+    private string GenerateConstructionCode(UIElement el, string parentVar, List<string> fields, Dictionary<UIElement, string> elementToVar) {
+        var sb = new System.Text.StringBuilder();
+        string typeName = el.GetType().Name;
+        string varName = !string.IsNullOrEmpty(el.Name) ? el.Name : $"_el{elementToVar.Count}";
+        elementToVar[el] = varName;
+
+        if (!string.IsNullOrEmpty(el.Name)) {
+            fields.Add($"    private {typeName} {el.Name};");
+            sb.AppendLine($"        {el.Name} = new {typeName}();");
+        } else {
+            sb.AppendLine($"        var {varName} = new {typeName}();");
+        }
+
+        // Set properties
+        var props = GetDesignableProperties(el);
+        foreach (var prop in props) {
+            var val = prop.GetValue(el);
+            string valCode = GetValueCode(val);
+            if (valCode != null) {
+                sb.AppendLine($"        {varName}.{prop.Name} = {valCode};");
+            }
+        }
+
+        // Hierarchy
+        if (parentVar == "this") {
+            sb.AppendLine($"        this.AddChild({varName});");
+        } else {
+            sb.AppendLine($"        {parentVar}.AddChild({varName});");
+        }
+
+        // Recursion
+        foreach (var child in el.Children) {
+            if (DesignMode.IsDesignableElement(child)) {
+                sb.Append(GenerateConstructionCode(child, varName, fields, elementToVar));
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    private IEnumerable<PropertyInfo> GetDesignableProperties(UIElement el) {
+        string[] skip = { "Parent", "Children", "Tag", "ActiveWindow", "OwnerProcess" };
+        return el.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => !Attribute.IsDefined(p, typeof(DesignerIgnoreJsonSerialization)))
+            .Where(p => p.CanRead && p.CanWrite && !skip.Contains(p.Name))
+            .Where(p => p.PropertyType != typeof(System.Action));
+    }
+
+    private string GetValueCode(object val) {
+        if (val == null) return "null";
+        if (val is string s) return $"\"{s.Replace("\"", "\\\"")}\"";
+        if (val is bool b) return b ? "true" : "false";
+        if (val is float f) return $"{f}f";
+        if (val is int i) return i.ToString();
+        if (val is Vector2 v) return $"new Vector2({v.X}f, {v.Y}f)";
+        if (val is Vector4 v4) return $"new Vector4({v4.X}f, {v4.Y}f, {v4.Z}f, {v4.W}f)";
+        if (val is Color c) return $"new Color({c.R}, {c.G}, {c.B}, {c.A})";
+        if (val is Enum e) return $"{e.GetType().Name}.{e}";
+        return null;
+    }
+
     public override void Undo() => History.Undo();
     public override void Redo() => History.Redo();
     
     public void Load() {
         if (VirtualFileSystem.Instance.Exists(FilePath)) {
             try {
-                string json = VirtualFileSystem.Instance.ReadAllText(FilePath);
+                string layoutPath = VirtualFileSystem.Instance.IsDirectory(FilePath) ? Path.Combine(FilePath, "layout.json") : FilePath;
+                string json = VirtualFileSystem.Instance.ReadAllText(layoutPath);
                 var root = UISerializer.Deserialize(json);
                 if (root != null) {
                     _surface.ContentLayer.ClearChildren();
                     _surface.ContentLayer.AddChild(root);
                     _hierarchy.Refresh();
+                    
+                    // Sync code-behind on load (Requirement: "IDE must read it and generate code FOR user")
+                    UpdateDesignerCode(root);
                 }
             } catch (Exception ex) {
                 DebugLogger.Log($"Error loading UI from {FilePath}: {ex.Message}");
@@ -216,19 +411,18 @@ public class DesignerTab : NachosTab {
             }
 
             // 3. Scan & Compile
-            string hostProjectPath = VirtualFileSystem.Instance.ToHostPath(ProjectPath);
-            if (!Directory.Exists(hostProjectPath)) return;
+            if (!VirtualFileSystem.Instance.Exists(ProjectPath)) return;
 
-            var csFiles = Directory.GetFiles(hostProjectPath, "*.cs", SearchOption.AllDirectories);
+            var csFiles = VirtualFileSystem.Instance.GetFilesRecursive(ProjectPath, "*.cs");
             var sourceFiles = new Dictionary<string, string>();
-            foreach (var f in csFiles) sourceFiles[f] = File.ReadAllText(f);
+            foreach (var f in csFiles) sourceFiles[f] = VirtualFileSystem.Instance.ReadAllText(f);
 
             // 3.1 Load Manifest References
             string[] projectReferences = null;
-            string manifestPath = Path.Combine(hostProjectPath, "manifest.json");
-            if (File.Exists(manifestPath)) {
+            string manifestPath = Path.Combine(ProjectPath, "manifest.json");
+            if (VirtualFileSystem.Instance.Exists(manifestPath)) {
                 try {
-                    string json = File.ReadAllText(manifestPath);
+                    string json = VirtualFileSystem.Instance.ReadAllText(manifestPath);
                     var manifest = AppManifest.FromJson(json);
                     projectReferences = manifest.References;
                 } catch (Exception ex) {
