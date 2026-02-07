@@ -166,7 +166,7 @@ public class DesignerTab : NachosTab {
             }
         };
         
-        Load();
+        _ = RefreshToolboxAsync(true);
 
         // Handle toolbox drops
         _surface.OnDropReceived += (data, pos) => {
@@ -354,7 +354,7 @@ public class DesignerTab : NachosTab {
             try {
                 string layoutPath = VirtualFileSystem.Instance.IsDirectory(FilePath) ? Path.Combine(FilePath, "layout.json") : FilePath;
                 string json = VirtualFileSystem.Instance.ReadAllText(layoutPath);
-                var root = UISerializer.Deserialize(json);
+                var root = UISerializer.Deserialize(json, _surface.UserAssembly);
                 if (root != null) {
                     _surface.ContentLayer.ClearChildren();
                     _surface.ContentLayer.AddChild(root);
@@ -383,14 +383,15 @@ public class DesignerTab : NachosTab {
         }
     }
 
-    public async Task RefreshToolboxAsync() {
+    public async Task RefreshToolboxAsync(bool initialLoad = false) {
         if (string.IsNullOrEmpty(ProjectPath)) return;
 
         try {
             DesignMode.IsToolboxGeneration = true;
 
             // 1. Serialization of current state
-            string currentUi = UISerializer.Serialize(_surface.ContentLayer.Children.FirstOrDefault());
+            var rootEl = _surface.ContentLayer.Children.FirstOrDefault();
+            string currentUi = rootEl != null ? UISerializer.Serialize(rootEl) : null;
 
             // 2. Cleanup
             _surface.ContentLayer.ClearChildren();
@@ -490,10 +491,14 @@ public class DesignerTab : NachosTab {
             }
 
             // 5. Restore State (Binding to new types)
-            var newRoot = UISerializer.Deserialize(currentUi, assembly);
-            if (newRoot != null) {
-                _surface.ContentLayer.AddChild(newRoot);
-                _hierarchy.Refresh();
+            if (initialLoad) {
+                Load();
+            } else if (currentUi != null) {
+                var newRoot = UISerializer.Deserialize(currentUi, assembly);
+                if (newRoot != null) {
+                    _surface.ContentLayer.AddChild(newRoot);
+                    _hierarchy.Refresh();
+                }
             }
 
         } catch (Exception ex) {

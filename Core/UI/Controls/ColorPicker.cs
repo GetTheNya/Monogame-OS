@@ -15,7 +15,7 @@ public class ColorPicker : ValueControl<Color> {
     private bool _isDraggingValue;
     private bool _isDraggingAlpha;
 
-    [Obsolete("For Designer/Serialization use only", error: true)]
+    [Obsolete("For Designer/Serialization use only")]
     [EditorBrowsable(EditorBrowsableState.Never)]
     public ColorPicker() : this(Vector2.Zero, 60) { }
 

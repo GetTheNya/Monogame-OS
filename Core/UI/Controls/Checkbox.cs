@@ -10,7 +10,7 @@ public class Checkbox : ValueControl<bool> {
     public string Label { get; set; }
     public Color TextColor { get; set; } = Color.White;
 
-    [Obsolete("For Designer/Serialization use only", error: true)]
+    [Obsolete("For Designer/Serialization use only")]
     [EditorBrowsable(EditorBrowsableState.Never)]
     public Checkbox() : this(Vector2.Zero, "Checkbox") { }
 

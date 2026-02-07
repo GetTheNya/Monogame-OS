@@ -46,7 +46,7 @@ public class TextInput : ValueControl<string> {
         _targetScrollX = 0;
     }
 
-    [Obsolete("For Designer/Serialization use only", error: true)]
+    [Obsolete("For Designer/Serialization use only")]
     [EditorBrowsable(EditorBrowsableState.Never)]
     public TextInput() : this(Vector2.Zero, Vector2.Zero) { }
 

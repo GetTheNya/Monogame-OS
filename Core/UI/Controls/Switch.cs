@@ -15,7 +15,7 @@ public class Switch : ValueControl<bool> {
 
     private float _thumbOffset = 0f; // 0 to 1
 
-    [Obsolete("For Designer/Serialization use only", error: true)]
+    [Obsolete("For Designer/Serialization use only")]
     [EditorBrowsable(EditorBrowsableState.Never)]
     public Switch() : this(Vector2.Zero, "Switch") {  }
 

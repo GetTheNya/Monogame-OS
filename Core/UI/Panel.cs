@@ -12,7 +12,7 @@ public class Panel : UIElement {
     public float BorderThickness { get; set; } = 1f;
     public float CornerRadius { get; set; } = 0f;
 
-    [Obsolete("For Designer/Serialization use only", error: true)]
+    [Obsolete("For Designer/Serialization use only")]
     [EditorBrowsable(EditorBrowsableState.Never)]
     public Panel() : this(Vector2.Zero, Vector2.Zero) { }
 

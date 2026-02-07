@@ -21,7 +21,7 @@ public class ProgressBar : ValueControl<float> {
     private float _shimmerTimer = 0f;
     private float _shimmerOffset = 0f;
 
-    [Obsolete("For Designer/Serialization use only", error: true)]
+    [Obsolete("For Designer/Serialization use only")]
     [EditorBrowsable(EditorBrowsableState.Never)]
     public ProgressBar() : this(Vector2.Zero, Vector2.Zero) { }
 

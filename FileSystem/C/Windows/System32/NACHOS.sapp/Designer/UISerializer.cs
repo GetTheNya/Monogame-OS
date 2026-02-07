@@ -30,6 +30,10 @@ public static class UISerializer {
     }
 
     private static UIElementData SerializeElement(UIElement element) {
+        if (element is ErrorElement err) {
+            return err.OriginalData;
+        }
+
         var type = element.GetType();
         string typeName = type.AssemblyQualifiedName;
 
@@ -85,15 +89,19 @@ public static class UISerializer {
             type = overrideAssembly.GetType(simpleName);
         }
 
-        // Fallback to standard resolution
+        // Fallback to type resolution by name if assembly didn't find it exactly
         if (type == null) {
             type = Type.GetType(typeName);
         }
 
-        if (type == null) return null;
+        if (type == null) return new ErrorElement(data);
 
-        var element = Activator.CreateInstance(type) as UIElement;
-        if (element == null) return null;
+        UIElement element = null;
+        try {
+            element = Activator.CreateInstance(type) as UIElement;
+        } catch { }
+
+        if (element == null) return new ErrorElement(data);
 
         element.Name = data.Name;
 

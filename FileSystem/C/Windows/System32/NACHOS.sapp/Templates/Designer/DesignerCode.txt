@@ -8,6 +8,8 @@ using Microsoft.Xna.Framework;
 using TheGame.Core.UI;
 using TheGame.Core.UI.Controls;
 
+#pragma warning disable CS0612, CS0618
+
 namespace {namespace};
 
 public partial class {className} : Window {

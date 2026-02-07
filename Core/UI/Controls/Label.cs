@@ -15,7 +15,7 @@ public class Label : UIElement {
     public int FontSize { get; set; } = 20;
     public bool UseBoldFont { get; set; } = false;
 
-    [Obsolete("For Designer/Serialization use only", error: true)]
+    [Obsolete("For Designer/Serialization use only")]
     [EditorBrowsable(EditorBrowsableState.Never)]
     public Label() : this(Vector2.Zero, "Label") { }
 

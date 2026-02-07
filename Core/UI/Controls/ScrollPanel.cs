@@ -44,7 +44,7 @@ public class ScrollPanel : Panel {
     private static readonly RasterizerState _scissorRasterizer = new RasterizerState { ScissorTestEnable = true };
     private static readonly RasterizerState _noScissorRasterizer = new RasterizerState { ScissorTestEnable = false };
 
-    [Obsolete("For Designer/Serialization use only", error: true)]
+    [Obsolete("For Designer/Serialization use only")]
     [EditorBrowsable(EditorBrowsableState.Never)]
     public ScrollPanel() : this(Vector2.Zero, Vector2.Zero) { }
 

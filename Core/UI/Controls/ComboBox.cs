@@ -19,7 +19,7 @@ public class ComboBox : ValueControl<int> {
 
     public Color TextColor { get; set; } = Color.White;
 
-    [Obsolete("For Designer/Serialization use only", error: true)]
+    [Obsolete("For Designer/Serialization use only")]
     [EditorBrowsable(EditorBrowsableState.Never)]
     public ComboBox() : this(Vector2.Zero, Vector2.Zero) {}
 

@@ -27,7 +27,7 @@ public class Button : UIControl {
     private string _lastMeasuredText = "";
     private int _lastMeasuredFontSize = -1;
 
-    [Obsolete("For Designer/Serialization use only", error: true)]
+    [Obsolete("For Designer/Serialization use only")]
     [EditorBrowsable(EditorBrowsableState.Never)]
     public Button() : this(Vector2.Zero, Vector2.Zero, "Button") { }
 

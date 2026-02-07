@@ -186,7 +186,7 @@ public class TextArea : ValueControl<string> {
     public int FontSize { get; set; } = 16;
     public bool DrawBackground { get; set; } = true;
 
-    [Obsolete("For Designer/Serialization use only", error: true)]
+    [Obsolete("For Designer/Serialization use only")]
     [EditorBrowsable(EditorBrowsableState.Never)]
     public TextArea() : this(Vector2.Zero, Vector2.Zero) { }
 

@@ -12,7 +12,7 @@ public class Slider : ValueControl<float> {
     private bool _isDraggingSlider;
     public bool IsDragging => _isDraggingSlider;
 
-    [Obsolete("For Designer/Serialization use only", error: true)]
+    [Obsolete("For Designer/Serialization use only")]
     [EditorBrowsable(EditorBrowsableState.Never)]
     public Slider() : this(Vector2.Zero, 0) {}
 

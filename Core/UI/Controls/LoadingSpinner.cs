@@ -15,7 +15,7 @@ public class LoadingSpinner : UIElement {
     private float _timer = 0f;
     private float _currentArcSize = 45f;
 
-    [Obsolete("For Designer/Serialization use only", error: true)]
+    [Obsolete("For Designer/Serialization use only")]
     [EditorBrowsable(EditorBrowsableState.Never)]
     public LoadingSpinner() : this(Vector2.Zero, Vector2.Zero) {}
 
