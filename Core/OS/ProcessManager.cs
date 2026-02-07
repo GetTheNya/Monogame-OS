@@ -25,17 +25,33 @@ public class ProcessManager {
     /// <summary>
     /// Starts a new process for the given app.
     /// </summary>
-    public Process StartProcess(string appId, string[] args = null, Action<Process> setup = null) {
+    public Process StartProcess(string appId, string[] args = null, Action<Process> setup = null, Rectangle? startBounds = null) {
         if (string.IsNullOrEmpty(appId)) return null;
         
         string upperAppId = appId.ToUpper();
         
+        // Snapshot existing processes to detect if a new one is created
+        var existingProcesses = GetProcessesByApp(upperAppId);
+
         // Create new process via AppLoader (single instance check is done in CreateAppWindow)
         var window = Shell.UI.CreateAppWindow(upperAppId, args ?? Array.Empty<string>(), setup);
+        
         if (window == null) {
-            // Might be single instance - check if process exists
-            var existing = GetProcessesByApp(upperAppId).FirstOrDefault(p => p.State != ProcessState.Terminated);
-            return existing;
+            var currentProcesses = GetProcessesByApp(upperAppId);
+            
+            // If we have existing processes and no new ones were created, it was a single-instance block
+            if (existingProcesses.Count > 0 && currentProcesses.Count == existingProcesses.Count) {
+                var existing = existingProcesses[0];
+                existing.Reopen(args ?? Array.Empty<string>(), startBounds);
+                return existing;
+            }
+            
+            // If a new process was created (background app), return the new one
+            if (currentProcesses.Count > existingProcesses.Count) {
+                return currentProcesses.Except(existingProcesses).FirstOrDefault() ?? currentProcesses.LastOrDefault();
+            }
+            
+            return null;
         }
         
         // Get or create process for this window
@@ -53,7 +69,7 @@ public class ProcessManager {
         
         // Open the window only if not already added to UI (prevents double-open for Application-based apps)
         if (window.Parent == null) {
-            Shell.UI.OpenWindow(window);
+            Shell.UI.OpenWindow(window, startBounds);
         }
         
         return process;

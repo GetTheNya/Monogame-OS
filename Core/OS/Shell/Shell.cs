@@ -192,11 +192,8 @@ public static partial class Shell {
         string appId = File.GetFileTypeHandler(ext);
         DebugLogger.Log($"File.GetFileTypeHandler({ext}) returned: {appId ?? "null"}");
         if (!string.IsNullOrEmpty(appId)) {
-            var win = UI.CreateAppWindow(appId, new[] { virtualPath });
-            if (win != null) {
-                UI.OpenWindow(win, startBounds);
-                return;
-            }
+            ProcessManager.Instance.StartProcess(appId, new[] { virtualPath }, null, startBounds);
+            return;
         }
 
         // Fall back to other hardcoded handlers
@@ -207,16 +204,16 @@ public static partial class Shell {
         }
 
         if (VirtualFileSystem.Instance.IsDirectory(virtualPath)) {
-            var win = UI.CreateAppWindow("EXPLORER", new[] { args ?? virtualPath });
-            if (win != null) {
+            // Use ProcessManager to launch Explorer for single-instance behavior
+            string[] argArray = new[] { args ?? virtualPath };
+            var process = ProcessManager.Instance.StartProcess("EXPLORER", argArray, null, startBounds);
+            if (process?.MainWindow != null) {
                 try {
-                    dynamic dwin = win;
+                    dynamic dwin = process.MainWindow;
                     dwin.NavigateTo(args ?? virtualPath);
                 }
                 catch {
                 }
-
-                UI.OpenWindow(win, startBounds);
             }
 
             return;

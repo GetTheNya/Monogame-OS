@@ -143,6 +143,16 @@ public abstract class Application {
 
     internal void TriggerOnBackground() => OnBackground();
     internal void TriggerOnForeground() => OnForeground();
+
+    /// <summary>
+    /// Called when the user attempts to open a new instance of an application that is already running
+    /// and is marked as single instance.
+    /// </summary>
+    protected virtual void OnInstanceReopened(string[] args, Rectangle? startBounds = null) {
+        OpenMainWindow(startBounds);
+    }
+
+    internal void TriggerOnInstanceReopened(string[] args, Rectangle? startBounds = null) => OnInstanceReopened(args, startBounds);
     
     // --- Window Creation Helpers ---
 

@@ -353,4 +353,15 @@ public class Process {
         bool hasVisibleWindows = Windows.Any(w => !w.IsClosing && w.IsVisible && w.Opacity > 0.1f);
         State = hasVisibleWindows ? ProcessState.Running : ProcessState.Background;
     }
+
+    /// <summary>
+    /// Called when a single-instance application is re-opened.
+    /// </summary>
+    public void Reopen(string[] args, Rectangle? startBounds = null) {
+        if (Application != null) {
+            Application.TriggerOnInstanceReopened(args, startBounds);
+        } else if (MainWindow != null) {
+            Shell.UI.OpenWindow(MainWindow, startBounds);
+        }
+    }
 }

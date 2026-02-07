@@ -11,7 +11,7 @@ using FontStashSharp;
 
 namespace TheGame.Core.UI;
 
-public class SystemTray : Panel {
+public class SystemTray : Panel, ITooltipSubElementProvider {
     private string _currentTime = "";
     private float _updateTimer = 0f;
     public float DesiredWidth { get; private set; } = 150f;
@@ -240,13 +240,16 @@ public class SystemTray : Panel {
             }
         }
         
-        // Handle tray icon mouse events
-        HandleTrayIconInput();
+        // Note: HandleTrayIconInput was renamed/refactored.
+        // Input handling for icons is now partially handled by the logic that was here,
+        // but we need to ensure clicks and scrolls still work.
+        // Let's restore the input handling logic but keep FindTooltipSubElement for tooltips.
+        ProcessTrayIconInput();
         
         base.Update(gameTime);
     }
 
-    private void HandleTrayIconInput() {
+    private void ProcessTrayIconInput() {
         if (InputManager.IsMouseConsumed || _gameTime == null) return;
         
         var mousePos = InputManager.MousePosition;
@@ -297,6 +300,22 @@ public class SystemTray : Panel {
                 InputManager.IsMouseConsumed = true;
             }
         }
+    }
+
+    public ITooltipTarget FindTooltipSubElement(Vector2 mousePos) {
+        float iconStartX = AbsolutePosition.X + 8f; 
+        
+        int totalIndex = 0;
+        foreach (var icon in AllIcons) {
+            float x = iconStartX + (totalIndex * (IconSize + IconSpacing));
+            Rectangle iconBounds = new Rectangle((int)x, (int)(AbsolutePosition.Y + (Size.Y - IconSize) / 2f), (int)IconSize, (int)IconSize);
+            totalIndex++;
+
+            if (iconBounds.Contains(mousePos.ToPoint())) {
+                return icon;
+            }
+        }
+        return null;
     }
 
     private float GetIconXRel(TrayIcon target) {

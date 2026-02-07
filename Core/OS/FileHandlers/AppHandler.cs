@@ -15,8 +15,7 @@ public class AppHandler : FileHandler {
              argArray = new[] { args };
         }
 
-        var win = Shell.UI.CreateAppWindow(appId, argArray);
-        if (win != null) Shell.UI.OpenWindow(win, startBounds);
+        ProcessManager.Instance.StartProcess(appId, argArray, null, startBounds);
     }
 
     private string GetAppId(string virtualPath) {

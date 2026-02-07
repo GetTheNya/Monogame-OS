@@ -8,7 +8,7 @@ namespace TheGame.Core.UI;
 /// Represents an icon in the system tray with callbacks for mouse events.
 /// Automatically associated with the creating window/process for auto-cleanup.
 /// </summary>
-public class TrayIcon {
+public class TrayIcon : ITooltipTarget {
     /// <summary>Unique identifier for this tray icon (auto-generated).</summary>
     public string Id { get; }
     
@@ -29,6 +29,9 @@ public class TrayIcon {
     
     /// <summary>Tooltip text shown on hover.</summary>
     public string Tooltip { get; set; }
+    
+    /// <summary>Delay in seconds before the tooltip is shown.</summary>
+    public float TooltipDelay { get; set; } = 0.5f;
     
     /// <summary>Called on left mouse button click.</summary>
     public Action OnClick { get; set; }

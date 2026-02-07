@@ -12,7 +12,7 @@ using TheGame.Core.Designer;
 
 namespace TheGame.Core.UI;
 
-public abstract class UIElement : IContextMenuProvider {
+public abstract class UIElement : IContextMenuProvider, ITooltipTarget {
     [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public UIElement Parent { get; set; }
     private readonly List<UIElement> _childrenInternal = new();

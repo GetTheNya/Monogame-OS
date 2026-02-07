@@ -331,6 +331,10 @@ public class Program : Application {
         }
     }
 
+    protected override void OnInstanceReopened(string[] args, Rectangle? startBounds = null) {
+        ShowHistory();
+    }
+
     protected override void OnClose() {
         if (_trayIcon != null) Shell.SystemTray.RemoveIcon(_trayIcon.Id);
         

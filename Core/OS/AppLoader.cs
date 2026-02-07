@@ -91,6 +91,13 @@ public class AppLoader {
 
             // Register app factory with Shell
             Shell.UI.RegisterApp(upperAppId, (args, setup) => {
+                // Single instance check
+                if (manifest.SingleInstance) {
+                    var existing = ProcessManager.Instance.GetProcessByAppId(upperAppId);
+                    if (existing != null) {
+                        return null; // Let ProcessManager handle re-opening the existing process
+                    }
+                }
                 return CreateWindowFromAssembly(assembly, manifest, appFolderPath, args, setup);
             });
 
@@ -388,6 +395,13 @@ public class AppLoader {
 
             // Re-register app factory with Shell
             Shell.UI.RegisterApp(upperAppId, (args, setup) => {
+                // Single instance check
+                if (manifest.SingleInstance) {
+                    var existing = ProcessManager.Instance.GetProcessByAppId(upperAppId);
+                    if (existing != null) {
+                        return null; // Let ProcessManager handle re-opening the existing process
+                    }
+                }
                 return CreateWindowFromAssembly(assembly, manifest, appVirtualPath, args, setup);
             });
 
