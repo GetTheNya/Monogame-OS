@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System;
+using System.Reflection;
 using System.Collections.Generic;
 using System.Linq;
 using TheGame.Core.Input;
@@ -11,9 +12,9 @@ using TheGame.Core.OS.DragDrop;
 using TheGame.Core.UI;
 using TheGame.Core.UI.Controls;
 using TheGame.Core.Designer;
+using TheGame.Core.OS.History;
 
 namespace NACHOS.Designer;
-using TheGame.Core.OS.History;
 
 public class DesignerSurface : UIElement, IDesignerContext, IDropTarget {
     public UIElement ContentLayer { get; }
@@ -21,6 +22,7 @@ public class DesignerSurface : UIElement, IDesignerContext, IDropTarget {
     
     public UIElement SelectedElement { get; private set; }
     public DesignerAdorner ActiveAdorner { get; private set; }
+    public Assembly UserAssembly { get; set; }
     public CommandHistory History { get; set; }
     
     // Interaction state

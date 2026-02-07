@@ -20,6 +20,11 @@ public class ToolboxPanel : ScrollPanel {
         BackgroundColor = new Color(40, 40, 40);
         Padding = new Vector4(10, 10, 10, 10);
         
+        RegisterSystemComponents();
+    }
+
+    public void RegisterSystemComponents() {
+        ClearItems();
         AddToolboxItem("Button", typeof(Button));
         AddToolboxItem("Label", typeof(Label));
         AddToolboxItem("TextInput", typeof(TextInput));
@@ -34,8 +39,30 @@ public class ToolboxPanel : ScrollPanel {
         AddToolboxItem("Loading Spinner", typeof(LoadingSpinner));
         AddToolboxItem("Scroll panel", typeof(ScrollPanel));
     }
+
+    public void ClearItems() {
+        ClearChildren();
+        _nextItemY = 10;
+    }
+
+    public void AddSeparator(string label) {
+        _nextItemY += 5;
+        var sep = new Label(new Vector2(10, _nextItemY), label) {
+            TextColor = Color.Gray * 0.8f,
+            FontSize = 14
+        };
+        AddChild(sep);
+        _nextItemY += 25;
+
+        // Line
+        var line = new Panel(new Vector2(10, _nextItemY), new Vector2(Size.X - 20, 1)) {
+            BackgroundColor = Color.Gray * 0.3f
+        };
+        AddChild(line);
+        _nextItemY += 10;
+    }
     
-    private void AddToolboxItem(string name, Type type) {
+    public void AddToolboxItem(string name, Type type) {
         var item = new ToolboxItem(name, type) {
             Position = new Vector2(10, _nextItemY)
         };

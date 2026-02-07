@@ -258,7 +258,7 @@ public class HierarchyNode : Panel, IDraggable, IDropTarget {
         }});
 
         items.Add(new MenuItem { Text = "Duplicate", Action = () => {
-            var clone = UISerializer.CloneElement(TargetElement);
+            var clone = UISerializer.CloneElement(TargetElement, Surface.UserAssembly);
             if (clone != null) {
                 // Add to same parent with offset
                 TargetElement.Parent?.AddChild(clone);

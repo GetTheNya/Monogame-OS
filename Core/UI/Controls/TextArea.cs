@@ -72,7 +72,8 @@ public class TextArea : ValueControl<string> {
     protected virtual bool CanEditAt(int line, int col) => true;
     protected virtual void OnEnterPressed() {
         if (History != null) {
-            History.Execute(new ReplaceTextCommand(this, "New Line", _selStartLine, _selStartCol, _cursorLine, _cursorCol, "\n"));
+            GetSelectionRange(out int sl, out int sc, out int el, out int ec);
+            History.Execute(new ReplaceTextCommand(this, "New Line", sl, sc, el, ec, "\n"));
         } else {
             if (HasSelection()) DeleteSelection();
             string remainder = _lines[_cursorLine].Substring(_cursorCol);
@@ -86,7 +87,8 @@ public class TextArea : ValueControl<string> {
     }
     protected virtual void OnTabPressed() {
         if (History != null) {
-             History.Execute(new ReplaceTextCommand(this, "Tab", _selStartLine, _selStartCol, _cursorLine, _cursorCol, "    "));
+             GetSelectionRange(out int sl, out int sc, out int el, out int ec);
+             History.Execute(new ReplaceTextCommand(this, "Tab", sl, sc, el, ec, "    "));
         } else {
             if (HasSelection()) DeleteSelection();
             _lines[_cursorLine] = _lines[_cursorLine].Insert(_cursorCol, "    ");
@@ -479,9 +481,27 @@ public class TextArea : ValueControl<string> {
         NotifyUserChanged();
     }
 
+    public void SortRange(ref int sl, ref int sc, ref int el, ref int ec) {
+        if (sl > el || (sl == el && sc > ec)) {
+            int tempL = sl; sl = el; el = tempL;
+            int tempC = sc; sc = ec; ec = tempC;
+        }
+    }
+
+    private void ClampIndices(ref int line, ref int col) {
+        line = Math.Clamp(line, 0, _lines.Count - 1);
+        col = Math.Clamp(col, 0, _lines[line].Length);
+    }
+
     internal void InternalInsertText(int line, int col, string text) {
-        if (string.IsNullOrEmpty(text)) return;
-        string[] newLines = text.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
+        ClampIndices(ref line, ref col);
+        if (string.IsNullOrEmpty(text)) {
+            NotifyUserChanged();
+            return;
+        }
+
+        string normalized = text.Replace("\r\n", "\n").Replace("\r", "\n");
+        string[] newLines = normalized.Split('\n');
         
         string currentLine = _lines[line];
         string before = currentLine.Substring(0, col);
@@ -492,11 +512,17 @@ public class TextArea : ValueControl<string> {
             _cursorLine = line;
             _cursorCol = col + newLines[0].Length;
         } else {
+            // First line
             _lines[line] = before + newLines[0];
+            
+            // Middle lines
             for (int i = 1; i < newLines.Length - 1; i++) {
                 _lines.Insert(line + i, newLines[i]);
             }
+            
+            // Last line
             _lines.Insert(line + newLines.Length - 1, newLines[^1] + after);
+            
             _cursorLine = line + newLines.Length - 1;
             _cursorCol = newLines[^1].Length;
         }
@@ -505,13 +531,24 @@ public class TextArea : ValueControl<string> {
     }
 
     internal void InternalDeleteRange(int sl, int sc, int el, int ec) {
+        SortRange(ref sl, ref sc, ref el, ref ec);
+        ClampIndices(ref sl, ref sc);
+        ClampIndices(ref el, ref ec);
+        // Console.WriteLine($"[DeleteRange] {sl},{sc} to {el},{ec}");
+
         if (sl == el) {
-            _lines[sl] = _lines[sl].Remove(sc, ec - sc);
+            int count = Math.Max(0, ec - sc);
+            if (count > 0) {
+                _lines[sl] = _lines[sl].Remove(sc, count);
+            }
         } else {
             string before = _lines[sl].Substring(0, sc);
             string after = _lines[el].Substring(ec);
             _lines[sl] = before + after;
-            _lines.RemoveRange(sl + 1, el - sl);
+            int linesToRemove = el - sl;
+            if (linesToRemove > 0) {
+                _lines.RemoveRange(sl + 1, linesToRemove);
+            }
         }
         _cursorLine = sl;
         _cursorCol = sc;
@@ -539,19 +576,35 @@ public class TextArea : ValueControl<string> {
     }
 
     public string InternalGetRange(int sl, int sc, int el, int ec) {
+        SortRange(ref sl, ref sc, ref el, ref ec);
+        ClampIndices(ref sl, ref sc);
+        ClampIndices(ref el, ref ec);
+
+        if (sl == el) return _lines[sl].Substring(sc, ec - sc);
+
         StringBuilder sb = new();
-        for (int i = sl; i <= el; i++) {
-            int start = (i == sl) ? sc : 0;
+        sb.Append(_lines[sl].Substring(sc));
+        for (int i = sl + 1; i <= el; i++) {
+            sb.Append("\n");
             int end = (i == el) ? ec : _lines[i].Length;
-            sb.Append(_lines[i].Substring(start, end - start));
-            if (i < el) sb.Append("\n");
+            sb.Append(_lines[i].Substring(0, end));
         }
         return sb.ToString();
     }
 
     internal void InternalReplaceRange(int sl, int sc, int el, int ec, string newText) {
-        InternalDeleteRange(sl, sc, el, ec);
-        InternalInsertText(sl, sc, newText);
+        SortRange(ref sl, ref sc, ref el, ref ec);
+        DebugLogger.Log($"TextArea.InternalReplaceRange: {sl},{sc} to {el},{ec} with text of length {newText?.Length}");
+        _notifySkipCount++;
+        try {
+            InternalDeleteRange(sl, sc, el, ec);
+            InternalInsertText(sl, sc, newText);
+        } finally {
+            _notifySkipCount--;
+            if (_notifySkipCount == 0 && _needsNotify) {
+                NotifyUserChanged();
+            }
+        }
     }
 
     internal void InternalGetPositionAfter(int sl, int sc, string text, out int el, out int ec) {
@@ -579,7 +632,13 @@ public class TextArea : ValueControl<string> {
         History?.Execute(new ReplaceTextCommand(this, "Paste", sl, sc, el, ec, text));
     }
 
-    public override void Undo() => History?.Undo();
+    public override void Undo() {
+        if (History == null) DebugLogger.Log("TextArea.Undo: History is null");
+        else {
+            DebugLogger.Log($"TextArea.Undo: Undoing last command. History count: {History.CanUndo}");
+            History.Undo();
+        }
+    }
     public override void Redo() => History?.Redo();
 
     private void SelectWordAtCursor() {
@@ -638,39 +697,14 @@ public class TextArea : ValueControl<string> {
     }
 
     public override void DeleteSelection() {
+        if (!HasSelection()) return;
         GetSelectionRange(out int startLine, out int startCol, out int endLine, out int endCol);
 
-        if (startLine < 0 || startLine >= _lines.Count) return;
-        if (endLine < 0 || endLine >= _lines.Count) return;
-
-        if (startLine == endLine) {
-            int lineLen = _lines[startLine].Length;
-            startCol = Math.Clamp(startCol, 0, lineLen);
-            int count = Math.Clamp(endCol - startCol, 0, lineLen - startCol);
-            
-            if (count > 0) {
-                _lines[startLine] = _lines[startLine].Remove(startCol, count);
-            }
+        if (History != null) {
+            History.Execute(new ReplaceTextCommand(this, "Delete", startLine, startCol, endLine, endCol, ""));
         } else {
-            int startLineLen = _lines[startLine].Length;
-            int endLineLen = _lines[endLine].Length;
-            
-            startCol = Math.Clamp(startCol, 0, startLineLen);
-            endCol = Math.Clamp(endCol, 0, endLineLen);
-            
-            string before = _lines[startLine].Substring(0, startCol);
-            string after = _lines[endLine].Substring(endCol);
-            _lines[startLine] = before + after;
-            
-            if (endLine > startLine) {
-                _lines.RemoveRange(startLine + 1, endLine - startLine);
-            }
+            InternalDeleteRange(startLine, startCol, endLine, endCol);
         }
-
-        _cursorLine = startLine;
-        _cursorCol = startCol;
-        ResetSelection();
-        NotifyUserChanged();
     }
 
     protected void GetSelectionRange(out int startLine, out int startCol, out int endLine, out int endCol) {

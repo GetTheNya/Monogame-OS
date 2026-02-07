@@ -7,6 +7,7 @@ public interface IDesignerContext { }
 
 public static class DesignMode {
     public static bool IsEnabled { get; private set; }
+    public static bool IsToolboxGeneration { get; set; }
     
     // Event fired when design mode is toggled
     public static event Action<bool> OnModeChanged;

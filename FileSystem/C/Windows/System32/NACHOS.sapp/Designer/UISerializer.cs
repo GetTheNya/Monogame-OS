@@ -24,9 +24,9 @@ public static class UISerializer {
         return JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
     }
 
-    public static UIElement CloneElement(UIElement element) {
+    public static UIElement CloneElement(UIElement element, Assembly overrideAssembly = null) {
         string json = Serialize(element);
-        return Deserialize(json);
+        return Deserialize(json, overrideAssembly);
     }
 
     private static UIElementData SerializeElement(UIElement element) {
@@ -65,12 +65,13 @@ public static class UISerializer {
         return data;
     }
 
-    public static UIElement Deserialize(string json) {
+    public static UIElement Deserialize(string json, Assembly overrideAssembly = null) {
         var data = JsonSerializer.Deserialize<UIElementData>(json);
-        return DeserializeElement(data);
+        if (data == null) return null;
+        return DeserializeElement(data, overrideAssembly);
     }
 
-    private static UIElement DeserializeElement(UIElementData data) {
+    private static UIElement DeserializeElement(UIElementData data, Assembly overrideAssembly = null) {
         string typeName = data.Type;
         
         // Redirect Window to DesignerWindow for the designer
@@ -78,7 +79,20 @@ public static class UISerializer {
             typeName = typeof(DesignerWindow).AssemblyQualifiedName;
         }
 
-        var type = Type.GetType(typeName);
+        Type type = null;
+        
+        // Try to resolve from override assembly first (for user components)
+        if (overrideAssembly != null) {
+            // Extract the simple name if it's an assembly-qualified name
+            string simpleName = typeName.Split(',')[0].Trim();
+            type = overrideAssembly.GetType(simpleName);
+        }
+
+        // Fallback to standard resolution
+        if (type == null) {
+            type = Type.GetType(typeName);
+        }
+
         if (type == null) return null;
 
         var element = Activator.CreateInstance(type) as UIElement;
@@ -95,7 +109,7 @@ public static class UISerializer {
         }
 
         foreach (var childData in data.Children) {
-            var child = DeserializeElement(childData);
+            var child = DeserializeElement(childData, overrideAssembly);
             if (child != null) {
                 element.AddChild(child);
             }

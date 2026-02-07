@@ -31,7 +31,7 @@ public class AppCompiler {
             MetadataReference.CreateFromFile(Assembly.Load("System.Collections").Location),
             MetadataReference.CreateFromFile(Assembly.Load("System.Linq").Location),
             MetadataReference.CreateFromFile(Assembly.Load("netstandard").Location),
-            
+            MetadataReference.CreateFromFile(Assembly.Load("System.Runtime.Loader").Location),
             // MonoGame
             MetadataReference.CreateFromFile(typeof(Microsoft.Xna.Framework.Game).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(Microsoft.Xna.Framework.Graphics.SpriteBatch).Assembly.Location),
@@ -57,7 +57,7 @@ public class AppCompiler {
         };
     }
 
-    private List<MetadataReference> GetFullReferences(IEnumerable<string> extraNames) {
+    public List<MetadataReference> GetFullReferences(IEnumerable<string> extraNames) {
         var refs = new List<MetadataReference>(_baseReferences);
         if (extraNames != null) {
             foreach (var name in extraNames) {
@@ -102,6 +102,9 @@ public class AppCompiler {
     /// <param name="diagnostics">Output compilation diagnostics</param>
     /// <param name="extraReferences">Optional assembly names from manifest</param>
     /// <returns>Compiled assembly or null if compilation failed</returns>
+    /// <summary>
+    /// Compiles C# source files into an assembly.
+    /// </summary>
     public Assembly Compile(Dictionary<string, string> sourceFiles, string assemblyName, out IEnumerable<Diagnostic> diagnostics, IEnumerable<string> extraReferences = null) {
         var compilation = Validate(sourceFiles, assemblyName, out diagnostics, extraReferences);
 
@@ -111,12 +114,26 @@ public class AppCompiler {
 
         diagnostics = result.Diagnostics;
 
-        if (!result.Success) {
-            return null;
-        }
+        if (!result.Success) return null;
 
         // Load the compiled assembly
         ms.Seek(0, SeekOrigin.Begin);
         return Assembly.Load(ms.ToArray());
+    }
+
+    /// <summary>
+    /// Compiles C# source files into an assembly using a collectible AssemblyLoadContext.
+    /// </summary>
+    public Assembly CompileCollectible(Dictionary<string, string> sourceFiles, string assemblyName, out IEnumerable<Diagnostic> diagnostics, System.Runtime.Loader.AssemblyLoadContext context, IEnumerable<string> extraReferences = null) {
+        var compilation = Validate(sourceFiles, assemblyName, out diagnostics, extraReferences);
+
+        using var ms = new MemoryStream();
+        EmitResult result = compilation.Emit(ms);
+        diagnostics = result.Diagnostics;
+
+        if (!result.Success) return null;
+
+        ms.Seek(0, SeekOrigin.Begin);
+        return context.LoadFromStream(ms);
     }
 }

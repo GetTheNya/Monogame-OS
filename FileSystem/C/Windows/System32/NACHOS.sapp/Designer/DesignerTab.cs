@@ -12,6 +12,10 @@ using TheGame.Core;
 using TheGame.Core.Input;
 using TheGame.Core.Designer;
 
+using System.Reflection;
+using System.Runtime.Loader;
+using System.Threading.Tasks;
+using Microsoft.CodeAnalysis;
 using NACHOS;
 
 namespace NACHOS.Designer;
@@ -24,7 +28,9 @@ public class DesignerTab : NachosTab {
     private ToolboxPanel _toolbox;
     private HierarchyPanel _hierarchy;
     private Panel _toolbar;
+    public string ProjectPath { get; set; }
     
+    private System.Runtime.Loader.AssemblyLoadContext _loadContext;
     private Action<bool> _modeChangedHandler;
 
     public override CommandHistory History { get; } = new();
@@ -33,8 +39,9 @@ public class DesignerTab : NachosTab {
     public override string DisplayTitle => Path.GetFileName(FilePath) + (IsDirty ? "*" : "");
 
 
-    public DesignerTab(Vector2 position, Vector2 size, string filePath) : base(position, size, filePath) {
+    public DesignerTab(Vector2 position, Vector2 size, string filePath, string projectPath) : base(position, size, filePath) {
         FilePath = filePath;
+        ProjectPath = projectPath;
         
         float sidebarWidth = 170;
         float propertyWidth = 250;
@@ -49,7 +56,14 @@ public class DesignerTab : NachosTab {
         };
         _toolbar.AddChild(saveBtn);
         
-        var designToggle = new Checkbox(new Vector2(100, 7), "Design Mode") {
+        var refreshBtn = new Button(new Vector2(90, 5), new Vector2(130, 25), "Refresh Toolbox") {
+            OnClickAction = () => {
+                _ = RefreshToolboxAsync();
+            }
+        };
+        _toolbar.AddChild(refreshBtn);
+
+        var designToggle = new Checkbox(new Vector2(225, 7), "Design Mode") {
             Value = DesignMode.IsEnabled,
             OnValueChanged = (val) => DesignMode.SetEnabled(val)
         };
@@ -176,6 +190,128 @@ public class DesignerTab : NachosTab {
             History.Clear(); // Don't want adding default to be undoable at start
             History.MarkAsSaved();
             OnDirtyChanged?.Invoke();
+        }
+    }
+
+    public async Task RefreshToolboxAsync() {
+        if (string.IsNullOrEmpty(ProjectPath)) return;
+
+        try {
+            DesignMode.IsToolboxGeneration = true;
+
+            // 1. Serialization of current state
+            string currentUi = UISerializer.Serialize(_surface.ContentLayer.Children.FirstOrDefault());
+
+            // 2. Cleanup
+            _surface.ContentLayer.ClearChildren();
+            _toolbox.ClearItems();
+            _toolbox.RegisterSystemComponents();
+            
+            if (_loadContext != null) {
+                _loadContext.Unload();
+                _loadContext = null;
+                _surface.UserAssembly = null;
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }
+
+            // 3. Scan & Compile
+            string hostProjectPath = VirtualFileSystem.Instance.ToHostPath(ProjectPath);
+            if (!Directory.Exists(hostProjectPath)) return;
+
+            var csFiles = Directory.GetFiles(hostProjectPath, "*.cs", SearchOption.AllDirectories);
+            var sourceFiles = new Dictionary<string, string>();
+            foreach (var f in csFiles) sourceFiles[f] = File.ReadAllText(f);
+
+            // 3.1 Load Manifest References
+            string[] projectReferences = null;
+            string manifestPath = Path.Combine(hostProjectPath, "manifest.json");
+            if (File.Exists(manifestPath)) {
+                try {
+                    string json = File.ReadAllText(manifestPath);
+                    var manifest = AppManifest.FromJson(json);
+                    projectReferences = manifest.References;
+                } catch (Exception ex) {
+                    DebugLogger.Log($"[Toolbox Scan] Failed to read manifest: {ex.Message}");
+                }
+            }
+
+            _loadContext = new AssemblyLoadContext("UserComponents", isCollectible: true);
+            
+            // Iterative Compilation
+            Assembly assembly = null;
+            List<string> errorFiles = new List<string>();
+            List<string> lastDiagnostics = new List<string>();
+
+            while (sourceFiles.Count > 0) {
+                IEnumerable<Microsoft.CodeAnalysis.Diagnostic> diagnostics;
+                assembly = AppCompiler.Instance.CompileCollectible(sourceFiles, "UserComponents", out diagnostics, _loadContext, projectReferences);
+                if (assembly != null) break;
+
+                lastDiagnostics.Clear();
+                var fatalErrors = diagnostics.Where(d => (int)d.Severity == (int)Microsoft.CodeAnalysis.DiagnosticSeverity.Error).ToList();
+                foreach (var diag in diagnostics) {
+                    string msg = $"{diag.Severity} {diag.Id}: {diag.GetMessage()} at {diag.Location}";
+                    DebugLogger.Log($"[Toolbox Scan] {msg}");
+                    if ((int)diag.Severity == (int)Microsoft.CodeAnalysis.DiagnosticSeverity.Error) lastDiagnostics.Add(msg);
+                }
+                if (fatalErrors.Count == 0) break; 
+
+                var filesToRemove = fatalErrors
+                    .Select((Microsoft.CodeAnalysis.Diagnostic d) => d.Location.SourceTree?.FilePath)
+                    .Where(f => f != null)
+                    .Cast<string>()
+                    .Distinct()
+                    .ToList();
+                    
+                if (filesToRemove.Count == 0) break; 
+
+                foreach (string f in filesToRemove) {
+                    sourceFiles.Remove(f);
+                    errorFiles.Add(System.IO.Path.GetFileName(f));
+                }
+            }
+
+            if (errorFiles.Count > 0 || (assembly == null && lastDiagnostics.Count > 0)) {
+                string errorMsg = "Compilation Issues:\n";
+                if (errorFiles.Count > 0) errorMsg += "Skipped files: " + string.Join(", ", errorFiles) + "\n\n";
+                if (assembly == null && lastDiagnostics.Count > 0) {
+                    errorMsg += "Critical errors prevented compilation:\n" + string.Join("\n", lastDiagnostics.Take(3));
+                }
+                Shell.UI.OpenWindow(new MessageBox("Toolbox Refresh", errorMsg));
+            }
+
+            // 4. Discovery
+            if (assembly != null) {
+                _surface.UserAssembly = assembly;
+                var userTypes = assembly.GetTypes()
+                    .Where(t => t.IsPublic && !t.IsAbstract && !t.IsGenericType)
+                    .Where(t => typeof(UIElement).IsAssignableFrom(t))
+                    .Where(t => !typeof(WindowBase).IsAssignableFrom(t))
+                    .Where(t => !t.IsDefined(typeof(DesignerIgnoreControl), true))
+                    .Where(t => t.GetConstructor(Type.EmptyTypes) != null)
+                    .ToList();
+
+                if (userTypes.Count > 0) {
+                    _toolbox.AddSeparator("User Components");
+                    foreach (var type in userTypes) {
+                        _toolbox.AddToolboxItem(type.Name, type);
+                    }
+                }
+            }
+
+            // 5. Restore State (Binding to new types)
+            var newRoot = UISerializer.Deserialize(currentUi, assembly);
+            if (newRoot != null) {
+                _surface.ContentLayer.AddChild(newRoot);
+                _hierarchy.Refresh();
+            }
+
+        } catch (Exception ex) {
+            DebugLogger.Log($"Error refreshing toolbox: {ex.Message}");
+            Shell.Notifications.Show("Designer", "Toolbox refresh failed: " + ex.Message);
+        } finally {
+            DesignMode.IsToolboxGeneration = false;
         }
     }
     

@@ -14,6 +14,7 @@
     "System.ComponentModel.Primitives",
     "System.Text.Json",
     "System.Memory",
+    "System.Runtime.Loader",
     "System.Text.RegularExpressions"
   ]
 }

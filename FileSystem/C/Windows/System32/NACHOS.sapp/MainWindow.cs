@@ -33,6 +33,7 @@ public class MainWindow : Window {
     private bool _terminalVisible = true;
     private float _sidebarWidth = 200;
     private float _terminalHeight = 200;
+    private string[] _projectReferences = Array.Empty<string>();
     private readonly ConcurrentQueue<Action> _pendingUiActions = new();
     
     private List<OpenPage> _pages = new();
@@ -222,7 +223,7 @@ public class MainWindow : Window {
         OpenPage pageInfo;
 
         NachosTab tab = path.EndsWith(".uilayout") 
-            ? new DesignerTab(Vector2.Zero, _tabControl.ContentArea.Size, path)
+            ? new DesignerTab(Vector2.Zero, _tabControl.ContentArea.Size, path, _projectPath)
             : new EditorTab(Vector2.Zero, _tabControl.ContentArea.Size, path);
 
         var icon = FileIconHelper.GetIcon(path);
@@ -370,6 +371,22 @@ public class MainWindow : Window {
             
             // Initialize usage tracker for this project
             UsageTracker.Initialize();
+
+            // Load project references
+            try {
+                string hostPath = VirtualFileSystem.Instance.ToHostPath(path);
+                string manifestPath = Path.Combine(hostPath, "manifest.json");
+                if (File.Exists(manifestPath)) {
+                    string json = File.ReadAllText(manifestPath);
+                    var manifest = AppManifest.FromJson(json);
+                    _projectReferences = manifest.References ?? Array.Empty<string>();
+                } else {
+                    _projectReferences = Array.Empty<string>();
+                }
+            } catch (Exception ex) {
+                DebugLogger.Log("Failed to load project references: " + ex.Message);
+                _projectReferences = Array.Empty<string>();
+            }
         }
     }
 
@@ -473,7 +490,7 @@ public class MainWindow : Window {
                 await Task.Delay(20, token);
                 if (token.IsCancellationRequested) return;
 
-                var items = await IntelliSenseProvider.GetCompletionsAsync(sourceFiles, page.Path, pos);
+                var items = await IntelliSenseProvider.GetCompletionsAsync(sourceFiles, page.Path, pos, _projectReferences);
                 if (token.IsCancellationRequested) return;
                 
                 // Back to UI thread-sh (actually just add child)
@@ -601,7 +618,7 @@ public class MainWindow : Window {
 
         Task.Run(async () => {
             try {
-                var sig = await IntelliSenseProvider.GetSignatureHelpAsync(sourceFiles, page.Path, pos);
+                var sig = await IntelliSenseProvider.GetSignatureHelpAsync(sourceFiles, page.Path, pos, _projectReferences);
                 if (token.IsCancellationRequested) return;
 
                 _pendingUiActions.Enqueue(() => {
@@ -684,7 +701,20 @@ public class MainWindow : Window {
 
                 if (string.IsNullOrEmpty(_projectPath)) return;
 
-                var compilation = AppCompiler.Instance.Validate(sourceFiles, "NACHOS_ANALYSIS", out var diagnostics);
+                // Sync manifest references if manifest is open
+                var currentReferences = _projectReferences;
+                var manifestFile = sourceFiles.Keys.FirstOrDefault(k => k.EndsWith("manifest.json", StringComparison.OrdinalIgnoreCase));
+                if (manifestFile != null) {
+                    try {
+                        var manifest = AppManifest.FromJson(sourceFiles[manifestFile]);
+                        if (manifest != null && manifest.References != null) {
+                            currentReferences = manifest.References;
+                            _pendingUiActions.Enqueue(() => _projectReferences = currentReferences);
+                        }
+                    } catch { /* Ignore malformed JSON during typing */ }
+                }
+
+                var compilation = AppCompiler.Instance.Validate(sourceFiles, "NACHOS_ANALYSIS", out var diagnostics, currentReferences);
                 
                 // Group diagnostics by file
                 var diagsByFile = diagnostics.GroupBy(d => d.Location.SourceTree?.FilePath).ToList();

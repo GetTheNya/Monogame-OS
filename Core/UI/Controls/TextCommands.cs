@@ -58,7 +58,7 @@ public class InsertTextCommand : TextCommand {
     private int _col;
 
     public InsertTextCommand(TextArea target, string text, int line, int col) : base(target, "Typing") {
-        _text = text;
+        _text = (text ?? "").Replace("\r\n", "\n").Replace("\r", "\n");
         _line = line;
         _col = col;
     }
@@ -100,7 +100,7 @@ public class DeleteTextCommand : TextCommand {
         : base(target, isBackspace ? "Backspace" : "Delete") {
         _line = line;
         _col = col;
-        _deletedText = text;
+        _deletedText = (text ?? "").Replace("\r\n", "\n").Replace("\r", "\n");
         _isBackspace = isBackspace;
     }
 
@@ -150,10 +150,11 @@ public class ReplaceTextCommand : TextCommand {
 
     public ReplaceTextCommand(TextArea target, string description, int sl, int sc, int el, int ec, string newText) 
         : base(target, description) {
+        target.SortRange(ref sl, ref sc, ref el, ref ec);
         _startLine = sl; _startCol = sc;
         _endLine = el; _endCol = ec;
-        _newText = newText;
-        _oldText = target.InternalGetRange(sl, sc, el, ec);
+        _newText = (newText ?? "").Replace("\r\n", "\n").Replace("\r", "\n");
+        _oldText = target.InternalGetRange(_startLine, _startCol, _endLine, _endCol);
     }
 
     public override void Execute() {
@@ -162,10 +163,16 @@ public class ReplaceTextCommand : TextCommand {
     }
 
     public override void Undo() {
-        // Find where the new text ended up
         int newEndLine, newEndCol;
         _target.InternalGetPositionAfter(_startLine, _startCol, _newText, out newEndLine, out newEndCol);
-        _target.InternalReplaceRange(_startLine, _startCol, newEndLine, newEndCol, _oldText);
+        
+        // Ensure the range we are replacing is valid and sorted
+        int sl = _startLine;
+        int sc = _startCol;
+        int el = newEndLine;
+        int ec = newEndCol;
+        
+        _target.InternalReplaceRange(sl, sc, el, ec, _oldText);
         _before.Restore(_target);
     }
 }

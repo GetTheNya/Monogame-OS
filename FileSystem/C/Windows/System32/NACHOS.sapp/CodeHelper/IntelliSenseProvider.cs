@@ -29,7 +29,7 @@ private static readonly string[] _keywords = {
     "when", "where", "while", "with", "yield"
 };
 
-    public static async Task<List<CompletionItem>> GetCompletionsAsync(Dictionary<string, string> sourceFiles, string currentFile, int cursorPosition) {
+    public static async Task<List<CompletionItem>> GetCompletionsAsync(Dictionary<string, string> sourceFiles, string currentFile, int cursorPosition, IEnumerable<string> extraReferences = null) {
         return await Task.Run(() => {
             try {
                 var syntaxTrees = sourceFiles.Select(kvp => 
@@ -44,8 +44,7 @@ private static readonly string[] _keywords = {
                 var compilation = CSharpCompilation.Create(
                     "IntelliSenseCompilation",
                     syntaxTrees: syntaxTrees,
-                    references: AppCompiler.Instance.GetType().GetMethod("GetFullReferences", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                        .Invoke(AppCompiler.Instance, new object[] { null }) as IEnumerable<MetadataReference>
+                    references: AppCompiler.Instance.GetFullReferences(extraReferences)
                 );
 
                 var semanticModel = compilation.GetSemanticModel(currentTree);
@@ -350,7 +349,7 @@ private static readonly string[] _keywords = {
         });
     }
 
-    public static async Task<(string MethodName, List<(string Type, string Name)> Parameters, int ActiveIndex)?> GetSignatureHelpAsync(Dictionary<string, string> sourceFiles, string currentFile, int cursorPosition) {
+    public static async Task<(string MethodName, List<(string Type, string Name)> Parameters, int ActiveIndex)?> GetSignatureHelpAsync(Dictionary<string, string> sourceFiles, string currentFile, int cursorPosition, IEnumerable<string> extraReferences = null) {
         return await Task.Run<(string MethodName, List<(string Type, string Name)> Parameters, int ActiveIndex)?>(() => {
             try {
                 var syntaxTrees = sourceFiles.Select(kvp => 
@@ -363,8 +362,7 @@ private static readonly string[] _keywords = {
                 var compilation = CSharpCompilation.Create(
                     "SignatureHelpCompilation",
                     syntaxTrees: syntaxTrees,
-                    references: AppCompiler.Instance.GetType().GetMethod("GetFullReferences", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                        .Invoke(AppCompiler.Instance, new object[] { null }) as IEnumerable<MetadataReference>
+                    references: AppCompiler.Instance.GetFullReferences(extraReferences)
                 );
 
                 var semanticModel = compilation.GetSemanticModel(currentTree);
