@@ -7,12 +7,14 @@ using TheGame.Core.Animation;
 using TheGame.Graphics;
 using TheGame.Core.OS;
 using TheGame;
+using FontStashSharp;
 
 namespace ScreenCapture;
 
 public class CapturePreview : UIElement {
     private readonly Texture2D _texture;
     private readonly string _virtualPath;
+    private readonly DynamicSpriteFont _font;
     private float _timer = 5f;
     private bool _isClosing = false;
     private float _opacity = 0f;
@@ -24,6 +26,8 @@ public class CapturePreview : UIElement {
         _texture = texture;
         _virtualPath = virtualPath;
         _opacity = 0f;
+
+        _font = GameContent.FontSystem.GetFont(16);
         
         // Calculate size (max 250px width, preserving aspect ratio)
         float maxWidth = 250f;
@@ -101,6 +105,12 @@ public class CapturePreview : UIElement {
         
         // Draw image
         spriteBatch.Draw(_texture, destRect, Color.White * _opacity);
+
+        //If mouse over preview draw path
+        if (IsMouseOver && _font != null) {
+            var truncatedText = TextHelper.TruncateWithEllipsis(_font, _virtualPath, Size.X);
+            _font.DrawText(spriteBatch, truncatedText, AbsolutePosition, Color.White * _opacity);
+        }
         
         // Draw border
         shapeBatch.BorderRectangle(pos, Size, Color.White * 0.5f * _opacity, 1f);

@@ -26,6 +26,7 @@ public class Program : Application {
     private TrayIcon _trayIcon;
     private readonly List<CapturePreview> _previews = new();
     private CaptureHistory _history;
+    private Rectangle? _hoveredWindowBounds;
 
     private const string ScreenshotDir = "C:\\Users\\Admin\\Documents\\Screenshots";
 
@@ -33,18 +34,23 @@ public class Program : Application {
 
     protected override async Task OnLoadAsync(string[] args) {
         ExitOnMainWindowClose = false;
+
         Shell.Core.SetStartup(Process, true);
+
         _history = Shell.AppSettings.Load<CaptureHistory>(Process);
         
         // Prune non-existent files on load
         _history.Items.RemoveAll(item => !VirtualFileSystem.Instance.Exists(item.Path));
         Shell.AppSettings.Save(Process, _history);
 
+        Shell.Hotkeys.RegisterLocal(Process, Keys.PrintScreen, HotkeyModifiers.None, () => StartCapture(), callInBackground: true);
+
         try {
             // Setup Tray Icon
             Texture2D iconTex = Shell.Images.LoadAppImage(Process, "tray_icon.png");
             _trayIcon = new TrayIcon(iconTex, "Screen Capture") {
                 PersistAfterWindowClose = true,
+                Tooltip = "Slice - the screenshot app for HentOS",
                 OnClick = () => StartCapture(),
                 OnDoubleClick = () => ShowHistory(),
                 OnRightClick = () => {
@@ -57,6 +63,7 @@ public class Program : Application {
                     });
                 }
             };
+
             Shell.SystemTray.AddIcon(Process, _trayIcon);
 
             // Set initial priority to Low (background)
@@ -101,6 +108,13 @@ public class Program : Application {
         if (InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
             _startPos = InputManager.MousePosition.ToVector2();
             _selection = null;
+            _hoveredWindowBounds = null;
+        }
+
+        // Track hovered window when not dragging
+        if (!InputManager.IsMouseButtonDown(MouseButton.Left)) {
+            var hoveredWin = GetTopWindowAt(InputManager.MousePosition.ToVector2());
+            _hoveredWindowBounds = hoveredWin?.Bounds;
         }
 
         // Update selection rect
@@ -116,11 +130,30 @@ public class Program : Application {
         }
 
         // Finish selection
-        if (InputManager.IsMouseButtonJustReleased(MouseButton.Left) && _selection.HasValue) {
-            var finalRect = _selection.Value;
-            if (finalRect.Width > 5 && finalRect.Height > 5) {
-                _state = CaptureState.Saving;
-                SaveRegion(finalRect);
+        if (InputManager.IsMouseButtonJustReleased(MouseButton.Left) && _startPos.HasValue) {
+            Vector2 endPos = InputManager.MousePosition.ToVector2();
+            float dist = Vector2.Distance(_startPos.Value, endPos);
+
+            if (dist < 5) {
+                // It's a click! Try to find a window at this position
+                var targetWin = GetTopWindowAt(endPos);
+                if (targetWin != null) {
+                    _state = CaptureState.Saving;
+                    SaveRegion(targetWin.Bounds, targetWin.AppId);
+                    return;
+                }
+            }
+
+            // Normal region capture
+            if (_selection.HasValue) {
+                var finalRect = _selection.Value;
+                if (finalRect.Width > 5 && finalRect.Height > 5) {
+                    _state = CaptureState.Saving;
+                    SaveRegion(finalRect, "Capture");
+                } else {
+                    _startPos = null;
+                    _selection = null;
+                }
             } else {
                 _startPos = null;
                 _selection = null;
@@ -135,10 +168,11 @@ public class Program : Application {
             _screenshot = null;
             _startPos = null;
             _selection = null;
+            _hoveredWindowBounds = null;
         }
     }
 
-    private async void SaveRegion(Rectangle rect) {
+    private async void SaveRegion(Rectangle rect, string prefix = "Capture") {
         try {
             // Crop the texture
             rect.X = MathHelper.Clamp(rect.X, 0, _screenshot.Width);
@@ -159,7 +193,7 @@ public class Program : Application {
             cropped.SetData(data);
 
             string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-            string fileName = $"Capture_{timestamp}.png";
+            string fileName = $"{prefix}_{timestamp}.png";
             string virtualPath = Path.Combine(ScreenshotDir, fileName);
 
             // Add to history and save
@@ -191,6 +225,7 @@ public class Program : Application {
             _screenshot = null;
             _startPos = null;
             _selection = null;
+            _hoveredWindowBounds = null;
         }
     }
 
@@ -220,7 +255,7 @@ public class Program : Application {
             // Position it
             var viewport = G.GraphicsDevice.Viewport;
             float margin = 20f;
-            float bottomOffset = 40f; // Above taskbar
+            float bottomOffset = 60f; // Above taskbar
             
             // Simple stacking: find the top of the last preview
             float yOffset = bottomOffset;
@@ -237,6 +272,22 @@ public class Program : Application {
         }
     }
 
+    private Window GetTopWindowAt(Vector2 pos) {
+        if (Shell.WindowLayer == null) return null;
+        
+        // WindowLayer.Children is ordered back-to-front, so we iterate backwards to find top-most
+        var children = Shell.WindowLayer.Children;
+        for (int i = children.Count - 1; i >= 0; i--) {
+            var child = children[i];
+            if (child is Window win && win.IsVisible && win.Bounds.Contains(pos)) {
+                // Ignore our own windows (like history window)
+                if (win.OwnerProcess == Process) continue;
+                return win;
+            }
+        }
+        return null;
+    }
+
     protected override void OnDraw(SpriteBatch spriteBatch, ShapeBatch shapeBatch) {
         if (_screenshot == null || _state != CaptureState.Selecting) return;
 
@@ -248,8 +299,10 @@ public class Program : Application {
         spriteBatch.Begin();
         spriteBatch.Draw(_screenshot, Vector2.Zero, Color.White);
 
-        if (_selection.HasValue) {
-            Rectangle rect = _selection.Value;
+        Rectangle? activeRect = _selection ?? _hoveredWindowBounds;
+
+        if (activeRect.HasValue) {
+            Rectangle rect = activeRect.Value;
             
             // Top
             if (rect.Y > 0)
@@ -270,9 +323,9 @@ public class Program : Application {
         spriteBatch.End();
 
         // 2. Draw border using ShapeBatch
-        if (_selection.HasValue) {
+        if (activeRect.HasValue) {
             shapeBatch.Begin();
-            Rectangle rect = _selection.Value;
+            Rectangle rect = activeRect.Value;
             shapeBatch.BorderRectangle(new Vector2(rect.X, rect.Y), new Vector2(rect.Width, rect.Height), Color.White, 1f);
             shapeBatch.End();
         }

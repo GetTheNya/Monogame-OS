@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
+using TheGame;
 using TheGame.Core.UI;
 using TheGame.Core.UI.Controls;
 using TheGame.Core.OS;
@@ -11,17 +12,41 @@ public class HistoryWindow : Window {
     private ScrollPanel _scrollPanel;
     private CaptureHistory _history;
 
-    public HistoryWindow(CaptureHistory history) : base(new Vector2(100, 100), new Vector2(400, 500)) {
+    private static readonly string[] SliceIntros = {
+        "Slice. Capture your reality.",
+        "Slice — the screenshot app for HentOS.",
+        "Slice. The tastiest way to grab your screen.",
+        "Slice: Serving HentOS in slices.",
+        "Slice. Stop the moment.",
+        "Slice: Slice it, Save it, Love it.",
+        "Slice — Sharp. Fast. Digital."
+    };
+
+    public HistoryWindow(CaptureHistory history) : base(Vector2.Zero, new Vector2(400, 500)) {
         _history = history;
         Title = "Capture History";
         CanResize = false;
-        
+
+        var viewport = G.GraphicsDevice.Viewport;
+        Position = new Vector2(viewport.Width - Size.X - 20, viewport.Height - Size.Y - 60);
+    }
+
+    protected override void OnLoad() {
+        base.OnLoad();
+
+        var label = new Label(new Vector2(10, 15), SliceIntros[Random.Shared.Next(SliceIntros.Length)]) {
+            Color = Color.LightBlue,
+            FontSize = 18,
+            UseBoldFont = true,
+        };
+        AddChild(label);
+
         // Setup layout
         _scrollPanel = new ScrollPanel(new Vector2(10, 40), new Vector2(ClientSize.X - 20, ClientSize.Y - 110));
         _scrollPanel.BackgroundColor = new Color(30, 30, 30, 100);
         AddChild(_scrollPanel);
         
-        // Refresh List Button (at bottom)
+        // Refresh List Button (at bottom left)
         var refreshBtn = new Button(new Vector2(10, ClientSize.Y - 50), new Vector2(100, 30), "Refresh");
         refreshBtn.OnClickAction = () => RefreshList();
         AddChild(refreshBtn);

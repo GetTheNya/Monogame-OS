@@ -13,6 +13,7 @@ public class Label : UIElement {
     [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public Color TextColor { get => Color; set => Color = value; }
     public int FontSize { get; set; } = 20;
+    public bool UseBoldFont { get; set; } = false;
 
     [Obsolete("For Designer/Serialization use only", error: true)]
     [EditorBrowsable(EditorBrowsableState.Never)]
@@ -40,8 +41,11 @@ public class Label : UIElement {
     public override void Draw(SpriteBatch spriteBatch, ShapeBatch batch) {
         if (!IsVisible || string.IsNullOrEmpty(Text)) return;
 
-        if (GameContent.FontSystem != null) {
-            var font = GameContent.FontSystem.GetFont(FontSize);
+        var activeFontSystem = UseBoldFont ? GameContent.BoldFontSystem : GameContent.FontSystem;
+
+        if (activeFontSystem != null) {
+            var font = activeFontSystem.GetFont(FontSize);
+    
             if (font != null) {
                 font.DrawText(batch, Text, AbsolutePosition, Color * AbsoluteOpacity);
             }

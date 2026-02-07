@@ -3,6 +3,8 @@
     "name": "Screen Capture",
     "entryClass": "ScreenCapture.Program",
     "entryMethod": "Main",
-    "singleInstance": false,
-    "references": []
+    "singleInstance": true,
+    "references": [
+        "FontStashSharp"
+    ]
 }

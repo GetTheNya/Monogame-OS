@@ -9,6 +9,7 @@ public class WindowsKeyHook : IDisposable {
     private const int WH_KEYBOARD_LL = 13;
     private const int WM_KEYDOWN = 0x0100;
     private const int WM_SYSKEYDOWN = 0x0104;
+    private const int VK_SNAPSHOT = 0x2C;
     private const int VK_LWIN = 0x5B;
     private const int VK_RWIN = 0x5C;
     private const int VK_CONTROL = 0x11;
@@ -56,6 +57,18 @@ public class WindowsKeyHook : IDisposable {
 
             bool isKeyDown = wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN;
             bool isKeyUp = wParam == (IntPtr)0x0101 || wParam == (IntPtr)0x0105; // WM_KEYUP, WM_SYSKEYUP
+
+            // Block Print Screen Key
+            if (vkCode == VK_SNAPSHOT) {
+                if (isKeyDown) {
+                    InputManager.SetKeyOverride(Keys.PrintScreen, true);
+                }
+                if (isKeyUp) {
+                    InputManager.SetKeyOverride(Keys.PrintScreen, false);
+                }
+                
+                return (IntPtr)1; 
+            }
 
             // Block Windows Keys (Left: 0x5B, Right: 0x5C)
             if (vkCode == 0x5B || vkCode == 0x5C) {
