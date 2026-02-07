@@ -7,6 +7,23 @@ using Microsoft.Xna.Framework;
 
 namespace TheGame.Core.OS;
 
+public enum WatcherChangeType {
+    Created,
+    Deleted,
+    Modified,
+    Renamed
+}
+
+public class FileSystemEventArgs : EventArgs {
+    public string Path { get; }
+    public WatcherChangeType ChangeType { get; }
+
+    public FileSystemEventArgs(string path, WatcherChangeType changeType) {
+        Path = path;
+        ChangeType = changeType;
+    }
+}
+
 public class VirtualFileSystem {
     private static VirtualFileSystem _instance;
     public static VirtualFileSystem Instance => _instance ??= new VirtualFileSystem();
@@ -15,6 +32,8 @@ public class VirtualFileSystem {
     
     // Cached recycle bin state to avoid disk I/O every frame
     private bool? _isRecycleBinEmptyCache = null;
+
+    private Dictionary<string, Action<FileSystemEventArgs>> _watchers = new();
 
     public void Initialize(string hostRoot) {
         // Register Apps first so they are available for shortcuts
@@ -48,6 +67,33 @@ public class VirtualFileSystem {
         // Load all apps from System32 using AppLoader
         AppLoader.Instance.LoadAppsFromDirectory("C:\\Windows\\System32\\");
 		AppLoader.Instance.LoadAppsFromDirectory("C:\\Windows\\System32\\TerminalApps\\");
+    }
+
+    public void WatchDirectory(string path, Action<FileSystemEventArgs> onEvent) {
+        if (!_watchers.ContainsKey(path)) {
+            _watchers[path] = onEvent;
+        } else {
+            _watchers[path] += onEvent;
+        }
+    }
+
+    public void UnwatchDirectory(string path, Action<FileSystemEventArgs> onEvent) {
+        if (_watchers.ContainsKey(path)) {
+            _watchers[path] -= onEvent;
+            if (_watchers[path] == null) {
+                _watchers.Remove(path);
+            }
+        }
+    }
+
+    private void NotifyWatchers(string parentFolderPath, string affectedFilePath, WatcherChangeType type) {
+        if (_watchers.ContainsKey(parentFolderPath)) {
+            _watchers[parentFolderPath]?.Invoke(new FileSystemEventArgs(affectedFilePath, type));
+        }
+        
+        if (type == WatcherChangeType.Deleted && _watchers.ContainsKey(affectedFilePath)) {
+             _watchers[affectedFilePath]?.Invoke(new FileSystemEventArgs(affectedFilePath, WatcherChangeType.Deleted));
+        }
     }
 
     private void EnsureFile(string path, string content) {
@@ -143,11 +189,13 @@ public class VirtualFileSystem {
         string hostPath = ToHostPath(virtualPath);
         if (!string.IsNullOrEmpty(hostPath)) {
             Directory.CreateDirectory(hostPath);
+            NotifyWatchers(GetParentPath(virtualPath), virtualPath, WatcherChangeType.Created);
         }
     }
 
     public void CreateFile(string virtualPath) {
         using (var s = OpenWrite(virtualPath)) { }
+        NotifyWatchers(GetParentPath(virtualPath), virtualPath, WatcherChangeType.Created);
     }
 
     /// <summary>
@@ -285,6 +333,7 @@ public class VirtualFileSystem {
         string dir = Path.GetDirectoryName(hostPath);
         if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
         File.WriteAllText(hostPath, content);
+        NotifyWatchers(GetParentPath(virtualPath), virtualPath, WatcherChangeType.Modified);
     }
 
     public void Delete(string virtualPath) {
@@ -296,6 +345,7 @@ public class VirtualFileSystem {
         string hostPath = ToHostPath(virtualPath);
         if (File.Exists(hostPath)) File.Delete(hostPath);
         else if (Directory.Exists(hostPath)) Directory.Delete(hostPath, true);
+        NotifyWatchers(GetParentPath(virtualPath), virtualPath, WatcherChangeType.Deleted);
     }
 
     private bool IsSystemProtectedPath(string virtualPath) {
@@ -368,6 +418,9 @@ public class VirtualFileSystem {
             Shell.RefreshDesktop?.Invoke();
             Shell.RefreshExplorers();
         }
+
+        NotifyWatchers(GetParentPath(sourceVirtualPath), sourceVirtualPath, WatcherChangeType.Deleted);
+        NotifyWatchers(GetParentPath(destVirtualPath), destVirtualPath, WatcherChangeType.Created);
     }
 
     public void Copy(string sourceVirtualPath, string destVirtualPath) {
@@ -385,6 +438,8 @@ public class VirtualFileSystem {
         } else if (Directory.Exists(sourceHost)) {
             DirectoryCopy(sourceHost, destHost, true);
         }
+        
+        NotifyWatchers(GetParentPath(destVirtualPath), destVirtualPath, WatcherChangeType.Created);
     }
 
     private void DirectoryCopy(string sourceDirName, string destDirName, bool copySubDirs) {
@@ -408,6 +463,8 @@ public class VirtualFileSystem {
                 DirectoryCopy(subdir.FullName, temppath, copySubDirs);
             }
         }
+        
+        NotifyWatchers(GetParentPath(destDirName), destDirName, WatcherChangeType.Created);
     }
 
     private void RemoveTrashInfo(string trashVirtualPath) {
@@ -601,6 +658,17 @@ public class VirtualFileSystem {
         string bundle = GetAppBundleDirectory(appId);
         if (bundle == null) return null;
         return Path.Combine(bundle, resourceName);
+    }
+
+    private string GetParentPath(string virtualPath) {
+        if (string.IsNullOrEmpty(virtualPath)) return null;
+
+        var normalizedPath = virtualPath.TrimEnd('\\');
+
+        int lastSlashIndex = normalizedPath.LastIndexOf('\\');
+
+        if (lastSlashIndex == -1) return null; 
+        return normalizedPath.Substring(0, lastSlashIndex + 1);
     }
 }
 

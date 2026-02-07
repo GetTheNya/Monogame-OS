@@ -52,6 +52,11 @@ public class FileExplorerWindow : Window {
         AppId = "EXPLORER";
 
         OnResize += () => LayoutUI();
+        OnClosed += () => {
+            if (!string.IsNullOrEmpty(_currentPath)) {
+                VirtualFileSystem.Instance.UnwatchDirectory(_currentPath, OnFileSystemChanged);
+            }
+        };
     }
     
     protected override void OnLoad() {
@@ -166,6 +171,10 @@ public class FileExplorerWindow : Window {
     }
 
     public void NavigateTo(string path) {
+        if (!string.IsNullOrEmpty(_currentPath)) {
+            VirtualFileSystem.Instance.UnwatchDirectory(_currentPath, OnFileSystemChanged);
+        }
+
         if (path == "COMPUTER") {
             _isComputerMode = true;
             _currentPath = "COMPUTER";
@@ -180,6 +189,9 @@ public class FileExplorerWindow : Window {
             _pathInput.Value = path;
             _settings.LastPath = path;
             Shell.AppSettings.Save(OwnerProcess, _settings);
+
+            VirtualFileSystem.Instance.WatchDirectory(_currentPath, OnFileSystemChanged);
+
             RefreshList();
         }
     }
@@ -226,6 +238,10 @@ public class FileExplorerWindow : Window {
             Shell.RefreshDesktop?.Invoke();
             Shell.RefreshExplorers();
         }
+    }
+
+    private void OnFileSystemChanged(FileSystemEventArgs e) {
+        RefreshList();
     }
 }
 
