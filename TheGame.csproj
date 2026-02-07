@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <SatelliteResourceLanguages>en-US</SatelliteResourceLanguages>
     <OutputType>Exe</OutputType>
     <TargetFramework>net6.0-windows</TargetFramework>
     <RollForward>Major</RollForward>
@@ -32,4 +33,15 @@
     <Message Text="Restoring dotnet tools" Importance="High" />
     <Exec Command="dotnet tool restore" />
   </Target>
+<Target Name="MoveDllsToLib" AfterTargets="Build">
+  <ItemGroup>
+    <DllFiles Include="$(TargetDir)*.dll" Exclude="$(TargetDir)$(TargetName).dll;$(TargetDir)MonoGame.Framework.dll" />
+    <PdbFiles Include="$(TargetDir)*.pdb" Exclude="$(TargetDir)$(TargetName).pdb" />
+    <XmlFiles Include="$(TargetDir)*.xml" />
+  </ItemGroup>
+  
+  <Move SourceFiles="@(DllFiles)" DestinationFolder="$(TargetDir)libs" />
+  <Move SourceFiles="@(PdbFiles)" DestinationFolder="$(TargetDir)libs" />
+  <Move SourceFiles="@(XmlFiles)" DestinationFolder="$(TargetDir)libs" />
+</Target>
 </Project>
