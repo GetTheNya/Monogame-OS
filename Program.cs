@@ -12,16 +12,17 @@ AssemblyLoadContext.Default.Resolving += (context, assemblyName) => {
     return null;
 };
 
-// Initialize CEF
+// Initialize CEF on the main thread
 var settings = new CefSettings {
     CachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TheGame", "Cache"),
     WindowlessRenderingEnabled = true,
+    MultiThreadedMessageLoop = true // Recommended for offscreen in some scenarios
 };
 
-// Set subprocess path if needed, but for .NET Core it usually defaults to the current exe
-// Cef.Initialize(settings, performDependencyCheck: true, browserProcessHandler: null);
-if (Cef.IsInitialized == false) {
-    Cef.Initialize(settings);
+if (Cef.IsInitialized != true) {
+    Console.WriteLine($"[CEF] Initializing on thread {Environment.CurrentManagedThreadId}...");
+    bool success = Cef.Initialize(settings, performDependencyCheck: true, browserProcessHandler: null);
+    Console.WriteLine($"[CEF] Initialization {(success ? "succeeded" : "failed")}");
 }
 
 try {

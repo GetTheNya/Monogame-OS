@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.ComponentModel;
 using CefSharp;
 using CefSharp.OffScreen;
@@ -18,6 +19,8 @@ public class BrowserControl : UIElement {
     private byte[] _pixelBuffer;
     private bool _isDirty;
     private readonly object _textureLock = new();
+
+    public bool IsInitialized { get; private set; }
     
     public string Url { get; set; } = "about:blank";
     public Color BackgroundColor { get; set; } = new Color(30, 30, 30);
@@ -32,9 +35,30 @@ public class BrowserControl : UIElement {
     
     /// <summary>
     /// Call this after the GraphicsDevice is available to create the browser instance.
+    /// This is a synchronous wrapper for backward compatibility.
     /// </summary>
     public void InitializeBrowser() {
-        if (_browser != null) return;
+        InitializeBrowserAsync().GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Initializes the browser asynchronously to prevent blocking the UI thread.
+    /// </summary>
+    public async System.Threading.Tasks.Task InitializeBrowserAsync() {
+        if (IsInitialized || _browser != null) return;
+
+        // Verify initialization on UI thread first
+        if (Cef.IsInitialized != true) {
+            DebugLogger.Log($"[BrowserControl] CEF not initialized! Initializing on thread {Environment.CurrentManagedThreadId}");
+            var settings = new CefSettings {
+                CachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TheGame", "Cache"),
+                WindowlessRenderingEnabled = true,
+                MultiThreadedMessageLoop = true
+            };
+            Cef.Initialize(settings, performDependencyCheck: true, browserProcessHandler: null);
+        } else {
+            DebugLogger.Log($"[BrowserControl] CEF already initialized (on some thread). Current thread: {Environment.CurrentManagedThreadId}");
+        }
         
         int width = Math.Max(1, (int)Size.X);
         int height = Math.Max(1, (int)Size.Y);
@@ -46,8 +70,14 @@ public class BrowserControl : UIElement {
             WindowlessFrameRate = 60 // Match game framerate
         };
         
-        _browser = new ChromiumWebBrowser(Url, browserSettings);
-        _browser.Size = new System.Drawing.Size(width, height);
+        // Initialize the browser on a background thread to avoid UI freeze
+        // We ensure CEF is initialized BEFORE entering this Task.Run
+        _browser = await System.Threading.Tasks.Task.Run(() => {
+            DebugLogger.Log($"[BrowserControl] Creating ChromiumWebBrowser on background thread {Environment.CurrentManagedThreadId}");
+            var b = new ChromiumWebBrowser(Url, browserSettings);
+            b.Size = new System.Drawing.Size(width, height);
+            return b;
+        });
         
         // Handle paint events
         _browser.Paint += OnBrowserPaint;
@@ -60,6 +90,7 @@ public class BrowserControl : UIElement {
         };
         
         OnResize += HandleResize;
+        IsInitialized = true;
     }
     
     private void HandleResize() {

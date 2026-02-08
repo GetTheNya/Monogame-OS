@@ -28,6 +28,7 @@ public class BrowserWindow : Window {
     private Label _statusLabel;
     private Panel _toolbarBg;
     private Panel _statusBg;
+    private LoadingSpinner _loadingSpinner;
 
     public BrowserWindow() {
         Title = "Web Browser";
@@ -81,10 +82,18 @@ public class BrowserWindow : Window {
 
         // --- Browser Control ---
         _browser = new BrowserControl(new Vector2(0, 40), new Vector2(Size.X, Size.Y - 60)) {
-            Url = "https://google.com"
+            Url = "https://google.com",
+            IsVisible = false // Hide until initialized
         };
-        _browser.InitializeBrowser();
         AddChild(_browser);
+
+        // --- Loading Spinner ---
+        _loadingSpinner = new LoadingSpinner(new Vector2(Size.X / 2 - 25, Size.Y / 2 - 25 + 20), new Vector2(50, 50)) {
+            Color = new Color(0, 120, 215),
+            Thickness = 4f,
+            Speed = 1.2f
+        };
+        AddChild(_loadingSpinner);
 
         // --- Status Bar ---
         _statusBg = new Panel(new Vector2(0, Size.Y - 20), new Vector2(Size.X, 20)) {
@@ -101,8 +110,25 @@ public class BrowserWindow : Window {
         // Handle window resize
         OnResize += HandleWindowResize;
         
-        // Navigate to initial URL
-        _browser.Navigate(_urlInput.Value);
+        // Start async initialization
+        InitializeAsync();
+    }
+
+    private async void InitializeAsync() {
+        if (_browser == null) return;
+
+        if (_statusLabel != null) _statusLabel.Text = "Initializing Browser Engine...";
+
+        await _browser.InitializeBrowserAsync();
+
+        if (_loadingSpinner != null) _loadingSpinner.IsVisible = false;
+        if (_browser != null) {
+            _browser.IsVisible = true;
+            _browser.Navigate(_urlInput?.Value ?? "https://google.com");
+        }
+
+        if (_statusLabel != null) _statusLabel.Text = "Ready";
+        UpdateNavButtons();
     }
 
     private void NavigateToUrl(string url) {
@@ -147,6 +173,11 @@ public class BrowserWindow : Window {
 
         // Update browser size
         if (_browser != null) _browser.Size = new Vector2(Size.X, Size.Y - 60);
+
+        // Update spinner position
+        if (_loadingSpinner != null) {
+            _loadingSpinner.Position = new Vector2(Size.X / 2 - 25, Size.Y / 2 - 25 + 20);
+        }
 
         // Update status bar
         if (_statusBg != null) {
