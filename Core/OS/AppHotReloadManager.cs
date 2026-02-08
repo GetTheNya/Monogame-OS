@@ -190,4 +190,15 @@ public class AppHotReloadManager {
             Shell.Notifications.Show("Hot Reload Error", $"Failed to reload {appId}: {ex.Message}");
         }
     }
+
+    /// <summary>
+    /// Resets the HotReload state for a full system restart.
+    /// </summary>
+    public void Reset() {
+        StopAll();
+        _pendingReloads.Clear();
+        _debounceTimers.Clear();
+        _appPaths.Clear();
+        DebugLogger.Log("[AppHotReloadManager] State reset for restart");
+    }
 }

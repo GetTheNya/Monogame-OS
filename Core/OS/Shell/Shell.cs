@@ -152,6 +152,66 @@ public static partial class Shell {
         UI.InternalInitialize();
     }
 
+    /// <summary>
+    /// Performs a full system restart.
+    /// </summary>
+    public static void Restart() {
+        DebugLogger.Log("--- SYSTEM RESTART INITIATED ---");
+        
+        // 1. Terminate all processes
+        ProcessManager.Instance.TerminateAll();
+        
+        // 2. Reset AppLoader
+        AppLoader.Instance.Reset();
+        
+        // 3. Reset HotReload
+        AppHotReloadManager.Instance.Reset();
+        
+        // 4. Reset Shell UI Registry
+        UI.Reset();
+        
+        // 5. Clear Window Layer
+        WindowLayer?.ClearChildren();
+        
+        // 6. Cancel active drags
+        DragDropManager.Instance.CancelDrag();
+        
+        // 7. Transition to ShutdownScene (Restart mode)
+        Game1.Instance.SceneManager.TransitionTo(new TheGame.Scenes.ShutdownScene(TheGame.Scenes.ShutdownMode.Restart));
+        
+        DebugLogger.Log("--- SYSTEM RESTART READY ---");
+    }
+
+    /// <summary>
+    /// Performs a full system shutdown.
+    /// </summary>
+    public static void Shutdown() {
+        DebugLogger.Log("--- SYSTEM SHUTDOWN INITIATED ---");
+        
+        // 1. Terminate all processes
+        ProcessManager.Instance.TerminateAll();
+        
+        // 2. Reset AppLoader
+        AppLoader.Instance.Reset();
+        
+        // 3. Reset HotReload
+        AppHotReloadManager.Instance.Reset();
+        
+        // 4. Reset Shell UI Registry
+        UI.Reset();
+        
+        // 5. Clear Window Layer
+        WindowLayer?.ClearChildren();
+        
+        // 6. Cancel active drags
+        DragDropManager.Instance.CancelDrag();
+        
+        // 7. Transition to ShutdownScene (Shutdown mode)
+        Game1.Instance.SceneManager.TransitionTo(new TheGame.Scenes.ShutdownScene(TheGame.Scenes.ShutdownMode.Shutdown));
+        
+        DebugLogger.Log("--- SYSTEM SHUTDOWN READY ---");
+    }
+
     public static void RefreshExplorers(string pathFilter = null) {
         if (WindowLayer == null) return;
         foreach (var child in WindowLayer.Children) {

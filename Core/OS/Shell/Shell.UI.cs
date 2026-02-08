@@ -23,6 +23,14 @@ public static partial class Shell {
             }
         }
 
+        public static void Reset() {
+            lock (_appRegistryLock) {
+                _appRegistry.Clear();
+                InternalInitialize();
+            }
+            DebugLogger.Log("[Shell.UI] Registry reset for restart");
+        }
+
         public static void SetTooltip(UIElement element, string text, float delay = 0.5f) {
             if (element == null) return;
             element.Tooltip = text;

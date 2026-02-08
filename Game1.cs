@@ -20,6 +20,7 @@ public class Game1 : Game {
     private SpriteBatch _spriteBatch;
 
     private SceneManager _sceneManager;
+    public SceneManager SceneManager => _sceneManager;
 
     private WindowsKeyHook _winKeyHook;
 
@@ -81,7 +82,7 @@ public class Game1 : Game {
 
         _sceneManager = new SceneManager(Content, GraphicsDevice);
         _sceneManager.LoadScene(new TheGame.Scenes.LoadingScene());
-        // DesktopScene is loaded via transition in LoadingScene
+        // DesktopScene is loaded via transition in LoginScene (which is loaded via transition in LoadingScene)
 
         _fps = new Fps();
         

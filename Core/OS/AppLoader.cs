@@ -471,6 +471,18 @@ public class AppLoader {
         var processes = ProcessManager.Instance.GetProcessesByApp(appId);
         return processes.SelectMany(p => p.Windows).ToList();
     }
+
+    /// <summary>
+    /// Resets the AppLoader state for a full system restart.
+    /// </summary>
+    public void Reset() {
+        _compiledApps.Clear();
+        _appPaths.Clear();
+        IsLoadingComplete = false;
+        AppsLoadedCount = 0;
+        TotalAppsToLoad = 0;
+        DebugLogger.Log("[AppLoader] State reset for restart");
+    }
 }
 
 public static class DiagnosticFormatter {

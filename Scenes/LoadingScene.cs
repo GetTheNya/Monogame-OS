@@ -58,7 +58,7 @@ public class LoadingScene : Core.Scenes.Scene {
         }
 
         if (AppLoader.Instance.IsLoadingComplete) {
-            SceneManager.TransitionTo(new DesktopScene());
+            SceneManager.TransitionTo(new LoginScene());
         }
     }
 

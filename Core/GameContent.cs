@@ -19,6 +19,7 @@ public static class GameContent {
     public static Texture2D DesktopIcon;
     public static Texture2D NotificationIcon;
     public static Texture2D UserIcon;
+    public static Texture2D RestartIcon;
     public static Texture2D PowerIcon;
     public static Texture2D CheckboxIcon;
     public static Texture2D CheckboxCheckedIcon;
@@ -57,6 +58,7 @@ public static class GameContent {
         DesktopIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\desktop.png");
         NotificationIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\notification.png");
         UserIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\user.png");
+        RestartIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\restart.png");
         PowerIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\power.png");
         CheckboxIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\UI\\checkbox.png");
         CheckboxCheckedIcon = LoadIcon("C:\\Windows\\SystemResources\\Icons\\UI\\checkbox_checked.png");

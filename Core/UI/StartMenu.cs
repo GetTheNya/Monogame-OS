@@ -6,6 +6,7 @@ using TheGame.Core.Animation;
 using Microsoft.Xna.Framework.Graphics;
 using TheGame.Core.UI.Controls;
 using TheGame.Core.OS;
+using System.Linq;
 
 namespace TheGame.Core.UI;
 
@@ -56,11 +57,28 @@ public class StartMenu : Panel {
         var powerBtn = new Button(new Vector2(MenuPadding, _startMenuHeight - SidebarWidth), new Vector2(SidebarWidth - MenuPadding * 2, SidebarWidth - MenuPadding * 2), "") {
             BackgroundColor = Color.Transparent,
             Icon = GameContent.PowerIcon, // Assume this exists or fallback
-            OnClickAction = () => System.Environment.Exit(0),
+            OnClickAction = () => {
+                Close();
+                Shell.Shutdown();
+            },
             Tooltip = "Shut Down",
             HoverColor = new Color(200, 50, 50, 100)
         };
         _sidebar.AddChild(powerBtn);
+        
+        // Restart Button above power button
+        var restartBtn = new Button(new Vector2(MenuPadding, _startMenuHeight - SidebarWidth * 2), new Vector2(SidebarWidth - MenuPadding * 2, SidebarWidth - MenuPadding * 2), "") {
+            BackgroundColor = Color.Transparent,
+            Icon = GameContent.RestartIcon, // Using user icon for now as a placeholder for restart, or we can look for RotateIcon/RefreshIcon if they exist
+            OnClickAction = () => {
+                Close();
+                Shell.Restart();
+            },
+            Tooltip = "Restart System",
+            HoverColor = new Color(50, 150, 200, 100)
+        };
+        // Let's check if we have a better icon
+        _sidebar.AddChild(restartBtn);
 
         // Main Scrollable Area
         _scrollPanel = new ScrollPanel(new Vector2(SidebarWidth, 0), new Vector2(_startMenuWidth - SidebarWidth, _startMenuHeight)) {
@@ -89,6 +107,15 @@ public class StartMenu : Panel {
         // Update constituent sizes if needed
         Size = new Vector2(_startMenuWidth, _startMenuHeight);
         _sidebar.Size = new Vector2(SidebarWidth, _startMenuHeight);
+        
+        // Re-position buttons in sidebar on resize
+        var sidebarButtons = _sidebar.Children.OfType<Button>().ToList();
+        var powerBtn = sidebarButtons.LastOrDefault();
+        var restartBtn = sidebarButtons.Count >= 2 ? sidebarButtons[sidebarButtons.Count - 2] : null;
+        
+        if (powerBtn != null) powerBtn.Position = new Vector2(MenuPadding, _startMenuHeight - SidebarWidth);
+        if (restartBtn != null) restartBtn.Position = new Vector2(MenuPadding, _startMenuHeight - SidebarWidth * 2);
+
         _scrollPanel.Size = new Vector2(_startMenuWidth - SidebarWidth, _startMenuHeight);
         base.OnResize?.Invoke();
     }

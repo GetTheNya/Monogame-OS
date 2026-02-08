@@ -245,4 +245,16 @@ public class ProcessManager {
         OnProcessTerminated?.Invoke(process);
         DebugLogger.Log($"Process unregistered: {process.AppId} ({process.ProcessId})");
     }
+
+    /// <summary>
+    /// Terminates all running processes.
+    /// </summary>
+    public void TerminateAll() {
+        var processes = _processes.Values.ToList();
+        DebugLogger.Log($"[ProcessManager] Terminating {processes.Count} processes...");
+        foreach (var process in processes) {
+            process.Terminate();
+        }
+        _processes.Clear();
+    }
 }
