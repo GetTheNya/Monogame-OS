@@ -14,6 +14,8 @@ public class LoadingScene : Core.Scenes.Scene {
     private Texture2D _hentosLogo;
     private Vector2 _hentosLogoPos;
     private float _loadingProgress = 0f;
+    private int _compiledApps;
+    private int _allApps;
     private bool _startedLoading = false;
 
     public LoadingScene() {
@@ -51,6 +53,8 @@ public class LoadingScene : Core.Scenes.Scene {
 
         if (AppLoader.Instance.TotalAppsToLoad > 0) {
             _loadingProgress = (float)AppLoader.Instance.AppsLoadedCount / AppLoader.Instance.TotalAppsToLoad;
+            _compiledApps = AppLoader.Instance.AppsLoadedCount;
+            _allApps = AppLoader.Instance.TotalAppsToLoad;
         }
 
         if (AppLoader.Instance.IsLoadingComplete) {
@@ -66,10 +70,15 @@ public class LoadingScene : Core.Scenes.Scene {
         // Draw progress text
         var viewport = G.GraphicsDevice.Viewport;
         var font = GameContent.FontSystem.GetFont(24);
-        string text = $"Loading System... {(int)(_loadingProgress * 100)}%";
-        var textSize = font.MeasureString(text);
-        font.DrawText(spriteBatch, text, new Vector2((viewport.Width / 2) - (textSize.X / 2), (viewport.Height / 2) + 100), Color.White * 0.7f);
+
+        string loadingText = $"Loading System... {(int)(_loadingProgress * 100)}%";
+        var loadingTextSize = font.MeasureString(loadingText);
+        font.DrawText(spriteBatch, loadingText, new Vector2((viewport.Width / 2) - (loadingTextSize.X / 2), (viewport.Height / 2) + 100), Color.White * 0.7f);
         
+        string additionalText = $"Compiling JIT apps {_compiledApps}/{_allApps}";
+        var additionalTextSize = font.MeasureString(additionalText);
+        font.DrawText(spriteBatch, additionalText, new Vector2((viewport.Width / 2) - (additionalTextSize.X / 2), (viewport.Height / 2) + 125), Color.White * 0.7f);
+
         spriteBatch.End();
         
         _spinner.Draw(spriteBatch, shapeBatch);

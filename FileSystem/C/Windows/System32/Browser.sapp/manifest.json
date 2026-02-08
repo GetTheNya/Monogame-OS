@@ -1,0 +1,12 @@
+{
+    "appId": "BROWSER",
+    "name": "Web Browser",
+    "entryClass": "BrowserApp.Program",
+    "entryMethod": "Main",
+    "singleInstance": true,
+    "references": [
+        "FontStashSharp",
+        "CefSharp.Core",
+        "CefSharp.OffScreen"
+    ]
+}
