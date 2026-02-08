@@ -145,9 +145,9 @@ public static partial class Shell {
             }
         }
 
-        public static void PickFile(string title, string defaultPath, Action<string> onFilePicked) {
+        public static void PickFile(string title, string defaultPath, Action<string> onFilePicked, string[] extentions = null) {
             if (WindowLayer == null) return;
-            OpenWindow(new FilePickerWindow(title, defaultPath, "", FilePickerMode.Open, onFilePicked));
+            OpenWindow(new FilePickerWindow(title, defaultPath, "", FilePickerMode.Open, onFilePicked, extentions));
         }
 
         public static void SaveFile(string title, string defaultPath, string defaultName, Action<string> onFilePicked) {

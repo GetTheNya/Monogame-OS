@@ -14,13 +14,13 @@ AssemblyLoadContext.Default.Resolving += (context, assemblyName) => {
 };
 
 // Initialize CEF on the main thread
-string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "cef_debug.log");
+// string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "cef_debug.log");
 var settings = new CefSettings {
     CachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TheGame", "Cache"),
     WindowlessRenderingEnabled = true,
     MultiThreadedMessageLoop = true, // Recommended for offscreen in some scenarios
     LogSeverity = LogSeverity.Info,
-    LogFile = logPath
+    // LogFile = logPath
 };
 
 // Enable audio output and bypass autoplay restrictions for offscreen

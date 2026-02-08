@@ -1,0 +1,13 @@
+{
+    "appId": "NEONWAVE",
+    "name": "NeonWave",
+    "description": "Modern Neon Media Player",
+    "mainExecutable": "Program.cs",
+    "entryClass": "NeonWave.Program",
+    "entryMethod": "Main",
+    "icon": "icon.png",
+    "singleInstance": true,
+    "references": [
+        "FontStashSharp"
+    ]
+}

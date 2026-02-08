@@ -156,5 +156,12 @@ public static partial class Shell {
         public static string RegisterLiveMedia(TheGame.Core.OS.Process process, NAudio.Wave.ISampleProvider source, bool useFading = false) {
             return AudioManager.Instance.RegisterLiveMedia(process, source, useFading);
         }
+
+        /// <summary>
+        /// Fills the provided buffer with spectrum data for the process (FFT analysis).
+        /// </summary>
+        public static void GetSpectrumData(TheGame.Core.OS.Process process, float[] buffer) {
+            AudioManager.Instance.GetSpectrumData(process, buffer);
+        }
     }
 }

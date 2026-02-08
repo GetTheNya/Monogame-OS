@@ -296,6 +296,15 @@ public class AudioManager {
         }
     }
 
+    public void GetSpectrumData(Process process, float[] buffer) {
+        if (process == null) return;
+        lock (_lock) {
+            if (_processContexts.TryGetValue(process, out var context) && context.SpectrumProvider != null) {
+                context.SpectrumProvider.GetSpectrumData(buffer);
+            }
+        }
+    }
+
     public float GetMasterLevel() {
         return Math.Max(_lowLatencyPeak?.Level ?? 0, _highLatencyPeak?.Level ?? 0);
     }
@@ -430,25 +439,12 @@ public class AudioManager {
     }
 
     private class ProcessContext : IDisposable {
-        public Process Owner { get; }
-        public MixingSampleProvider Mixer { get; }
-        public PeakSampleProvider PeakProvider => _peakProvider;
-        private PeakSampleProvider _peakProvider;
-        private VolumeSampleProvider _masterVolumeProvider;
-        public float Level => _peakProvider?.Level ?? 0f;
-        public float PeakHold => _peakProvider?.PeakHold ?? 0f;
-
-        public float Volume { get; set; } = 1.0f;
-        public bool IsRegistered { get; set; }
-        public int HandleCount => _handles.Count;
-
-        private readonly List<MediaHandle> _handles = new();
-
         public ProcessContext(Process owner) {
             Owner = owner;
             Mixer = new MixingSampleProvider(WaveFormat.CreateIeeeFloatWaveFormat(44100, 2));
             Mixer.ReadFully = true;
-            _peakProvider = new PeakSampleProvider(Mixer);
+            _spectrumProvider = new SpectrumProvider(Mixer);
+            _peakProvider = new PeakSampleProvider(_spectrumProvider);
             _masterVolumeProvider = new VolumeSampleProvider(_peakProvider);
             _masterVolumeProvider.Volume = AudioManager.Instance.MasterVolume;
 
@@ -493,6 +489,22 @@ public class AudioManager {
             }
             _handles.Clear();
         }
+
+        public SpectrumProvider SpectrumProvider => _spectrumProvider;
+        private SpectrumProvider _spectrumProvider;
+        public Process Owner { get; }
+        public MixingSampleProvider Mixer { get; }
+        public PeakSampleProvider PeakProvider => _peakProvider;
+        private PeakSampleProvider _peakProvider;
+        private VolumeSampleProvider _masterVolumeProvider;
+        public float Level => _peakProvider?.Level ?? 0f;
+        public float PeakHold => _peakProvider?.PeakHold ?? 0f;
+
+        public float Volume { get; set; } = 1.0f;
+        public bool IsRegistered { get; set; }
+        public int HandleCount => _handles.Count;
+
+        private readonly List<MediaHandle> _handles = new();
     }
 
     private class MediaHandle : IDisposable {
@@ -956,6 +968,114 @@ public class AudioManager {
                     _holdPeak *= (float)Math.Pow(0.1, elapsedSeconds * 0.8f);
                     _holdPeak -= elapsedSeconds * 0.05f;
                     if (_holdPeak < 0) _holdPeak = 0;
+                }
+            }
+        }
+    }
+
+    public class SpectrumProvider : ISampleProvider {
+        private readonly ISampleProvider _source;
+        private readonly float[] _fftBuffer;
+        private readonly float[] _prevSpectrum;
+        private readonly object _lock = new();
+        private int _fftPos;
+        private const int FftSize = 512;
+
+        public WaveFormat WaveFormat => _source.WaveFormat;
+
+        public SpectrumProvider(ISampleProvider source) {
+            _source = source;
+            _fftBuffer = new float[FftSize];
+            _prevSpectrum = new float[FftSize / 2];
+        }
+
+        public int Read(float[] buffer, int offset, int count) {
+            int read = _source.Read(buffer, offset, count);
+            if (read > 0) {
+                lock (_lock) {
+                    for (int i = 0; i < read; i++) {
+                        _fftBuffer[_fftPos] = buffer[offset + i];
+                        _fftPos++;
+                        if (_fftPos >= FftSize) {
+                            _fftPos = 0;
+                        }
+                    }
+                }
+            }
+            return read;
+        }
+
+        public void GetSpectrumData(float[] buffer) {
+            lock (_lock) {
+                float[] fftInput = new float[FftSize];
+                Array.Copy(_fftBuffer, _fftPos, fftInput, 0, FftSize - _fftPos);
+                Array.Copy(_fftBuffer, 0, fftInput, FftSize - _fftPos, _fftPos);
+
+                for (int i = 0; i < FftSize; i++) {
+                    fftInput[i] *= (float)(0.5 * (1.0 - Math.Cos(2 * Math.PI * i / (FftSize - 1))));
+                }
+
+                float[] real = fftInput;
+                float[] imag = new float[FftSize];
+                RunFFT(real, imag);
+
+                int bins = buffer.Length;
+                float maxFreq = 18000;
+                float minFreq = 40;
+                float rate = WaveFormat.SampleRate;
+
+                for (int i = 0; i < bins; i++) {
+                    float lowFreq = minFreq * (float)Math.Pow(maxFreq / minFreq, (double)i / bins);
+                    float highFreq = minFreq * (float)Math.Pow(maxFreq / minFreq, (double)(i + 1) / bins);
+                    
+                    int lowBin = Math.Max(0, (int)(lowFreq * FftSize / rate));
+                    int highBin = Math.Min(FftSize / 2, (int)(highFreq * FftSize / rate));
+                    if (highBin <= lowBin) highBin = lowBin + 1;
+                    
+                    float maxVal = 0;
+                    for (int j = lowBin; j < highBin && j < FftSize / 2; j++) {
+                        float mag = (float)Math.Sqrt(real[j] * real[j] + imag[j] * imag[j]) / FftSize;
+                        if (mag > maxVal) maxVal = mag;
+                    }
+                    
+                    buffer[i] = maxVal;
+                }
+            }
+        }
+
+        private void RunFFT(float[] real, float[] imag) {
+            int n = real.Length;
+            int j = 0;
+            for (int i = 0; i < n - 1; i++) {
+                if (i < j) {
+                    (real[i], real[j]) = (real[j], real[i]);
+                    (imag[i], imag[j]) = (imag[j], imag[i]);
+                }
+                int m = n / 2;
+                while (m >= 1 && j >= m) {
+                    j -= m;
+                    m /= 2;
+                }
+                j += m;
+            }
+
+            for (int len = 2; len <= n; len <<= 1) {
+                double ang = 2 * Math.PI / len;
+                float wreal = (float)Math.Cos(ang);
+                float wimag = (float)-Math.Sin(ang);
+                for (int i = 0; i < n; i += len) {
+                    float ureal = 1, uimag = 0;
+                    for (int k = 0; k < len / 2; k++) {
+                        float vreal = real[i + k + len / 2] * ureal - imag[i + k + len / 2] * uimag;
+                        float vimag = real[i + k + len / 2] * uimag + imag[i + k + len / 2] * ureal;
+                        real[i + k + len / 2] = real[i + k] - vreal;
+                        imag[i + k + len / 2] = imag[i + k] - vimag;
+                        real[i + k] += vreal;
+                        imag[i + k] += vimag;
+                        float tmp = ureal * wreal - uimag * wimag;
+                        uimag = ureal * wimag + uimag * wreal;
+                        ureal = tmp;
+                    }
                 }
             }
         }
