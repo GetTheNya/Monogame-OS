@@ -332,7 +332,7 @@ public class AudioManager {
     public void SetProcessVolume(Process process, float volume) {
         lock (_lock) {
             if (_processContexts.TryGetValue(process, out var context)) {
-                context.Volume = volume;
+                context.SetVolume(volume);
                 context.UpdateEffectiveVolume(_masterVolume);
 
                 // Save to registry
@@ -358,11 +358,13 @@ public class AudioManager {
                 context = new ProcessContext(process);
 
                 // Load from registry
+                float vol = 1.0f;
                 if (process.AppId == "SYSTEM") {
-                    context.Volume = Registry.GetValue($"{Shell.Registry.Audio}\\SystemVolume", 1.0f);
+                    vol = Registry.GetValue($"{Shell.Registry.Audio}\\SystemVolume", 1.0f);
                 } else {
-                    context.Volume = Registry.GetValue($"{Shell.Registry.AppSettings(process.AppId)}\\Volume", 1.0f);
+                    vol = Registry.GetValue($"{Shell.Registry.AppSettings(process.AppId)}\\Volume", 1.0f);
                 }
+                context.SetVolume(vol);
 
                 _processContexts[process] = context;
                 context.UpdateEffectiveVolume(_masterVolume);
@@ -444,7 +446,8 @@ public class AudioManager {
             Mixer = new MixingSampleProvider(WaveFormat.CreateIeeeFloatWaveFormat(44100, 2));
             Mixer.ReadFully = true;
             _spectrumProvider = new SpectrumProvider(Mixer);
-            _peakProvider = new PeakSampleProvider(_spectrumProvider);
+            _processVolumeProvider = new VolumeSampleProvider(_spectrumProvider);
+            _peakProvider = new PeakSampleProvider(_processVolumeProvider);
             _masterVolumeProvider = new VolumeSampleProvider(_peakProvider);
             _masterVolumeProvider.Volume = AudioManager.Instance.MasterVolume;
 
@@ -457,7 +460,6 @@ public class AudioManager {
 
         public void AddHandle(MediaHandle handle) {
             _handles.Add(handle);
-            handle.UpdateProcessVolume(Volume);
         }
         public void RemoveHandle(MediaHandle handle) {
             _handles.Remove(handle);
@@ -477,9 +479,11 @@ public class AudioManager {
 
         public void UpdateEffectiveVolume(float masterVolume) {
             _masterVolumeProvider.Volume = masterVolume;
-            foreach (var handle in _handles) {
-                handle.UpdateProcessVolume(Volume);
-            }
+        }
+
+        public void SetVolume(float volume) {
+            Volume = volume;
+            _processVolumeProvider.Volume = volume;
         }
 
         public void Dispose() {
@@ -497,10 +501,10 @@ public class AudioManager {
         public PeakSampleProvider PeakProvider => _peakProvider;
         private PeakSampleProvider _peakProvider;
         private VolumeSampleProvider _masterVolumeProvider;
+        private VolumeSampleProvider _processVolumeProvider;
         public float Level => _peakProvider?.Level ?? 0f;
         public float PeakHold => _peakProvider?.PeakHold ?? 0f;
-
-        public float Volume { get; set; } = 1.0f;
+        public float Volume { get; private set; } = 1.0f;
         public bool IsRegistered { get; set; }
         public int HandleCount => _handles.Count;
 
@@ -534,7 +538,6 @@ public class AudioManager {
         public bool IsFading => _fadeProvider?.IsFading ?? false;
 
         private float _userVolume = 1.0f;
-        private float _processEffectiveVolume = 1.0f;
 
         public double Duration { get; private set; }
         public double Position {
@@ -673,16 +676,9 @@ public class AudioManager {
             });
         }
 
-        public void UpdateProcessVolume(float effectiveVolume) {
-            _finalProvider.Lock(() => {
-                _processEffectiveVolume = effectiveVolume;
-                UpdateFinalVolume();
-            });
-        }
-
         private void UpdateFinalVolume() {
             if (Status == MediaStatus.Playing || Status == MediaStatus.Stopping || Status == MediaStatus.Pausing) {
-                _volumeProvider.Volume = _userVolume * _processEffectiveVolume;
+                _volumeProvider.Volume = _userVolume;
             } else {
                 _volumeProvider.Volume = 0;
             }

@@ -72,7 +72,7 @@ public class Program : Application {
             }
         }
 
-        RestoreMainWindow();
+        MainWindow = CreateWindow<MainWindow>();
     }
 
     public void RestoreMainWindow(Rectangle? startBounds = null) {
@@ -131,10 +131,29 @@ public class Program : Application {
 
     private void OnPlaybackFinished() {
         // Safety check: only advance if callback is for current media
-        if (_playbackFinishedMediaId != MediaId) return;
+        if (_playbackFinishedMediaId == null || _playbackFinishedMediaId != MediaId) return;
+        _playbackFinishedMediaId = null; // Mark as handled to prevent watchdog double-trigger
         
         if (IsRepeat) PlayTrack(CurrentIndex);
         else PlayNext();
+    }
+
+    protected override void OnUpdate(GameTime gameTime) {
+        base.OnUpdate(gameTime);
+        
+        // Watchdog: Check if track has naturally ended but callback didn't fire
+        if (MediaId != null && _playbackFinishedMediaId == MediaId) {
+            var status = Shell.Media.GetStatus(MediaId);
+            if (status == MediaStatus.Stopped) {
+                double pos = Shell.Media.GetPosition(MediaId);
+                double dur = Shell.Media.GetDuration(MediaId);
+                
+                // If we are at the end, trigger advancement
+                if (dur > 0 && pos >= dur - 0.5) {
+                    OnPlaybackFinished();
+                }
+            }
+        }
     }
 
     public void PlayNext() {

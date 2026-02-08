@@ -141,7 +141,6 @@ public class MainWindow : Window {
         };
         _volumeSlider.SetValue(Shell.Media.GetProcessVolume(OwnerProcess));
         _volumeSlider.OnValueChanged += (v) => {
-            if (App.MediaId != null) Shell.Media.SetVolume(App.MediaId, v);
             Shell.Media.SetProcessVolume(OwnerProcess, v);
         };
         AddChild(_volumeSlider);
@@ -202,14 +201,9 @@ public class MainWindow : Window {
         }
 
         if (App.MediaId != null) {
-            // Get volume compensation (if volume is low, boost gain proportionally)
-            float processVolume = Shell.Media.GetProcessVolume(OwnerProcess);
-            float volumeCompensation = (processVolume > 0.01f) ? (1.0f / processVolume) : 1.0f;
-            volumeCompensation = MathHelper.Clamp(volumeCompensation, 1.0f, 10.0f);
-
             for (int i = 0; i < _spectrumBuffer.Length; i++) {
-                // Apply dynamic gain + frequency-dependent gain + volume compensation
-                float visualGain = (1.0f + (float)i / _spectrumBuffer.Length * 3.0f) * _dynamicGain * volumeCompensation;
+                // Apply dynamic gain + frequency-dependent gain
+                float visualGain = (1.0f + (float)i / _spectrumBuffer.Length * 3.0f) * _dynamicGain;
                 float val = _spectrumVisual[i] * visualGain;
 
                 float h = val * specH * 3.5f; // Reduced multiplier from 4.5
