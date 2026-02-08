@@ -30,12 +30,18 @@ public static class GameContent {
 
         if (File.Exists(@"Assets/Fonts/JetMono.ttf"))
             FontSystem.AddFont(File.ReadAllBytes(@"Assets/Fonts/JetMono.ttf"));
-
+            
         BoldFontSystem = new FontSystem();
         if (File.Exists(@"Assets/Fonts/JetMono-Bold.ttf"))
             BoldFontSystem.AddFont(File.ReadAllBytes(@"Assets/Fonts/JetMono-Bold.ttf"));
         else if (File.Exists(@"Assets/Fonts/JetMono.ttf"))
             BoldFontSystem.AddFont(File.ReadAllBytes(@"Assets/Fonts/JetMono.ttf")); // Fallback
+
+        if (File.Exists(@"Assets/Fonts/fa-solid-900.ttf")) {
+            FontSystem.AddFont(File.ReadAllBytes(@"Assets/Fonts/fa-solid-900.ttf"));
+            BoldFontSystem.AddFont(File.ReadAllBytes(@"Assets/Fonts/fa-solid-900.ttf"));
+        }
+
 
         Pixel = new Texture2D(G.GraphicsDevice, 1, 1);
         Pixel.SetData(new Color[] { Color.White });

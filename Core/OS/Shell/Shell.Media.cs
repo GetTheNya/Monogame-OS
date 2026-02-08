@@ -149,5 +149,12 @@ public static partial class Shell {
 
         /// <summary> Gets peak hold level for a process. </summary>
         public static float GetProcessPeak(TheGame.Core.OS.Process process) => AudioManager.Instance.GetProcessPeak(process);
+
+        /// <summary>
+        /// Registers a live media stream (e.g. from a browser) as a media handle.
+        /// </summary>
+        public static string RegisterLiveMedia(TheGame.Core.OS.Process process, NAudio.Wave.ISampleProvider source, bool useFading = false) {
+            return AudioManager.Instance.RegisterLiveMedia(process, source, useFading);
+        }
     }
 }

@@ -9,7 +9,14 @@ using TheGame.Core.Input;
 namespace TheGame.Core.UI.Controls;
 
 public class TabPage {
-    public string Title { get; set; }
+    private string _title;
+    public string Title { 
+        get => _title;
+        set {
+            _title = value;
+            if (TabButton != null) TabButton.Text = value;
+        }
+    }
     public Texture2D Icon { get; set; }
     public ScrollPanel Content { get; set; }
     public Button TabButton { get; internal set; }
@@ -33,7 +40,7 @@ public class TabControl : UIElement {
     public TabPage SelectedPage => (_selectedIndex >= 0 && _selectedIndex < _pages.Count) ? _pages[_selectedIndex] : null;
     
     public event Action<int> OnTabChanged;
-    public event Action<int> OnTabClosed; // New event
+    public event Action<int, TabPage> OnTabClosed; // Passes both for compatibility and utility
 
     public TabControl(Vector2 position, Vector2 size) : base(position, size) {
         _tabBar = new ScrollPanel(Vector2.Zero, new Vector2(size.X, TabBarHeight)) {
@@ -111,7 +118,7 @@ public class TabControl : UIElement {
         
         UpdateTabButtons();
         UpdateTabs();
-        OnTabClosed?.Invoke(index);
+        OnTabClosed?.Invoke(index, page); // Pass both
     }
 
     private void UpdateTabButtons() {
@@ -142,6 +149,8 @@ public class TabControl : UIElement {
 
         UpdateTabButtons();
     }
+
+    public IReadOnlyList<TabPage> Pages => _pages;
 
     public int SelectedIndex {
         get => _selectedIndex;

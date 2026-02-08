@@ -129,7 +129,7 @@ public class MainWindow : Window {
 
         // Tab Control
         _tabControl = new TabControl(new Vector2(_sidebarWidth, 25), new Vector2(ClientSize.X - _sidebarWidth, ClientSize.Y - _terminalHeight - 25));
-        _tabControl.OnTabClosed += (index) => {
+        _tabControl.OnTabClosed += (index, page) => {
             if (index >= 0 && index < _pages.Count) {
                 _pages[index].Tab.Dispose();
                 _pages.RemoveAt(index);
@@ -207,7 +207,7 @@ public class MainWindow : Window {
         }
 
         _tabControl.Position = new Vector2(effSidebarWidth, top);
-        _tabControl.Size = new Vector2(ClientSize.X - effSidebarWidth, ClientSize.Y - effTerminalHeight - top - 22);
+        _tabControl.Size = new Vector2(ClientSize.X - effSidebarWidth, ClientSize.Y - effTerminalHeight - top);
         _tabControl.RefreshLayout();
 
         _statusBar.Position = new Vector2(0, ClientSize.Y - 22);

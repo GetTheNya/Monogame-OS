@@ -211,6 +211,23 @@ public class AudioManager {
         }
     }
 
+    public string RegisterLiveMedia(Process owner, ISampleProvider source, bool useFading = false) {
+        if (owner == null) owner = _systemProcess;
+        if (owner != _systemProcess && !IsRegistered(owner)) {
+            DebugLogger.Log($"Process {owner.AppId} attempted to register live media without registering as player first.");
+            return null;
+        }
+
+        lock (_lock) {
+            var context = GetOrCreateProcessContext(owner);
+            var handle = new MediaHandle(owner, source, useFading);
+            _handles[handle.Id] = handle;
+            context.AddHandle(handle);
+            context.PlayHandle(handle); // Auto-play live streams
+            return handle.Id;
+        }
+    }
+
     public void Play(string id) {
         if (_handles.TryGetValue(id, out var handle)) {
             if (handle.Status == MediaStatus.Playing) return;
@@ -545,6 +562,16 @@ public class AudioManager {
             _cachedSource = new CachedSampleProvider(cached);
             _source = _cachedSource;
             Duration = _cachedSource.DurationCorrect.TotalSeconds;
+            InitializeChain(useFading);
+        }
+
+        public MediaHandle(Process owner, ISampleProvider source, bool useFading) {
+            Owner = owner;
+            VirtualPath = "LIVE_STREAM";
+            AutoUnload = false;
+            _useFading = useFading;
+            _source = source;
+            Duration = double.PositiveInfinity;
             InitializeChain(useFading);
         }
 
@@ -930,6 +957,51 @@ public class AudioManager {
                     _holdPeak -= elapsedSeconds * 0.05f;
                     if (_holdPeak < 0) _holdPeak = 0;
                 }
+            }
+        }
+    }
+
+    public class BufferedSampleProvider : ISampleProvider {
+        private readonly WaveFormat _format;
+        private readonly List<float> _buffer = new();
+        private readonly object _lock = new();
+        private const int MaxBufferSamples = 44100 * 2; // 1 second buffer safely
+
+        public WaveFormat WaveFormat => _format;
+        public int BufferedCount { get { lock (_lock) return _buffer.Count; } }
+
+        public BufferedSampleProvider(WaveFormat format) {
+            _format = format;
+        }
+
+        public void AddSamples(float[] data, int count) {
+            lock (_lock) {
+                if (_buffer.Count + count > MaxBufferSamples) {
+                    // Buffer overflow - trim oldest
+                    int toRemove = (_buffer.Count + count) - MaxBufferSamples;
+                    _buffer.RemoveRange(0, Math.Min(toRemove, _buffer.Count));
+                }
+                for (int i = 0; i < count; i++) _buffer.Add(data[i]);
+            }
+        }
+
+        public int Read(float[] buffer, int offset, int count) {
+            lock (_lock) {
+                int available = _buffer.Count;
+                int toCopy = Math.Min(available, count);
+                if (toCopy <= 0) {
+                    Array.Clear(buffer, offset, count);
+                    return count; // Return silence instead of zero to keep mixer alive
+                }
+
+                _buffer.CopyTo(0, buffer, offset, toCopy);
+                _buffer.RemoveRange(0, toCopy);
+
+                if (toCopy < count) {
+                    Array.Clear(buffer, offset + toCopy, count - toCopy);
+                }
+
+                return count;
             }
         }
     }

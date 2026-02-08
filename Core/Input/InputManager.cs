@@ -210,6 +210,11 @@ public static class InputManager {
         return _currentKeyboard.IsKeyDown(key) && _previousKeyboard.IsKeyUp(key);
     }
 
+    public static bool IsKeyJustReleased(Keys key) {
+        if (IsKeyboardConsumed) return false;
+        return _currentKeyboard.IsKeyUp(key) && _previousKeyboard.IsKeyDown(key);
+    }
+
     /// <summary>
     /// Manually sets a key state, bypassing the hardware state. 
     /// Used by WindowsKeyHook to report keys that are blocked from the OS.

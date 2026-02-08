@@ -64,12 +64,18 @@ public class NetworkManager {
 
     private NetworkManager() {
         var handler = new HttpClientHandler {
-            AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
+            AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate,
+            UseCookies = false, // Let the browser manage its own cookies
+            AllowAutoRedirect = false // Let the browser handle redirects
         };
         _httpClient = new HttpClient(handler) {
-            Timeout = TimeSpan.FromSeconds(30)
+            Timeout = TimeSpan.FromSeconds(30),
+            DefaultRequestVersion = System.Net.HttpVersion.Version20,
+            DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower
         };
-        _httpClient.DefaultRequestHeaders.Add("User-Agent", "HentOS/1.0 (Compatible; Mozilla/5.0)");
+        
+        // Only set a generic UA as a fallback; BrowserControl should provide its own
+        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36");
     }
 
     public void RegisterProcess(Process process) {
@@ -145,7 +151,15 @@ public class NetworkManager {
             }
 
             if (headers != null) {
+                // Clear default UA if the browser provided one
+                if (headers.ContainsKey("User-Agent")) {
+                    request.Headers.UserAgent.Clear();
+                }
+
                 foreach (var header in headers) {
+                    // Skip restricted headers that HttpClient manages or that we want to avoid duplicating
+                    if (header.Key.Equals("Host", StringComparison.OrdinalIgnoreCase)) continue;
+                    
                     if (!request.Headers.TryAddWithoutValidation(header.Key, header.Value)) {
                         request.Content?.Headers.TryAddWithoutValidation(header.Key, header.Value);
                     }
@@ -160,8 +174,25 @@ public class NetworkManager {
             var result = new NetworkResponse {
                 StatusCode = (int)response.StatusCode,
                 BodyBytes = responseBytes,
-                Headers = response.Headers.ToDictionary(h => h.Key, h => string.Join(", ", h.Value))
+                Headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             };
+
+            // Copy headers from response
+            foreach (var h in response.Headers) {
+                result.Headers[h.Key] = string.Join(", ", h.Value);
+            }
+
+            if (response.Content != null) {
+                foreach (var h in response.Content.Headers) {
+                    // CRITICAL: If HttpClient decompressed the body, it might have removed the 'Content-Encoding' 
+                    // or changed 'Content-Length'. We should let the browser know the body is now raw bytes.
+                    if (h.Key.Equals("Content-Encoding", StringComparison.OrdinalIgnoreCase)) continue;
+                    
+                    if (!result.Headers.ContainsKey(h.Key)) {
+                        result.Headers[h.Key] = string.Join(", ", h.Value);
+                    }
+                }
+            }
 
             return result;
         } catch (OperationCanceledException) {
