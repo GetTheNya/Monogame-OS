@@ -80,7 +80,8 @@ public class Game1 : Game {
         // All apps are now loaded dynamically from System32 via AppLoader
 
         _sceneManager = new SceneManager(Content, GraphicsDevice);
-        _sceneManager.LoadScene(new TheGame.Scenes.DesktopScene());
+        _sceneManager.LoadScene(new TheGame.Scenes.LoadingScene());
+        // DesktopScene is loaded via transition in LoadingScene
 
         _fps = new Fps();
         

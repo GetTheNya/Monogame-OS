@@ -9,6 +9,7 @@ namespace TheGame.Core.OS;
 public static partial class Shell {
     public static class UI {
         private static Dictionary<string, Func<string[], Action<TheGame.Core.OS.Process>, WindowBase>> _appRegistry = new();
+        private static readonly object _appRegistryLock = new();
         private static Dictionary<string, FileHandler> _handlers = new();
 
         internal static void InternalInitialize() {
@@ -17,7 +18,9 @@ public static partial class Shell {
         }
 
         public static void RegisterApp(string appId, Func<string[], Action<TheGame.Core.OS.Process>, WindowBase> factory) {
-            _appRegistry[appId.ToUpper()] = factory;
+            lock (_appRegistryLock) {
+                _appRegistry[appId.ToUpper()] = factory;
+            }
         }
 
         public static void SetTooltip(UIElement element, string text, float delay = 0.5f) {
@@ -32,7 +35,12 @@ public static partial class Shell {
             DebugLogger.Log($"CreateAppWindow: Looking for {appId} (uppercase: {upperAppId})");
 
             // ... (rest of logic)
-            if (_appRegistry.TryGetValue(upperAppId, out var factory)) {
+            Func<string[], Action<TheGame.Core.OS.Process>, WindowBase> factory = null;
+            lock (_appRegistryLock) {
+                _appRegistry.TryGetValue(upperAppId, out factory);
+            }
+
+            if (factory != null) {
                 DebugLogger.Log($"  Found factory for {upperAppId}");
                 return factory(args ?? new string[0], setup);
             }

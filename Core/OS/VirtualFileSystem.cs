@@ -63,10 +63,6 @@ public class VirtualFileSystem {
         
         string windows = Path.Combine(cPath, "Windows", "System32");
         if (!Directory.Exists(windows)) Directory.CreateDirectory(windows);
-
-        // Load all apps from System32 using AppLoader
-        AppLoader.Instance.LoadAppsFromDirectory("C:\\Windows\\System32\\");
-		AppLoader.Instance.LoadAppsFromDirectory("C:\\Windows\\System32\\TerminalApps\\");
     }
 
     public void WatchDirectory(string path, Action<FileSystemEventArgs> onEvent) {

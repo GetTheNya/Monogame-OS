@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.Xna.Framework.Graphics;
 using TheGame.Core.UI;
@@ -18,6 +19,10 @@ public class AppLoader {
 
     private Dictionary<string, Assembly> _compiledApps = new Dictionary<string, Assembly>();
     private Dictionary<string, string> _appPaths = new Dictionary<string, string>();
+
+    public bool IsLoadingComplete { get; private set; } = false;
+    public int AppsLoadedCount { get; private set; } = 0;
+    public int TotalAppsToLoad { get; private set; } = 0;
 
     private AppLoader() { }
 
@@ -277,6 +282,36 @@ public class AppLoader {
             string virtualPath = VirtualFileSystem.Instance.ToVirtualPath(appFolder);
             LoadApp(virtualPath);
         }
+    }
+
+    /// <summary>
+    /// Loads all apps from a directory asynchronously.
+    /// </summary>
+    public async Task LoadAppsFromDirectoryAsync(string[] directoryPaths) {
+        IsLoadingComplete = false;
+        AppsLoadedCount = 0;
+        TotalAppsToLoad = 0;
+
+        var allFolders = new List<string>();
+        foreach (var path in directoryPaths) {
+            string hostPath = VirtualFileSystem.Instance.ToHostPath(path);
+            if (Directory.Exists(hostPath)) {
+                allFolders.AddRange(Directory.GetDirectories(hostPath, "*.sapp"));
+            }
+        }
+
+        TotalAppsToLoad = allFolders.Count;
+
+        // Run in a background thread to avoid stuttering during JIT
+        await Task.Run(() => {
+            foreach (var appFolder in allFolders) {
+                string virtualPath = VirtualFileSystem.Instance.ToVirtualPath(appFolder);
+                LoadApp(virtualPath);
+                AppsLoadedCount++;
+            }
+        });
+
+        IsLoadingComplete = true;
     }
 
     public void UpdateAppPath(string oldPath, string newPath) {
