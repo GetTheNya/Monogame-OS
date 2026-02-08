@@ -293,6 +293,11 @@ public class DesignerTab : NachosTab {
     }
 
     private string GenerateConstructionCode(UIElement el, string parentVar, List<string> fields, Dictionary<UIElement, string> elementToVar) {
+        if (el is ErrorElement) {
+            // Skip code-behind for broken components to prevent build errors
+            return "";
+        }
+
         var sb = new System.Text.StringBuilder();
         string typeName = el.GetType().Name;
         string varName = !string.IsNullOrEmpty(el.Name) ? el.Name : $"_el{elementToVar.Count}";

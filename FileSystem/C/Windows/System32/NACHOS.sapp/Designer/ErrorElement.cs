@@ -22,12 +22,5 @@ public class ErrorElement : Panel {
             FontSize = 14
         };
         AddChild(label);
-        
-        // Try to match size if possible
-        if (data != null && data.Properties.TryGetValue("Size", out var sizeObj)) {
-            if (sizeObj is Vector2 s) {
-                Size = s;
-            }
-        }
     }
 }

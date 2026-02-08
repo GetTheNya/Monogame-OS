@@ -41,7 +41,8 @@ public class CodeIntelligenceManager {
 
     public void Update() {
         while (_pendingUiActions.Count > 0) {
-            _pendingUiActions.Dequeue().Invoke();
+            var action = _pendingUiActions.Dequeue();
+            action?.Invoke();
         }
     }
 

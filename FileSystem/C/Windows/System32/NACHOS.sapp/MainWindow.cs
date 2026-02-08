@@ -27,6 +27,9 @@ public class MainWindow : Window {
     private ClosablePanel _sidebarPanel;
     private ClosablePanel _terminalPanel;
     private MenuBar _menuBar;
+    private Panel _statusBar;
+    private Label _statusLabel;
+    private Label _cursorLabel;
     private string _projectPath;
     private FileSystemWatcher _manifestWatcher;
     
@@ -158,6 +161,23 @@ public class MainWindow : Window {
         _terminalPanel.OnClose = ToggleTerminal;
         AddChild(_terminalPanel);
 
+        // Status Bar
+        _statusBar = new Panel(Vector2.Zero, Vector2.Zero);
+        _statusBar.BackgroundColor = new Color(30, 30, 30);
+        
+        _statusLabel = new Label(new Vector2(10, 3), "READY") {
+            TextColor = Color.White,
+            FontSize = 15
+        };
+        _statusBar.AddChild(_statusLabel);
+
+        _cursorLabel = new Label(Vector2.Zero, "") {
+            TextColor = Color.White,
+            FontSize = 15
+        };
+        _statusBar.AddChild(_cursorLabel);
+        AddChild(_statusBar);
+
         // Welcome Message
         _terminal.Execute("echo \"Welcome to NACHOS!\"");
 
@@ -187,8 +207,12 @@ public class MainWindow : Window {
         }
 
         _tabControl.Position = new Vector2(effSidebarWidth, top);
-        _tabControl.Size = new Vector2(ClientSize.X - effSidebarWidth, ClientSize.Y - effTerminalHeight - top);
+        _tabControl.Size = new Vector2(ClientSize.X - effSidebarWidth, ClientSize.Y - effTerminalHeight - top - 22);
         _tabControl.RefreshLayout();
+
+        _statusBar.Position = new Vector2(0, ClientSize.Y - 22);
+        _statusBar.Size = new Vector2(ClientSize.X, 22);
+        _cursorLabel.Position = new Vector2(ClientSize.X - _cursorLabel.Size.X - 10, 3);
 
         foreach (var p in _pages) {
             p.Tab.Size = _tabControl.ContentArea.Size;
@@ -414,6 +438,25 @@ public class MainWindow : Window {
                 DebugLogger.Log("Error executing pending action: " + ex.Message);
             }
         }
+
+        // Update Status Bar
+        if (_terminal != null && _statusLabel != null) {
+            bool running = _terminal.Backend.IsProcessRunning;
+            _statusLabel.Text = running ? "RUNNING" : "READY";
+            _statusBar.BackgroundColor = running ? new Color(0, 120, 212) : new Color(30, 30, 30);
+        }
+
+        if (_cursorLabel != null) {
+            var editor = GetActiveEditor();
+            if (editor != null) {
+                _cursorLabel.Text = $"Ln {editor.CursorLine + 1}, Col {editor.CursorCol + 1}";
+                _cursorLabel.IsVisible = true;
+                _cursorLabel.Position = new Vector2(ClientSize.X - _cursorLabel.Size.X - 10, 3);
+            } else {
+                _cursorLabel.IsVisible = false;
+            }
+        }
+
         base.Update(gameTime);
     }
 

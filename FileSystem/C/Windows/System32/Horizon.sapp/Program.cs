@@ -13,7 +13,7 @@ public class Program : Application {
 
     protected override void OnLoad(string[] args) {
         MainWindow = CreateWindow<BrowserWindow>();
-        MainWindow.Title = "Web Browser";
+        MainWindow.Title = "Horizon";
         MainWindow.Size = new Vector2(1000, 700);
     }
 }
@@ -31,7 +31,7 @@ public class BrowserWindow : Window {
     private LoadingSpinner _loadingSpinner;
 
     public BrowserWindow() {
-        Title = "Web Browser";
+        Title = "Horizon";
         Size = new Vector2(1000, 700);
     }
 

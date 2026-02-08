@@ -101,15 +101,25 @@ public static class UISerializer {
             element = Activator.CreateInstance(type) as UIElement;
         } catch { }
 
-        if (element == null) return new ErrorElement(data);
+        if (element == null) element = new ErrorElement(data);
 
         element.Name = data.Name;
 
-        foreach (var kvp in data.Properties) {
-            var prop = type.GetProperty(kvp.Key);
-            if (prop != null) {
-                var val = ConvertFromSerializable(kvp.Value, prop.PropertyType);
-                prop.SetValue(element, val);
+        // Restore basic properties even for ErrorElement
+        if (data.Properties.TryGetValue("Position", out var pos)) {
+            try { element.Position = (Vector2)ConvertFromSerializable(pos, typeof(Vector2)); } catch { }
+        }
+        if (data.Properties.TryGetValue("Size", out var size)) {
+            try { element.Size = (Vector2)ConvertFromSerializable(size, typeof(Vector2)); } catch { }
+        }
+
+        if (!(element is ErrorElement)) {
+            foreach (var kvp in data.Properties) {
+                var prop = type.GetProperty(kvp.Key);
+                if (prop != null) {
+                    var val = ConvertFromSerializable(kvp.Value, prop.PropertyType);
+                    prop.SetValue(element, val);
+                }
             }
         }
 

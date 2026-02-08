@@ -1,6 +1,6 @@
 {
-    "appId": "BROWSER",
-    "name": "Web Browser",
+    "appId": "Horizon",
+    "name": "Horizon Web Browser",
     "entryClass": "BrowserApp.Program",
     "entryMethod": "Main",
     "singleInstance": true,
