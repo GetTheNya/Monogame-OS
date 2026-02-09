@@ -10,11 +10,11 @@ using TheGame;
 namespace NACHOS;
 
 public static class FileIconHelper {
-    private static Dictionary<string, Texture2D> _icons = new();
+    private static readonly Dictionary<string, Texture2D> _icons = new();
 
     public static void Initialize(GraphicsDevice gd) {
-        string iconDir = "C:\\Windows\\System32\\NACHOS.sapp\\Content\\Icons";
-        string hostIconDir = VirtualFileSystem.Instance.ToHostPath(iconDir);
+        string appPath = AppLoader.Instance.GetAppDirectory("NACHOS");
+        string iconDir = Path.Combine(appPath, "Content/Icons");
 
         if (VirtualFileSystem.Instance.IsDirectory(iconDir)) {
             LoadIcon(gd, iconDir, "audio.png", ".wav", ".mp3", ".ogg");

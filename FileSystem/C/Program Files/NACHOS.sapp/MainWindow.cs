@@ -392,7 +392,8 @@ public class MainWindow : Window {
             VirtualFileSystem.Instance.WriteAllText(Path.Combine(path, "layout.json"), layoutJson);
 
             // 2. [Name].cs (User Code)
-            string userTemplatePath = "C:/Windows/System32/NACHOS.sapp/Templates/Designer/UserCode.txt";
+            string appPath = AppLoader.Instance.GetAppDirectory(OwnerProcess.AppId);
+            string userTemplatePath = Path.Combine(appPath, "Templates/Designer/UserCode.txt");
             string codeBehind = "// Template not found";
             if (VirtualFileSystem.Instance.Exists(userTemplatePath)) {
                 codeBehind = VirtualFileSystem.Instance.ReadAllText(userTemplatePath)
@@ -402,7 +403,7 @@ public class MainWindow : Window {
             VirtualFileSystem.Instance.WriteAllText(Path.Combine(path, layoutName + ".cs"), codeBehind);
 
             // 3. [Name].Designer.cs (Generated Code)
-            string designerTemplatePath = "C:/Windows/System32/NACHOS.sapp/Templates/Designer/DesignerCode.txt";
+            string designerTemplatePath = Path.Combine(appPath, "Templates/Designer/DesignerCode.txt");
             string designerCode = "// Template not found";
             if (VirtualFileSystem.Instance.Exists(designerTemplatePath)) {
                 designerCode = VirtualFileSystem.Instance.ReadAllText(designerTemplatePath)

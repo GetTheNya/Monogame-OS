@@ -8,8 +8,13 @@ namespace NACHOS;
 
 public static class SnippetManager {
     private static Dictionary<string, SnippetItem> _snippets = new();
-    private static string _snippetsDir = @"C:\Windows\System32\NACHOS.sapp\Templates\Snippets";
+    private static string _snippetsDir;
     private static DateTime _lastLoadTime = DateTime.MinValue;
+
+    static SnippetManager() {
+        string appPath = AppLoader.Instance.GetAppDirectory("NACHOS");
+        _snippetsDir = Path.Combine(appPath, "Templates/Snippets");
+    }
 
     public static List<SnippetItem> GetSnippets() {
         EnsureLoaded();

@@ -37,8 +37,10 @@ public class LoadingScene : Core.Scenes.Scene {
     private async void StartLoading() {
         _startedLoading = true;
         await AppLoader.Instance.LoadAppsFromDirectoryAsync(new[] {
-            "C:\\Windows\\System32\\",
-            "C:\\Windows\\System32\\TerminalApps\\"
+            "C:\\Windows\\System32\\SystemApps",
+            "C:\\Windows\\System32\\TerminalApps\\",
+            "C:\\Program Files\\",
+            "C:\\Program Files\\TerminalApps\\",
         });
     }
 

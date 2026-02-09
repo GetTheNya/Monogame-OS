@@ -102,7 +102,8 @@ public class Sidebar : ScrollPanel, IDropTarget {
         createSubItems.Add(new MenuItem { Type = MenuItemType.Separator });
              
         // Templates
-        string templatePath = "C:\\Windows\\System32\\NACHOS.sapp\\Templates";
+        string appPath = AppLoader.Instance.GetAppDirectory(GetOwnerWindow()?.OwnerProcess.AppId);
+        string templatePath = Path.Combine(appPath, "Templates");
         if (VirtualFileSystem.Instance.IsDirectory(templatePath)) {
             var templates = VirtualFileSystem.Instance.GetFiles(templatePath).Where(f => f.EndsWith(".txt"));
             foreach (var t in templates) {

@@ -276,7 +276,8 @@ public class DesignerTab : NachosTab {
             }
 
             // 3. Load Template
-            string templatePath = "C:/Windows/System32/NACHOS.sapp/Templates/Designer/DesignerCode.txt";
+            string appPath = AppLoader.Instance.GetAppDirectory(GetOwnerWindow()?.OwnerProcess.AppId);
+            string templatePath = Path.Combine(appPath, "Templates/Designer/DesignerCode.txt");
             string designerCode = "// Template not found";
             if (VirtualFileSystem.Instance.Exists(templatePath)) {
                 designerCode = VirtualFileSystem.Instance.ReadAllText(templatePath)
