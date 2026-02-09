@@ -1,0 +1,9 @@
+{
+    "appId": "HENTHUB_STORE",
+    "name": "HentHub Store",
+    "entryClass": "HentHub.Program",
+    "entryMethod": "Main",
+    "references": [
+        "System.Text.Json"
+    ]
+}

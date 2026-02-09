@@ -91,6 +91,11 @@ public class Game1 : Game {
     }
 
     protected override void Update(GameTime gameTime) {
+        if (!IsActive) {
+            base.Update(gameTime);
+            return;
+        }
+
         InputManager.Update(gameTime);
         CustomCursor.Instance.BeginFrame();
 
