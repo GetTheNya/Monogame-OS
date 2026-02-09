@@ -2,29 +2,43 @@ using System;
 using System.Linq;
 using Microsoft.Xna.Framework;
 using TheGame;
+using TheGame.Core;
 using TheGame.Core.UI;
 using TheGame.Core.UI.Controls;
 using TheGame.Core.OS;
 
 namespace NotepadApp;
 
-public class Program {
-    static Program() {
-        // Register file type associations - AppId is auto-detected
-        foreach (var extension in NotepadWindow.SupportedExtensions) {
-            Shell.File.RegisterFileTypeHandler(extension);
-        }
+public class Program : Application {
+    public static readonly string[] SupportedExtensions = new[] { ".txt", ".log", ".json", ".cs" };
+
+    // Modern entry point
+    public static Application Main(string[] args) {
+        return new Program();
     }
 
-    public static Window CreateWindow(string[] args) {
+    protected override void OnLoad(string[] args) {
+        // Register file type associations
+        foreach (var ext in SupportedExtensions) {
+            var extNoDot = ext.Substring(1);
+            Shell.File.RegisterFileTypeHandler(Process, ext, $"FileIcons/{extNoDot}.png", $"Notepad {extNoDot}");
+        }
+
+        // Create and show main window
         string filePath = args != null && args.Length > 0 ? args[0] : null;
-        return new NotepadWindow(new Vector2(100, 100), new Vector2(700, 500), filePath);
+        MainWindow = new NotepadWindow(new Vector2(100, 100), new Vector2(700, 500), filePath);
+    }
+
+    protected override void OnInstanceReopened(string[] args, Rectangle? startBounds = null) {
+        base.OnInstanceReopened(args, startBounds);
+        
+        if (args != null && args.Length > 0 && MainWindow is NotepadWindow notepad) {
+            notepad.LoadFile(args[0]);
+        }
     }
 }
 
 public class NotepadWindow : Window {
-    public static readonly string[] SupportedExtensions = new[] { ".txt", ".log", ".json", ".cs" };
-
     private TextArea _textArea;
     private MenuBar _menuBar;
     private string _currentFilePath = null;
@@ -33,7 +47,6 @@ public class NotepadWindow : Window {
 
     public NotepadWindow(Vector2 pos, Vector2 size, string filePath = null) : base(pos, size) {
         Title = "Untitled - Notepad";
-        AppId = "NOTEPAD"; // Required for automatic persistence
         _filePath = filePath;
 
         OnResize += () => LayoutUI();
@@ -45,8 +58,13 @@ public class NotepadWindow : Window {
         SetupUI();
 
         // Load file if provided
-        if (!string.IsNullOrEmpty(_filePath) && VirtualFileSystem.Instance.Exists(_filePath)) {
-            LoadFile(_filePath);
+        if (!string.IsNullOrEmpty(_filePath)) {
+            if (VirtualFileSystem.Instance.Exists(_filePath)) {
+                DebugLogger.Log($"NotepadWindow.OnLoad: Loading file '{_filePath}'");
+                LoadFile(_filePath);
+            } else {
+                DebugLogger.Log($"NotepadWindow.OnLoad: File not found: '{_filePath}'");
+            }
         }
     }
 
@@ -144,7 +162,7 @@ public class NotepadWindow : Window {
             (selectedPath) => {
                 LoadFile(selectedPath);
             },
-            SupportedExtensions
+            Program.SupportedExtensions
         );
         Shell.UI.OpenWindow(picker, owner: this.OwnerProcess);
     }
@@ -171,7 +189,7 @@ public class NotepadWindow : Window {
                 if (string.IsNullOrEmpty(selectedPath)) return;
                 DoSave(selectedPath);
             },
-            SupportedExtensions
+            Program.SupportedExtensions
         );
         Shell.UI.OpenWindow(picker, owner: this.OwnerProcess);
     }

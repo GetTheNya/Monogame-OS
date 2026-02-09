@@ -7,7 +7,8 @@
   "description": "Simple text editor",
   "entryPoint": "Program.cs",
   "entryClass": "NotepadApp.Program",
-  "entryMethod": "CreateWindow",
+  "entryMethod": "Main",
+  "singleInstance": true,
   "permissions": [],
   "dependencies": []
 }

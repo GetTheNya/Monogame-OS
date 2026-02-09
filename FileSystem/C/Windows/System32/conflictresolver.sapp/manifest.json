@@ -1,0 +1,14 @@
+{
+  "appId": "CONFLICTRESOLVER",
+  "name": "Conflict Resolver",
+  "icon": "icon.png",
+  "version": "1.0.0",
+  "author": "TheGame Team",
+  "description": "System utility for resolving file association conflicts",
+  "entryPoint": "Program.cs",
+  "entryClass": "ConflictResolver.Program",
+  "entryMethod": "Main",
+  "singleInstance": true,
+  "permissions": [],
+  "dependencies": []
+}

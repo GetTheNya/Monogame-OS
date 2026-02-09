@@ -16,17 +16,16 @@ using TheGame;
 namespace ImageViewerApp;
 
 public class Program : Application {
-    public static string[] Extensions = { ".png", ".jpg", ".jpeg", ".bmp", ".gif" };
-    static Program() {
-        // Register file type associations
-        foreach (var ext in Extensions) {
-            Shell.File.RegisterFileTypeHandler(ext);
-        }
-    }
+    public static string[] SupportedExtensions = { ".png", ".jpg", ".jpeg", ".bmp", ".gif" };
 
     public static Application Main(string[] args) => new Program();
 
     protected override void OnLoad(string[] args) {
+        foreach (var ext in SupportedExtensions) {
+            var extNoDot = ext.Substring(1);
+            Shell.File.RegisterFileTypeHandler(Process, ext, $"FileIcons/{extNoDot}.png", $"Image Viewer {extNoDot}");
+        }
+
         string filePath = args != null && args.Length > 0 ? args[0] : null;
         var window = CreateWindow<ImageViewerWindow>();
         if (!string.IsNullOrEmpty(filePath)) {
@@ -180,7 +179,7 @@ public class ImageViewerWindow : Window {
             "",
             FilePickerMode.Open,
             LoadFile,
-            Program.Extensions
+            Program.SupportedExtensions
         );
         Shell.UI.OpenWindow(picker, owner: this.OwnerProcess);
     }
@@ -219,7 +218,7 @@ public class ImageViewerWindow : Window {
             if (string.IsNullOrEmpty(dir)) dir = "C:\\";
             
             var extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            extensions.UnionWith(Program.Extensions);
+            extensions.UnionWith(Program.SupportedExtensions);
             _folderImages = VirtualFileSystem.Instance.GetFiles(dir)
                 .Where(f => extensions.Contains(Path.GetExtension(f)))
                 .OrderBy(f => f)

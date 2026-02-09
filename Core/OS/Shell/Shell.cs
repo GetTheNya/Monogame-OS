@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TheGame.Core.UI;
@@ -136,13 +137,47 @@ public static partial class Shell {
         UI.OpenWindow(mb);
     }
 
+    private static Dictionary<string, Texture2D> _resolvedFileIcons = new();
+
     public static Texture2D GetIcon(string virtualPath) {
         if (string.IsNullOrEmpty(virtualPath)) return GameContent.FileIcon;
         if (virtualPath.ToUpper().Contains("$RECYCLE.BIN")) return VirtualFileSystem.Instance.IsRecycleBinEmpty() ? GameContent.TrashEmptyIcon : GameContent.TrashFullIcon;
         if (VirtualFileSystem.Instance.IsDirectory(virtualPath) && !virtualPath.ToLower().EndsWith(".sapp")) return GameContent.FolderIcon;
+        
         string ext = System.IO.Path.GetExtension(virtualPath).ToLower();
-        var handler = UI.GetFileHandler(ext);
-        return handler?.GetIcon(virtualPath) ?? GameContent.FileIcon;
+        
+        // 1. Check new file association system for custom icons
+        string appId = File.GetDefaultFileTypeHandler(ext);
+        if (!string.IsNullOrEmpty(appId)) {
+            string cacheKey = $"{appId}:{ext}";
+            if (_resolvedFileIcons.TryGetValue(cacheKey, out var cached)) return cached;
+
+            var data = File.GetFileTypeHandlers(ext); // This triggers self-healing
+            var handlers = TheGame.Core.OS.Registry.GetValue<FileAssociationData>($"{Shell.Registry.FileAssociations}\\{ext}", null);
+            
+            if (handlers != null && handlers.Handlers.TryGetValue(appId, out var handler) && !string.IsNullOrEmpty(handler.Icon)) {
+                string appDir = AppLoader.Instance.GetAppDirectory(appId);
+                if (appDir != null) {
+                    string iconPath = VirtualFileSystem.Instance.ResolvePath(appDir, handler.Icon);
+                    if (VirtualFileSystem.Instance.Exists(iconPath)) {
+                        try {
+                            string hostPath = VirtualFileSystem.Instance.ToHostPath(iconPath);
+                            var tex = ImageLoader.Load(G.GraphicsDevice, hostPath);
+                            if (tex != null) {
+                                _resolvedFileIcons[cacheKey] = tex;
+                                return tex;
+                            }
+                        } catch { }
+                    }
+                }
+            }
+        }
+
+        // 2. Fallback to hardcoded handlers
+        var builtInHandler = UI.GetFileHandler(ext);
+        if (builtInHandler != null) return builtInHandler.GetIcon(virtualPath);
+
+        return GameContent.FileIcon;
     }
 
     public static void Initialize(Panel windowLayer, TheGame.Core.UI.ContextMenu contextMenu) {
@@ -241,30 +276,43 @@ public static partial class Shell {
         // Handle system file types (.sapp, .slnk) through built-in handlers first
         // These should never go through file associations
         if (ext == ".sapp" || ext == ".slnk") {
-            var handler = UI.GetFileHandler(ext);
-            if (handler != null) {
-                handler.Execute(virtualPath, args, startBounds);
+            var builtIn = UI.GetFileHandler(ext);
+            if (builtIn != null) {
+                builtIn.Execute(virtualPath, args, startBounds);
                 return;
             }
         }
 
-        // Check registry for user file type associations
-        string appId = File.GetFileTypeHandler(ext);
-        DebugLogger.Log($"File.GetFileTypeHandler({ext}) returned: {appId ?? "null"}");
+        // 1. Try default handler from association system
+        string appId = File.GetDefaultFileTypeHandler(ext);
         if (!string.IsNullOrEmpty(appId)) {
+            DebugLogger.Log($"Shell.Execute: Using default handler {appId} for {ext}");
             ProcessManager.Instance.StartProcess(appId, new[] { virtualPath }, null, startBounds);
             return;
         }
 
-        // Fall back to other hardcoded handlers
+        // 2. If no default, check if we have multiple handlers
+        var handlers = File.GetFileTypeHandlers(ext);
+        if (handlers.Count > 1) {
+            DebugLogger.Log($"Shell.Execute: Multiple handlers found for {ext}. Invoking Conflict Resolver.");
+            ProcessManager.Instance.StartProcess("CONFLICTRESOLVER", new[] { virtualPath }, null, startBounds);
+            return;
+        } else if (handlers.Count == 1) {
+            // Only one handler, use it directly (and it becomes the default implicitly by the system, or we can just launch it)
+            DebugLogger.Log($"Shell.Execute: Only one handler found ({handlers[0]}). Using it.");
+            ProcessManager.Instance.StartProcess(handlers[0], new[] { virtualPath }, null, startBounds);
+            return;
+        }
+
+        // 3. Fall back to hardcoded built-in handlers
         var handler2 = UI.GetFileHandler(ext);
         if (handler2 != null) {
             handler2.Execute(virtualPath, startBounds);
             return;
         }
 
+        // 4. Fall back to Explorer if it's a directory
         if (VirtualFileSystem.Instance.IsDirectory(virtualPath)) {
-            // Use ProcessManager to launch Explorer for single-instance behavior
             string[] argArray = new[] { args ?? virtualPath };
             var process = ProcessManager.Instance.StartProcess("EXPLORER", argArray, null, startBounds);
             if (process?.MainWindow != null) {
@@ -272,14 +320,12 @@ public static partial class Shell {
                     dynamic dwin = process.MainWindow;
                     dwin.NavigateTo(args ?? virtualPath);
                 }
-                catch {
-                }
+                catch { }
             }
-
             return;
         }
 
-        DebugLogger.Log($"No handler for {ext}. Path: {virtualPath}");
+        DebugLogger.Log($"No handler found for {ext}. Path: {virtualPath}");
     }
 
     // --- Nested API Classes ---

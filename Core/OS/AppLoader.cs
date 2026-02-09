@@ -127,24 +127,43 @@ public class AppLoader {
             }
 
             // Find the entry method
-            MethodInfo entryMethod = entryType.GetMethod(manifest.EntryMethod, BindingFlags.Public | BindingFlags.Static);
+            // Robust search: prefer static method with string[] parameter
+            MethodInfo entryMethod = entryType.GetMethod(manifest.EntryMethod, 
+                BindingFlags.Public | BindingFlags.Static, 
+                null, 
+                new[] { typeof(string[]) }, 
+                null);
+
+            bool hasArgsParam = true;
             if (entryMethod == null) {
-                DebugLogger.Log($"AppLoader: Could not find static entry method {manifest.EntryMethod} in {manifest.EntryClass}");
+                // Fallback: static method with no parameters
+                entryMethod = entryType.GetMethod(manifest.EntryMethod, 
+                    BindingFlags.Public | BindingFlags.Static, 
+                    null, 
+                    Type.EmptyTypes, 
+                    null);
+                hasArgsParam = false;
+            }
+
+            if (entryMethod == null) {
+                DebugLogger.Log($"AppLoader: Could not find suitable static entry method {manifest.EntryMethod} in {manifest.EntryClass}");
                 return null;
             }
 
-            // Try to invoke with args first (new signature), fall back to no args (old signature)
+            // Invoke based on detected parameters
             object result = null;
             try {
-                result = entryMethod.Invoke(null, new object[] { args });
-            } catch (TargetParameterCountException) {
-                // Old apps don't accept args, try calling with no parameters
-                try {
+                if (hasArgsParam) {
+                    result = entryMethod.Invoke(null, new object[] { args ?? Array.Empty<string>() });
+                } else {
                     result = entryMethod.Invoke(null, null);
-                } catch (Exception ex) {
-                    DebugLogger.Log($"AppLoader: Failed to invoke {manifest.EntryMethod}: {ex.Message}");
-                    return null;
                 }
+            } catch (Exception ex) {
+                DebugLogger.Log($"AppLoader: Failed to invoke {manifest.EntryMethod}: {ex.Message}");
+                if (ex.InnerException != null) {
+                    DebugLogger.Log($"  Inner Error: {ex.InnerException.Message}");
+                }
+                return null;
             }
 
             // Try to load custom icon early
@@ -331,6 +350,24 @@ public class AppLoader {
                 DebugLogger.Log($"App path updated (recursive): {appId} -> {updatedPath}");
             }
         }
+    }
+
+    public string GetAppName(string appId) {
+        if (string.IsNullOrEmpty(appId)) return null;
+        string appDir = GetAppDirectory(appId);
+        if (appDir == null) return appId;
+
+        try {
+            string hostPath = VirtualFileSystem.Instance.ToHostPath(appDir);
+            string manifestPath = Path.Combine(hostPath, "manifest.json");
+            if (File.Exists(manifestPath)) {
+                string json = File.ReadAllText(manifestPath);
+                var manifest = AppManifest.FromJson(json);
+                return manifest.Name ?? appId;
+            }
+        } catch { }
+
+        return appId;
     }
 
     public string GetAppDirectory(string appId) {

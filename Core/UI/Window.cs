@@ -667,9 +667,11 @@ public class Window : WindowBase {
         float controlButtonsWidth = 85;
         if (Icon != null && Size.X > controlButtonsWidth + 40) {
             float iconSize = 18f;
-            float iconY = absPos.Y + (TitleBarHeight - iconSize) / 2f;
-            float scale = iconSize / Icon.Width;
-            batch.DrawTexture(Icon, new Vector2(absPos.X + 10, iconY), Color.White * AbsoluteOpacity, scale);
+            float scale = Math.Min(iconSize / Icon.Width, iconSize / Icon.Height);
+            float drawW = Icon.Width * scale;
+            float drawH = Icon.Height * scale;
+            Vector2 iconPos = new Vector2(absPos.X + 10 + (iconSize - drawW) / 2, absPos.Y + (TitleBarHeight - drawH) / 2);
+            batch.DrawTexture(Icon, iconPos, Color.White * AbsoluteOpacity, scale);
             titleXOffset += iconSize + 8;
         }
         if (GameContent.FontSystem != null) {

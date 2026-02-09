@@ -15,14 +15,6 @@ public class Program : Application {
         ".mp3", ".wav", ".ogg" 
     };
 
-    static Program() {
-        // Register file type associations
-        foreach (var ext in SupportedExtensions) {
-            Shell.File.RegisterFileTypeHandler(ext);
-        }
-    }
-
-
     public static Application Main(string[] args) => new Program();
 
     // Shared Media State
@@ -37,6 +29,12 @@ public class Program : Application {
     private string _playbackFinishedMediaId;
 
     protected override void OnLoad(string[] args) {
+        // Register file type associations
+        foreach (var ext in SupportedExtensions) {
+            var extNoDot = ext.Substring(1);
+            Shell.File.RegisterFileTypeHandler(Process, ext, $"FileIcons/{extNoDot}.png", $"NeonWave {extNoDot} player");
+        }
+
         ExitOnMainWindowClose = false;
         Shell.Media.RegisterAsPlayer(Process);
 

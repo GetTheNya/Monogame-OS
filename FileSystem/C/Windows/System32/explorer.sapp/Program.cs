@@ -856,8 +856,12 @@ public class FileListItem : UIElement {
 
         if (_cachedIcon != null) {
             float iconSize = 20f;
-            float scale = iconSize / _cachedIcon.Width;
-            batch.DrawTexture(_cachedIcon, AbsolutePosition + new Vector2(4, 4), Color.White * AbsoluteOpacity, scale);
+            float scale = Math.Min(iconSize / _cachedIcon.Width, iconSize / _cachedIcon.Height);
+            float drawW = _cachedIcon.Width * scale;
+            float drawH = _cachedIcon.Height * scale;
+            Vector2 iconPos = AbsolutePosition + new Vector2(4 + (iconSize - drawW) / 2, 4 + (iconSize - drawH) / 2);
+
+            batch.DrawTexture(_cachedIcon, iconPos, Color.White * AbsoluteOpacity, scale);
         }
 
         var font = GameContent.FontSystem.GetFont(16);

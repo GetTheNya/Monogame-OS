@@ -1,7 +1,9 @@
 using System;
 using System.Linq;
 using System.Collections.Generic;
+using System.IO;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using TheGame.Core.UI;
 
 namespace TheGame.Core.OS;
@@ -11,6 +13,7 @@ public static partial class Shell {
         private static Dictionary<string, Func<string[], Action<TheGame.Core.OS.Process>, WindowBase>> _appRegistry = new();
         private static readonly object _appRegistryLock = new();
         private static Dictionary<string, FileHandler> _handlers = new();
+        private static Dictionary<string, Texture2D> _appIconCache = new();
 
         internal static void InternalInitialize() {
             RegisterHandler(new ShortcutHandler());
@@ -153,6 +156,54 @@ public static partial class Shell {
         public static void SaveFile(string title, string defaultPath, string defaultName, Action<string> onFilePicked) {
             if (WindowLayer == null) return;
             OpenWindow(new FilePickerWindow(title, defaultPath, defaultName, FilePickerMode.Save, onFilePicked));
+        }
+
+        public static Texture2D GetAppIcon(string appId) {
+            if (string.IsNullOrEmpty(appId)) return null;
+            appId = appId.ToUpper();
+
+            // 1. Try cache
+            if (_appIconCache.TryGetValue(appId, out var cachedIcon)) return cachedIcon;
+
+            // 2. Try running process
+            var process = ProcessManager.Instance.GetProcessByAppId(appId);
+            if (process?.Icon != null) {
+                _appIconCache[appId] = process.Icon;
+                return process.Icon;
+            }
+
+            // 3. Load from manifest
+            string appDir = AppLoader.Instance.GetAppDirectory(appId);
+            if (appDir != null) {
+                var icon = LoadAppIconFromManifest(appDir);
+                if (icon != null) {
+                    _appIconCache[appId] = icon;
+                    return icon;
+                }
+            }
+
+            return null;
+        }
+
+        private static Texture2D LoadAppIconFromManifest(string appVirtualPath) {
+            try {
+                string hostPath = VirtualFileSystem.Instance.ToHostPath(appVirtualPath);
+                string manifestPath = Path.Combine(hostPath, "manifest.json");
+                if (!System.IO.File.Exists(manifestPath)) return null;
+
+                string json = System.IO.File.ReadAllText(manifestPath);
+                var manifest = AppManifest.FromJson(json);
+                string iconName = manifest.Icon ?? "icon.png";
+
+                string iconVirtualPath = VirtualFileSystem.Instance.ResolvePath(appVirtualPath, iconName);
+                if (VirtualFileSystem.Instance.Exists(iconVirtualPath)) {
+                    string iconHostPath = VirtualFileSystem.Instance.ToHostPath(iconVirtualPath);
+                    return ImageLoader.Load(G.GraphicsDevice, iconHostPath);
+                }
+            } catch (Exception ex) {
+                DebugLogger.Log($"Shell.UI.LoadAppIconFromManifest: Error loading icon for {appVirtualPath}: {ex.Message}");
+            }
+            return null;
         }
     }
 }

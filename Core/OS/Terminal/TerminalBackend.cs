@@ -209,6 +209,20 @@ public class TerminalBackend : ITerminal {
         string command = parts[0];
         string[] args = parts.Skip(1).ToArray();
 
+        // Resolve relative paths in arguments
+        for (int i = 0; i < args.Length; i++) {
+            string arg = args[i];
+            if (string.IsNullOrEmpty(arg)) continue;
+
+            // Basic check: if it contains a dot but isn't an absolute path, try to resolve it
+            if (!arg.Contains(":\\") && (arg.Contains(".") || arg.Contains("\\") || arg.Contains("/"))) {
+                string resolved = VirtualFileSystem.Instance.ResolvePath(this.WorkingDirectory, arg);
+                if (VirtualFileSystem.Instance.Exists(resolved)) {
+                    args[i] = resolved;
+                }
+            }
+        }
+
         string appId = ResolveAppId(command);
 
         if (appId != null) {

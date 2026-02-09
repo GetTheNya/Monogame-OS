@@ -1,3 +1,4 @@
+using System;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TheGame.Graphics;
@@ -20,11 +21,11 @@ public class Icon : UIElement {
         var destRect = new Rectangle((int)absPos.X, (int)absPos.Y, (int)Size.X, (int)Size.Y);
 
         if (Texture != null) {
-            float scaleX = Size.X / Texture.Width;
-            float scaleY = Size.Y / Texture.Height;
-            // DrawTexture usually takes a single scale. If non-uniform scaling is needed, we'd need a different ShapeBatch method.
-            // But usually UI icons are square/uniform.
-            batch.DrawTexture(Texture, absPos, Tint * AbsoluteOpacity, scaleX);
+            float scale = Math.Min(Size.X / Texture.Width, Size.Y / Texture.Height);
+            float drawW = Texture.Width * scale;
+            float drawH = Texture.Height * scale;
+            Vector2 drawPos = absPos + new Vector2((Size.X - drawW) / 2, (Size.Y - drawH) / 2);
+            batch.DrawTexture(Texture, drawPos, Tint * AbsoluteOpacity, scale);
         } else {
             // Placeholder
             batch.FillRectangle(absPos, Size, Color.Magenta); // Missing texture color

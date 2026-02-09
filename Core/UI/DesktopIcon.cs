@@ -378,13 +378,16 @@ public class DesktopIcon : UIElement {
 
         // Draw Icon
         float iconSize = 48f;
-        Vector2 iconPos = absPos + new Vector2((Size.X - iconSize) / 2, 5);
         
         if (Icon != null) {
-            float scale = iconSize / Icon.Width;
+            float scale = Math.Min(iconSize / Icon.Width, iconSize / Icon.Height);
+            float drawW = Icon.Width * scale;
+            float drawH = Icon.Height * scale;
+            Vector2 iconPos = absPos + new Vector2((Size.X - drawW) / 2, 5 + (iconSize - drawH) / 2);
             batch.DrawTexture(Icon, iconPos, Color.White * AbsoluteOpacity, scale);
         } else {
             // Placeholder icon
+            Vector2 iconPos = absPos + new Vector2((Size.X - iconSize) / 2, 5);
             batch.FillRectangle(iconPos, new Vector2(iconSize, iconSize), new Color(200, 200, 200, 150));
             batch.BorderRectangle(iconPos, new Vector2(iconSize, iconSize), Color.White, thickness: 1f);
         }

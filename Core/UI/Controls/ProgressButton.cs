@@ -1,3 +1,4 @@
+using System;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using TheGame.Graphics;
@@ -50,8 +51,10 @@ public class ProgressButton : Button {
         // Draw Icon if present
         if (Icon != null) {
             iconSize = size.Y - (pT + pB);
-            var iconPos = new Vector2(drawPos.X + pL, drawPos.Y + pT);
-            float scale = iconSize / Icon.Width;
+            float scale = Math.Min(iconSize / Icon.Width, iconSize / Icon.Height);
+            float drawW = Icon.Width * scale;
+            float drawH = Icon.Height * scale;
+            var iconPos = new Vector2(drawPos.X + pL + (iconSize - drawW) / 2, drawPos.Y + pT + (iconSize - drawH) / 2);
             batch.DrawTexture(Icon, iconPos, Color.White * AbsoluteOpacity, scale);
         }
 
