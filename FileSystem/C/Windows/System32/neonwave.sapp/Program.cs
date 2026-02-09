@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using TheGame.Core;
 using TheGame.Core.OS;
 using TheGame.Core.UI;
 using TheGame.Core.Input;
@@ -27,6 +28,7 @@ public class Program : Application {
 
     private TrayIcon _trayIcon;
     private string _playbackFinishedMediaId;
+    private float _silenceWatchdogTimer = 0.0f;
 
     protected override void OnLoad(string[] args) {
         // Register file type associations
@@ -138,19 +140,34 @@ public class Program : Application {
 
     protected override void OnUpdate(GameTime gameTime) {
         base.OnUpdate(gameTime);
+        float elapsed = (float)gameTime.ElapsedGameTime.TotalSeconds;
         
         // Watchdog: Check if track has naturally ended but callback didn't fire
         if (MediaId != null && _playbackFinishedMediaId == MediaId) {
             var status = Shell.Media.GetStatus(MediaId);
+            double pos = Shell.Media.GetPosition(MediaId);
+            double dur = Shell.Media.GetDuration(MediaId);
+
             if (status == MediaStatus.Stopped) {
-                double pos = Shell.Media.GetPosition(MediaId);
-                double dur = Shell.Media.GetDuration(MediaId);
-                
                 // If we are at the end, trigger advancement
                 if (dur > 0 && pos >= dur - 0.5) {
                     OnPlaybackFinished();
                 }
+            } else if (status == MediaStatus.Playing && dur > 0) {
+                // Silence Watchdog: If we are near the end and it's quiet (-90dB), start timer
+                float level = Shell.Media.GetProcessLevel(Process);
+                if (pos > dur - 2.0 && level < 0.0001f) {
+                    _silenceWatchdogTimer += elapsed;
+                    if (_silenceWatchdogTimer > 1.5f) { // 1.5 seconds of silence near end = stuck
+                        DebugLogger.Log($"NeonWave: Silence watchdog triggered at {pos}/{dur}. Forcing next track.");
+                        OnPlaybackFinished();
+                    }
+                } else {
+                    _silenceWatchdogTimer = 0;
+                }
             }
+        } else {
+            _silenceWatchdogTimer = 0;
         }
     }
 

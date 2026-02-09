@@ -386,7 +386,15 @@ public class AudioManager {
             foreach (var handle in _handles.Values.ToList()) {
                 handle.Update(elapsedSeconds);
 
-                if (handle.Status == MediaStatus.Playing && handle.Position >= handle.Duration - 0.01) {
+                bool isFinished = false;
+                if (handle.Status == MediaStatus.Playing) {
+                    // Robust check: either position reached duration (with safe margin) OR signal exhausted
+                    if (handle.Position >= handle.Duration - 0.05 || handle.IsEndOfStream) {
+                        isFinished = true;
+                    }
+                }
+
+                if (isFinished) {
                     handle.OnFinished();
                     if (handle.AutoUnload) {
                         toUnload.Add(handle.Id);
@@ -536,6 +544,7 @@ public class AudioManager {
         public ISampleProvider FinalProvider => _finalProvider;
         public PeakSampleProvider PeakProvider => _peakProvider;
         public bool IsFading => _fadeProvider?.IsFading ?? false;
+        public bool IsEndOfStream => _peakProvider?.HasReachedEndOfStream ?? false;
 
         private float _userVolume = 1.0f;
 
@@ -912,11 +921,13 @@ public class AudioManager {
         private float _currentPeak = 0;
         private float _holdPeak = 0;
         private float _holdTime = 0;
+        private bool _hasReachedEndOfStream = false;
         private readonly object _lock = new object();
 
         public WaveFormat WaveFormat => _source.WaveFormat;
         public float Level => _currentPeak;
         public float PeakHold => _holdPeak;
+        public bool HasReachedEndOfStream => _hasReachedEndOfStream;
 
         public PeakSampleProvider(ISampleProvider source) {
             _source = source;
@@ -924,8 +935,13 @@ public class AudioManager {
 
         public int Read(float[] buffer, int offset, int count) {
             int read = _source.Read(buffer, offset, count);
-            if (read <= 0) return read;
+            if (read <= 0) {
+                _hasReachedEndOfStream = true;
+                return read;
+            }
 
+            _hasReachedEndOfStream = (read < count); // Partial read often means EOF in some providers
+            
             float max = 0;
             for (int i = 0; i < read; i++) {
                 float abs = Math.Abs(buffer[offset + i]);
