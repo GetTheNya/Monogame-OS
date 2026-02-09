@@ -121,14 +121,14 @@ public class NetworkManager {
             if (Firewall.BlacklistedDomains.Contains(host)) return false;
             if (Firewall.WhitelistedDomains.Count > 0 && !Firewall.WhitelistedDomains.Contains(host)) return false;
 
-            if (!Firewall.AllowLocalhost) {
-                if (host == "localhost" || host == "127.0.0.1" || host == "::1") return false;
-            }
+            // if (!Firewall.AllowLocalhost) {
+            //     if (host == "localhost" || host == "127.0.0.1" || host == "::1") return false;
+            // }
 
-            // Simple private network check (can be expanded)
-            if (!Firewall.AllowPrivateNetwork) {
-                if (host.StartsWith("192.168.") || host.StartsWith("10.") || host.StartsWith("172.16.")) return false;
-            }
+            // // Simple private network check (can be expanded)
+            // if (!Firewall.AllowPrivateNetwork) {
+            //     if (host.StartsWith("192.168.") || host.StartsWith("10.") || host.StartsWith("172.16.")) return false;
+            // }
 
             return true;
         } catch {
@@ -137,6 +137,25 @@ public class NetworkManager {
     }
 
     public async Task<NetworkResponse> SendRequestAsync(Process process, string url, HttpMethod method, byte[] body = null, Dictionary<string, string> headers = null, CancellationToken cancellationToken = default) {
+        var response = await SendRequestStreamAsync(process, url, method, body, headers, cancellationToken);
+        if (response.StatusCode == 0 || response.StatusCode >= 400 || response.Stream == null) return response;
+
+        try {
+            using var ms = new MemoryStream();
+            await response.Stream.CopyToAsync(ms, cancellationToken);
+            response.BodyBytes = ms.ToArray();
+            response.Stream.Dispose();
+            response.Stream = null;
+            
+            TrackBandwidth(process?.ProcessId, response.BodyBytes.Length, 0);
+            return response;
+        } catch (Exception ex) {
+            response.Stream?.Dispose();
+            return new NetworkResponse { StatusCode = 0, ErrorMessage = ex.Message };
+        }
+    }
+
+    public async Task<NetworkResponse> SendRequestStreamAsync(Process process, string url, HttpMethod method, byte[] body = null, Dictionary<string, string> headers = null, CancellationToken cancellationToken = default) {
         if (!IsUrlAllowed(url)) {
             return new NetworkResponse { StatusCode = 403, ErrorMessage = IsEnabled ? "Firewall blocked" : "Network disabled" };
         }
@@ -151,46 +170,34 @@ public class NetworkManager {
             }
 
             if (headers != null) {
-                // Clear default UA if the browser provided one
-                if (headers.ContainsKey("User-Agent")) {
-                    request.Headers.UserAgent.Clear();
-                }
+                if (headers.ContainsKey("User-Agent")) request.Headers.UserAgent.Clear();
 
                 foreach (var header in headers) {
-                    // Skip restricted headers that HttpClient manages or that we want to avoid duplicating
                     if (header.Key.Equals("Host", StringComparison.OrdinalIgnoreCase)) continue;
-                    
                     if (!request.Headers.TryAddWithoutValidation(header.Key, header.Value)) {
                         request.Content?.Headers.TryAddWithoutValidation(header.Key, header.Value);
                     }
                 }
             }
 
-            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, linkedToken);
-            var responseBytes = await response.Content.ReadAsByteArrayAsync(linkedToken);
+            // Use ResponseHeadersRead to avoid buffering the whole body
+            var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linkedToken);
             
-            TrackBandwidth(process?.ProcessId, responseBytes.Length, 0);
+            var rawStream = await response.Content.ReadAsStreamAsync(linkedToken);
+            // Wrap in a tracking stream to count bandwidth as it's read by the browser/app
+            var trackingStream = new NetworkTrackingStream(rawStream, (bytes) => TrackBandwidth(process?.ProcessId, bytes, 0));
 
             var result = new NetworkResponse {
                 StatusCode = (int)response.StatusCode,
-                BodyBytes = responseBytes,
-                Headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                Headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                Stream = trackingStream
             };
 
-            // Copy headers from response
-            foreach (var h in response.Headers) {
-                result.Headers[h.Key] = string.Join(", ", h.Value);
-            }
-
+            foreach (var h in response.Headers) result.Headers[h.Key] = string.Join(", ", h.Value);
             if (response.Content != null) {
                 foreach (var h in response.Content.Headers) {
-                    // CRITICAL: If HttpClient decompressed the body, it might have removed the 'Content-Encoding' 
-                    // or changed 'Content-Length'. We should let the browser know the body is now raw bytes.
                     if (h.Key.Equals("Content-Encoding", StringComparison.OrdinalIgnoreCase)) continue;
-                    
-                    if (!result.Headers.ContainsKey(h.Key)) {
-                        result.Headers[h.Key] = string.Join(", ", h.Value);
-                    }
+                    if (!result.Headers.ContainsKey(h.Key)) result.Headers[h.Key] = string.Join(", ", h.Value);
                 }
             }
 
@@ -199,6 +206,48 @@ public class NetworkManager {
             return new NetworkResponse { StatusCode = 0, ErrorMessage = "Request cancelled" };
         } catch (Exception ex) {
             return new NetworkResponse { StatusCode = 0, ErrorMessage = ex.Message };
+        }
+    }
+
+    /// <summary>
+    /// Helper stream that calls a callback whenever bytes are read.
+    /// Used for real-time bandwidth tracking without buffering.
+    /// </summary>
+    private class NetworkTrackingStream : Stream {
+        private readonly Stream _innerStream;
+        private readonly Action<int> _onRead;
+
+        public NetworkTrackingStream(Stream innerStream, Action<int> onRead) {
+            _innerStream = innerStream;
+            _onRead = onRead;
+        }
+
+        public override bool CanRead => _innerStream.CanRead;
+        public override bool CanSeek => _innerStream.CanSeek;
+        public override bool CanWrite => _innerStream.CanWrite;
+        public override long Length => _innerStream.Length;
+        public override long Position { get => _innerStream.Position; set => _innerStream.Position = value; }
+
+        public override void Flush() => _innerStream.Flush();
+        public override long Seek(long offset, SeekOrigin origin) => _innerStream.Seek(offset, origin);
+        public override void SetLength(long value) => _innerStream.SetLength(value);
+        public override void Write(byte[] buffer, int offset, int count) => _innerStream.Write(buffer, offset, count);
+
+        public override int Read(byte[] buffer, int offset, int count) {
+            int read = _innerStream.Read(buffer, offset, count);
+            if (read > 0) _onRead(read);
+            return read;
+        }
+
+        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) {
+            int read = await _innerStream.ReadAsync(buffer, offset, count, cancellationToken);
+            if (read > 0) _onRead(read);
+            return read;
+        }
+
+        protected override void Dispose(bool disposing) {
+            if (disposing) _innerStream.Dispose();
+            base.Dispose(disposing);
         }
     }
 

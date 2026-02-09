@@ -1,11 +1,12 @@
 {
     "appId": "Horizon",
     "name": "Horizon Web Browser",
-    "entryClass": "BrowserApp.Program",
+    "entryClass": "HorizonBrowser.Program",
     "entryMethod": "Main",
     "singleInstance": true,
     "references": [
         "FontStashSharp",
+        "CefSharp",
         "CefSharp.Core",
         "CefSharp.OffScreen",
         "System.Private.Uri"

@@ -7,13 +7,14 @@ using TheGame.Core.Input;
 using TheGame.Core.OS;
 using TheGame.Graphics;
 using TheGame.Core.UI.Controls;
+using TheGame.Core.OS.DragDrop;
 
 namespace TheGame.Core.UI;
 
 /// <summary>
 /// A desktop icon component that displays an image, text, and handles double-click actions.
 /// </summary>
-public class DesktopIcon : UIElement {
+public class DesktopIcon : UIElement, IDraggable {
     public Texture2D Icon { get; set; }
     private string _label;
     public string Label { 
@@ -455,4 +456,13 @@ public class DesktopIcon : UIElement {
         // For icons, we typically WANT to stop here.
         context.Handled = true;
     }
+
+    // === IDraggable ===
+    public object GetDragData() => VirtualPath;
+    public Texture2D GetDragIcon() => Icon;
+    public string GetDragLabel() => Label;
+    public UIElement GetCustomDragVisual() => null;
+    public void OnDragStart(Vector2 grabOffset) { }
+    public void OnDragEnd() { }
+    public void OnDragCancel() { }
 }

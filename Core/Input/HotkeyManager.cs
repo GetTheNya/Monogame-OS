@@ -46,6 +46,11 @@ public static class HotkeyManager {
         _localHotkeys.RemoveAll(e => e.Owner == process);
     }
 
+    public static void UnregisterLocal(Process process, Hotkey hotkey) {
+        if (process == null) return;
+        _localHotkeys.RemoveAll(e => e.Owner == process && e.Hotkey == hotkey);
+    }
+
     public static void Update(GameTime gameTime, KeyboardState currentState) {
         var pressedKeys = currentState.GetPressedKeys();
         

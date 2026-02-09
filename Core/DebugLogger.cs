@@ -9,7 +9,7 @@ public static class DebugLogger {
     private static string _path = "debug_log.txt";
     private static List<string> _buffer = new List<string>();
     private static float _timeSinceFlush = 0f;
-    private const float FLUSH_INTERVAL = 2f; // Flush every 2 seconds
+    private const float FLUSH_INTERVAL = 0.5f; // Flush every 2 seconds
     private const int MAX_BUFFER_SIZE = 100; // Or flush if buffer gets too large
     private static bool _isWriting = false;
 

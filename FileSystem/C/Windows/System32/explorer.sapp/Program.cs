@@ -9,6 +9,7 @@ using TheGame.Core;
 using TheGame.Core.UI;
 using TheGame.Core.UI.Controls;
 using TheGame.Core.OS;
+using TheGame.Core.OS.DragDrop;
 using TheGame.Core.Input;
 using TheGame.Graphics;
 using MessageBox = TheGame.Core.UI.MessageBox;
@@ -218,10 +219,18 @@ public class FileExplorerWindow : Window {
     public void HandleDropData(object dropped, string targetPath) {
         if (targetPath == "COMPUTER") return;
         
+        // Extract actual data if it's IDraggable (like from Browser)
+        object dragData = dropped;
+        if (dropped is IDraggable draggable) {
+            dragData = draggable.GetDragData();
+        }
+
+        if (dragData == null) return;
+        
         List<string> paths = new();
-        if (dropped is string p) paths.Add(p);
-        else if (dropped is List<string> ps) paths.AddRange(ps);
-        else if (dropped is DesktopIcon d && !string.IsNullOrEmpty(d.VirtualPath)) paths.Add(d.VirtualPath);
+        if (dragData is string p) paths.Add(p);
+        else if (dragData is List<string> ps) paths.AddRange(ps);
+        else if (dragData is DesktopIcon d && !string.IsNullOrEmpty(d.VirtualPath)) paths.Add(d.VirtualPath);
 
         bool changed = false;
         foreach (var src in paths) {

@@ -56,7 +56,8 @@ public class AppCompiler {
             { "System.Memory", MetadataReference.CreateFromFile(Assembly.Load("System.Memory").Location)},
             { "System.Text.RegularExpressions", MetadataReference.CreateFromFile(Assembly.Load("System.Text.RegularExpressions").Location)},
             { "System.IO.FileSystem.Watcher", MetadataReference.CreateFromFile(typeof(FileSystemWatcher).Assembly.Location) },
-            { "System.Private.Uri", MetadataReference.CreateFromFile(Assembly.Load("System.Private.Uri").Location)}
+            { "System.Private.Uri", MetadataReference.CreateFromFile(Assembly.Load("System.Private.Uri").Location)},
+            { "CefSharp", MetadataReference.CreateFromFile(Assembly.Load("CefSharp").Location)},
         };
     }
 

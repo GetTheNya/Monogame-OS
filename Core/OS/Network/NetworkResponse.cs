@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 
 namespace TheGame.Core.OS;
@@ -21,6 +22,9 @@ public class NetworkResponse {
     
     /// <summary> The response body decoded as a UTF-8 string. </summary>
     public string BodyText => BodyBytes != null ? Encoding.UTF8.GetString(BodyBytes) : null;
+
+    /// <summary> A stream to read the response body. If provided, BodyBytes should be null. </summary>
+    public Stream Stream { get; set; }
     
     /// <summary> An error message if the request failed before receiving a response. </summary>
     public string ErrorMessage { get; set; }

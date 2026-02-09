@@ -9,6 +9,7 @@ using TheGame.Core;
 using TheGame.Graphics;
 using TheGame.Core.OS;
 using TheGame.Core.UI.Controls;
+using TheGame.Core.OS.DragDrop;
 using System.Linq;
 using Keys = Microsoft.Xna.Framework.Input.Keys;
 
@@ -907,9 +908,17 @@ public class DesktopScene : Core.Scenes.Scene {
         }
 
         private void HandleDesktopDrop(object item) {
+            // Handle IDraggable (like items from Browser)
+            object dragData = item;
+            if (item is IDraggable draggable) {
+                dragData = draggable.GetDragData();
+            }
+
+            if (dragData == null) return;
+
             if (TrashIcon != null && TrashIcon.Bounds.Contains(InputManager.MousePosition)) {
-                if (item is string path) VirtualFileSystem.Instance.Recycle(path);
-                else if (item is List<string> list) foreach (var p in list) VirtualFileSystem.Instance.Recycle(p);
+                if (dragData is string path) VirtualFileSystem.Instance.Recycle(path);
+                else if (dragData is List<string> list) foreach (var p in list) VirtualFileSystem.Instance.Recycle(p);
                 RefreshAction?.Invoke();
                 Shell.RefreshExplorers();
                 Shell.Drag.DraggedItem = null;
@@ -920,9 +929,10 @@ public class DesktopScene : Core.Scenes.Scene {
             Vector2 dropPos = InputManager.MousePosition.ToVector2() - DragDropManager.Instance.DragGrabOffset;
             
             // If dragging a DesktopIcon from inside this scene, handled by its own OnDropAction
+            // We check 'item' here because we don't want to handle internal DesktopIcon drags twice
             if (item is DesktopIcon) { return; }
             
-            if (item is string itemPath) {
+            if (dragData is string itemPath) {
                 string newPath = MoveToDesktop(itemPath, desktopPath);
                 if (!string.IsNullOrEmpty(newPath)) {
                     Vector2 finalPos = dropPos;
@@ -936,7 +946,7 @@ public class DesktopScene : Core.Scenes.Scene {
                     _scene.SaveIconPosition(newPath, finalPos);
                 }
                 changed = true;
-            } else if (item is List<string> list) {
+            } else if (dragData is List<string> list) {
                 var occupiedCells = _scene._alignToGrid ? _scene.GetOccupiedCells() : null;
                 foreach (string path in list) {
                     string newPath = MoveToDesktop(path, desktopPath);

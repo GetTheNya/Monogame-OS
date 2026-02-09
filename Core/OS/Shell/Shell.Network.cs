@@ -26,6 +26,11 @@ public static partial class Shell {
             return NetworkManager.Instance.SendRequestAsync(process, url, method, body, headers, cancellationToken);
         }
 
+        /// <summary> Makes a full-featured HTTP request with a streaming response. </summary>
+        public static Task<NetworkResponse> SendRequestStreamAsync(OS.Process process, string url, HttpMethod method, byte[] body = null, Dictionary<string, string> headers = null, CancellationToken cancellationToken = default) {
+            return NetworkManager.Instance.SendRequestStreamAsync(process, url, method, body, headers, cancellationToken);
+        }
+
         /// <summary> HTTP GET shorthand. </summary>
         public static Task<NetworkResponse> GetAsync(OS.Process process, string url, CancellationToken cancellationToken = default) {
             return SendRequestAsync(process, url, HttpMethod.Get, null, null, cancellationToken);

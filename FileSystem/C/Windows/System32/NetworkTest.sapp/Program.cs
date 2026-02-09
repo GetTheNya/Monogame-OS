@@ -41,7 +41,7 @@ public class NetworkTestWindow : Window {
         
         _urlInput = new TextInput(new Vector2(10, 35), new Vector2(380, 30)) {
             Placeholder = "http://example.com",
-            Value = "http://google.com"
+            Value = "https://www.google.com"
         };
         AddChild(_urlInput);
 

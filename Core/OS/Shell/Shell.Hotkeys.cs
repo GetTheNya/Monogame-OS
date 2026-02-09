@@ -25,5 +25,9 @@ public static partial class Shell {
         public static void UnregisterLocal(TheGame.Core.OS.Process process) {
             HotkeyManager.UnregisterLocal(process);
         }
+
+        public static void UnregisterLocal(TheGame.Core.OS.Process process, Keys key, HotkeyModifiers mods) {
+            HotkeyManager.UnregisterLocal(process, new Hotkey(key, mods));
+        }
     }
 }

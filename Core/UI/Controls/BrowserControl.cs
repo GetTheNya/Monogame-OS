@@ -14,17 +14,21 @@ using TheGame.Graphics;
 using System.Linq;
 using CefSharp.Callback;
 using CefSharp.Structs;
+using TheGame.Core.OS.DragDrop;
+using CefSharp.Enums;
 
 namespace TheGame.Core.UI.Controls;
 
 /// <summary>
 /// A UI control that embeds a real Chromium browser using CefSharp offscreen rendering.
 /// </summary>
-public class BrowserControl : UIElement, IDisposable {
+public class BrowserControl : UIElement, IDisposable, IDropTarget {
     private ChromiumWebBrowser _browser;
     private Texture2D _browserTexture;
     private byte[] _pixelBuffer;
     private bool _isDirty;
+    private bool _dragInside;
+    private IDragData _activeCefDragData; // Cache for the current drag session
     private readonly object _textureLock = new();
 
     private bool _isInitializing;
@@ -38,6 +42,15 @@ public class BrowserControl : UIElement, IDisposable {
     public event Action<string> OnAddressChanged;
     public event Action<string> OnTitleChanged;
     public event Action<bool> OnLoadingStateChanged;
+    
+    // Download and Dialog events
+    public event Action<DownloadItem, IBeforeDownloadCallback> OnDownloadStarted;
+    public event Action<DownloadItem, IDownloadItemCallback> OnDownloadUpdated;
+    public event Action<DialogType, string, string, IJsDialogCallback, bool> OnShowDialog;
+    public event Action<CefFileDialogMode, string, string, IReadOnlyCollection<string>, IFileDialogCallback> OnFileDialog;
+    
+    public event Action OnFocusedEvent;
+    public event Action OnUnfocusedEvent;
 
     public bool CanGoBack => _browser?.CanGoBack ?? false;
     public bool CanGoForward => _browser?.CanGoForward ?? false;
@@ -46,8 +59,11 @@ public class BrowserControl : UIElement, IDisposable {
     [EditorBrowsable(EditorBrowsableState.Never)]
     public BrowserControl() : this(Vector2.Zero, new Vector2(800, 600)) { }
     
+    private TaskScheduler _uiScheduler;
+
     public BrowserControl(Vector2 position, Vector2 size) : base(position, size) {
         ConsumesInput = true;
+        _uiScheduler = TaskScheduler.FromCurrentSynchronizationContext();
     }
     
     /// <summary>
@@ -95,6 +111,12 @@ public class BrowserControl : UIElement, IDisposable {
                 // Set audio handler to capture PCM data
                 _audioHandler = new BrowserAudioHandler(ownerProcess);
                 b.AudioHandler = _audioHandler;
+                
+                // Set download and dialog handlers
+                b.DownloadHandler = new DownloadHandler(this);
+                b.JsDialogHandler = new JsDialogHandler(this);
+                b.DialogHandler = new FileDialogHandler(this);
+                b.DragHandler = new DragHandler(this);
                 
                 // Track initialization state
                 b.BrowserInitialized += (s, e) => {
@@ -177,7 +199,7 @@ public class BrowserControl : UIElement, IDisposable {
     private class NetworkResourceHandler : IResourceHandler {
         private readonly Process _ownerProcess;
         private NetworkResponse _response;
-        private MemoryStream _responseStream;
+        private Stream _responseStream;
         private string _mimeType;
         private string _charset;
         private TaskCompletionSource<bool> _completionSource;
@@ -226,7 +248,8 @@ public class BrowserControl : UIElement, IDisposable {
 
                     if (_response == null) {
                         var method = new System.Net.Http.HttpMethod(methodStr);
-                        _response = await Shell.Network.SendRequestAsync(_ownerProcess, url, method, postData, headers);
+                        // Use streaming API to avoid buffering large responses (like downloads)
+                        _response = await Shell.Network.SendRequestStreamAsync(_ownerProcess, url, method, postData, headers);
                     }
                     
                     if (_response == null || _response.StatusCode >= 400) {
@@ -234,7 +257,9 @@ public class BrowserControl : UIElement, IDisposable {
                         _response = CreateErrorResponse(url, reason);
                     }
                     
-                    if (_response.BodyBytes != null) {
+                    if (_response.Stream != null) {
+                        _responseStream = _response.Stream;
+                    } else if (_response.BodyBytes != null) {
                         _responseStream = new MemoryStream(_response.BodyBytes);
                     }
 
@@ -295,7 +320,11 @@ public class BrowserControl : UIElement, IDisposable {
         public void GetResponseHeaders(IResponse response, out long responseLength, out string redirectUrl) {
             _completionSource.Task.Wait(); 
 
-            responseLength = _responseStream?.Length ?? -1;
+            responseLength = -1; // Streaming
+            try {
+                if (_responseStream?.CanSeek == true) responseLength = _responseStream.Length;
+            } catch { }
+
             redirectUrl = null;
 
             response.StatusCode = _response?.StatusCode ?? 200;
@@ -319,15 +348,22 @@ public class BrowserControl : UIElement, IDisposable {
             if (_responseStream == null) return false;
 
             try {
-                var buffer = new byte[dataOut.Length];
-                bytesRead = _responseStream.Read(buffer, 0, buffer.Length);
+                // Buffer to read from our response stream
+                var buffer = new byte[8192];
+                bytesRead = _responseStream.Read(buffer, 0, (int)Math.Min(buffer.Length, dataOut.Length));
 
                 if (bytesRead > 0) {
                     dataOut.Write(buffer, 0, bytesRead);
                     return true;
+                } else {
+                    // End of stream
+                    _responseStream.Dispose();
+                    _responseStream = null;
                 }
             } catch (Exception ex) {
                 DebugLogger.Log($"[NetworkResourceHandler] Read Error: {ex.Message}");
+                _responseStream?.Dispose();
+                _responseStream = null;
             }
 
             return false;
@@ -335,7 +371,7 @@ public class BrowserControl : UIElement, IDisposable {
 
         public bool Skip(long nToSkip, out long nSkipped, IResourceSkipCallback callback) {
             nSkipped = 0;
-            if (_responseStream == null) return false;
+            if (_responseStream == null || !_responseStream.CanSeek) return false;
             try {
                 long oldPos = _responseStream.Position;
                 _responseStream.Seek(nToSkip, SeekOrigin.Current);
@@ -348,10 +384,12 @@ public class BrowserControl : UIElement, IDisposable {
 
         public void Cancel() {
             _responseStream?.Dispose();
+            _responseStream = null;
         }
 
         public void Dispose() {
             _responseStream?.Dispose();
+            _responseStream = null;
         }
 
         [Obsolete] public bool ProcessRequest(IRequest request, ICallback callback) => false;
@@ -532,6 +570,118 @@ public class BrowserControl : UIElement, IDisposable {
 
     #endregion
     
+    #region Download and Dialog Handlers
+
+    private class DownloadHandler : IDownloadHandler {
+        private readonly BrowserControl _parent;
+
+        public DownloadHandler(BrowserControl parent) {
+            _parent = parent;
+        }
+
+        public bool CanDownload(IWebBrowser chromiumWebBrowser, IBrowser browser, string url, string requestMethod) {
+            return true;
+        }
+
+        public bool OnBeforeDownload(IWebBrowser chromiumWebBrowser, IBrowser browser, DownloadItem downloadItem, IBeforeDownloadCallback callback) {
+            DebugLogger.Log($"[DownloadHandler] OnBeforeDownload: {downloadItem.SuggestedFileName} (Total: {downloadItem.TotalBytes} bytes)");
+            if (_parent.OnDownloadStarted != null) {
+                _parent.OnDownloadStarted?.Invoke(downloadItem, callback);
+                return true; // SIGNAL: We are handling this download (CefSharp should wait/use the callback)
+            } else {
+                // Default behavior if no one is subscribed: cancel to avoid memory leaks
+                if (!callback.IsDisposed) callback.Dispose();
+            }
+            return false;
+        }
+
+        public void OnDownloadUpdated(IWebBrowser chromiumWebBrowser, IBrowser browser, DownloadItem downloadItem, IDownloadItemCallback callback) {
+            if (downloadItem.IsInProgress && downloadItem.PercentComplete % 10 == 0) {
+                DebugLogger.Log($"[DownloadHandler] OnDownloadUpdated: {downloadItem.SuggestedFileName} - {downloadItem.PercentComplete}% ({downloadItem.ReceivedBytes}/{downloadItem.TotalBytes})");
+            }
+            if (downloadItem.IsComplete) DebugLogger.Log($"[DownloadHandler] Download Complete: {downloadItem.SuggestedFileName}");
+            if (downloadItem.IsCancelled) DebugLogger.Log($"[DownloadHandler] Download Cancelled: {downloadItem.SuggestedFileName}");
+            
+            _parent.OnDownloadUpdated?.Invoke(downloadItem, callback);
+        }
+    }
+
+    private class JsDialogHandler : IJsDialogHandler {
+        private readonly BrowserControl _parent;
+
+        public JsDialogHandler(BrowserControl parent) {
+            _parent = parent;
+        }
+
+        public bool OnJSDialog(IWebBrowser chromiumWebBrowser, IBrowser browser, string originUrl, CefJsDialogType dialogType, string messageText, string defaultPromptText, IJsDialogCallback callback, ref bool suppressMessage) {
+            if (_parent.OnShowDialog != null) {
+                _parent.OnShowDialog?.Invoke((DialogType)dialogType, messageText, defaultPromptText, callback, false);
+                return true;
+            }
+            return false;
+        }
+
+        public bool OnBeforeUnloadDialog(IWebBrowser chromiumWebBrowser, IBrowser browser, string messageText, bool isReload, IJsDialogCallback callback) {
+            if (_parent.OnShowDialog != null) {
+                _parent.OnShowDialog?.Invoke(DialogType.Confirm, messageText, null, callback, true);
+                return true;
+            }
+            return false;
+        }
+
+        public void OnResetDialogState(IWebBrowser chromiumWebBrowser, IBrowser browser) { }
+        public void OnDialogClosed(IWebBrowser chromiumWebBrowser, IBrowser browser) { }
+    }
+
+    private class DragHandler : IDragHandler {
+        private readonly BrowserControl _parent;
+
+        public DragHandler(BrowserControl parent) {
+            _parent = parent;
+        }
+
+        public bool OnDragEnter(IWebBrowser chromiumWebBrowser, IBrowser browser, IDragData dragData, DragOperationsMask mask) {
+            // Log for diagnostic purposes
+            DebugLogger.Log($"[BrowserControl] DragHandler.OnDragEnter: IsLink={dragData.IsLink}, IsFile={dragData.IsFile}, FileCount={dragData.FileNames?.Count ?? 0}");
+            
+            // CRITICAL: Return false to allow CefSharp to handle the drag operation
+            // Returning true would CANCEL the drag and prevent files from being dropped into web pages
+            // Note: CefSharp offscreen doesn't support dragging OUT to desktop without complex workarounds
+            return false;
+        }
+
+        public void OnDraggableRegionsChanged(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IList<DraggableRegion> regions) {
+        }
+    }
+
+    // Note: BrowserDraggableItem class removed - dragging FROM browser to desktop
+    // is not supported in CefSharp offscreen mode without complex workarounds.
+    // See implementation_plan.md for details.
+
+    private class FileDialogHandler : IDialogHandler {
+        private readonly BrowserControl _parent;
+
+        public FileDialogHandler(BrowserControl parent) {
+            _parent = parent;
+        }
+
+        public bool OnFileDialog(IWebBrowser chromiumWebBrowser, IBrowser browser, CefFileDialogMode mode, string title, string defaultFilePath, IReadOnlyCollection<string> acceptFilters, IReadOnlyCollection<string> acceptExtensions, IReadOnlyCollection<string> acceptDescriptions, IFileDialogCallback callback) {
+            if (_parent.OnFileDialog != null) {
+                _parent.OnFileDialog?.Invoke(mode, title, defaultFilePath, acceptFilters, callback);
+                return true;
+            }
+            return false;
+        }
+    }
+
+    public enum DialogType {
+        Alert = 0,
+        Confirm = 1,
+        Prompt = 2
+    }
+
+    #endregion
+    
     private void HandleResize() {
         if (_browser == null) return;
         
@@ -600,16 +750,33 @@ public class BrowserControl : UIElement, IDisposable {
     
     protected override void OnFocused() {
         _browser?.GetBrowserHost()?.SetFocus(true);
+        OnFocusedEvent?.Invoke();
     }
     
     protected override void OnUnfocused() {
         _browser?.GetBrowserHost()?.SetFocus(false);
+        OnUnfocusedEvent?.Invoke();
     }
     
     protected override void UpdateInput() {
         base.UpdateInput();
         
         if (_browser == null || !IsVisible) return;
+
+        // Hook into Shell Drag/Drop lifecycle so this control is recognized as a drop target
+        // Moving this to UpdateInput ensures higher responsiveness during active drags
+        if (Shell.Drag.IsActive) {
+            if (IsMouseOver) {
+                Shell.Drag.CheckDropTarget(this, InputManager.MousePosition.ToVector2());
+            } else if (_dragInside) {
+                OnDragLeave();
+            }
+        }
+
+        // Handle drop on mouse release
+        if (Shell.Drag.IsActive && IsMouseOver && InputManager.IsMouseButtonJustReleased(MouseButton.Left)) {
+            Shell.Drag.TryDropOn(this, InputManager.MousePosition.ToVector2());
+        }
         
         var host = _browser.GetBrowserHost();
         if (host == null) return;
@@ -619,8 +786,10 @@ public class BrowserControl : UIElement, IDisposable {
             var localPos = InputManager.MousePosition.ToVector2() - AbsolutePosition;
             var mouseEvent = new MouseEvent((int)localPos.X, (int)localPos.Y, GetCefModifiers());
             
-            // Mouse move
-            host.SendMouseMoveEvent(mouseEvent, false);
+            // Mouse move (CRITICAL: Skip if drag is active over the browser to avoid conflicts)
+            if (!_dragInside) {
+                host.SendMouseMoveEvent(mouseEvent, false);
+            }
             
             // Mouse clicks
             if (InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
@@ -737,4 +906,133 @@ public class BrowserControl : UIElement, IDisposable {
     public void ExecuteJavaScript(string script) {
         _browser?.ExecuteScriptAsync(script);
     }
+
+    /// <summary>
+    /// Evaluate a JavaScript expression and return the result
+    /// </summary>
+    public async Task<JavascriptResponse> EvaluateScriptAsync(string script) {
+        if (_browser == null) return new JavascriptResponse { Success = false, Message = "Browser not initialized" };
+        return await _browser.EvaluateScriptAsync(script);
+    }
+
+    // --- IDropTarget Implementation ---
+
+    public bool CanAcceptDrop(object dragData) {
+    // Accept files, strings (paths), or IDraggable (which DesktopIcon now implements)
+    return dragData is string || dragData is IEnumerable<string> || dragData is IDragData || dragData is IDraggable;
+}
+
+    public DragDropEffect OnDragOver(object dragData, Vector2 position) {
+        if (_browser == null) {
+            DebugLogger.Log("[BrowserControl] OnDragOver: Browser is null, ignoring drag.");
+            return DragDropEffect.None;
+        }
+
+        var localPos = position - AbsolutePosition;
+        var mouseEvent = new MouseEvent((int)localPos.X, (int)localPos.Y, GetCefModifiers());
+
+        var host = _browser.GetBrowserHost();
+        if (host == null) {
+            DebugLogger.Log("[BrowserControl] OnDragOver: BrowserHost is null, ignoring drag.");
+            return DragDropEffect.None;
+        }
+
+        if (!_dragInside) {
+            // Initialize new drag session
+            _activeCefDragData = CreateCefDragData(dragData);
+            if (_activeCefDragData == null) {
+                DebugLogger.Log("[BrowserControl] OnDragOver: Failed to create CefDragData.");
+                return DragDropEffect.None;
+            }
+            DebugLogger.Log($"Browser: DragTargetDragEnter (data: {dragData?.GetType().Name}, localPos: {localPos}, mods: {mouseEvent.Modifiers})");
+            host.DragTargetDragEnter(_activeCefDragData, mouseEvent, DragOperationsMask.Copy | DragOperationsMask.Move | DragOperationsMask.Link);
+            _dragInside = true;
+        }
+
+        host.DragTargetDragOver(mouseEvent, DragOperationsMask.Copy | DragOperationsMask.Move | DragOperationsMask.Link);
+        return DragDropEffect.Copy; // Assume copy for now
+    }
+
+    private IDragData CreateCefDragData(object dragData) {
+        if (dragData is IDragData existing) return existing;
+
+        var cefDragData = CefSharp.DragData.Create();
+        List<string> paths = new();
+
+        if (dragData is string path) paths.Add(path);
+        else if (dragData is IEnumerable<string> ps) paths.AddRange(ps);
+        else if (dragData is IDraggable draggable) {
+            var data = draggable.GetDragData();
+            if (data is string s) paths.Add(s);
+            else if (data is IEnumerable<string> l) paths.AddRange(l);
+            else if (dragData is DesktopIcon di) paths.Add(di.VirtualPath); // Fallback if GetDragData failed
+        }
+
+        foreach (var p in paths) {
+            if (string.IsNullOrEmpty(p)) continue;
+            string hostPath = VirtualFileSystem.Instance.ToHostPath(p);
+            if (!string.IsNullOrEmpty(hostPath)) {
+                DebugLogger.Log($"Browser: Adding file to drag: {p} -> {hostPath}");
+                cefDragData.AddFile(hostPath, Path.GetFileName(p));
+            } else {
+                DebugLogger.Log($"Browser: Warning - Could not map virtual path to host: {p}. Attempting direct use if it looks like a host path.");
+                // If it looks like a host path already or VFS couldn't map it but it's valid, try adding it directly.
+                // Some internal drag sources might already provide host paths.
+                if (File.Exists(p)) {
+                    DebugLogger.Log($"Browser: Using direct host path for drag: {p}");
+                    cefDragData.AddFile(p, Path.GetFileName(p));
+                }
+            }
+        }
+        
+        DebugLogger.Log($"Browser: Created CEF drag data with {cefDragData.FileNames?.Count ?? 0} files.");
+        return cefDragData;
+    }
+
+    public void OnDragLeave() {
+        DebugLogger.Log("Browser: OnDragLeave");
+        _dragInside = false;
+        var host = _browser?.GetBrowserHost();
+        if (host != null) {
+            host.DragTargetDragLeave();
+            // Notify source that drag ended outside/cancelled
+            host.DragSourceEndedAt(0, 0, DragOperationsMask.None);
+            host.DragSourceSystemDragEnded();
+        }
+        _activeCefDragData = null;
+    }
+
+    public bool OnDrop(object dragData, Vector2 position) {
+        _dragInside = false;
+        if (_browser == null) {
+            DebugLogger.Log("Browser: OnDrop failed - _browser is null");
+            return false;
+        }
+
+        var host = _browser.GetBrowserHost();
+        if (host == null) {
+            DebugLogger.Log("Browser: OnDrop failed - BrowserHost is null");
+            return false;
+        }
+
+        var localPos = position - AbsolutePosition;
+        // CRITICAL: Force LeftMouseButton flag during the Drop event. 
+        // In the frame it's released, GetCefModifiers might return None, which confuses Chromium.
+        var modifiers = GetCefModifiers() | CefEventFlags.LeftMouseButton;
+        var mouseEvent = new MouseEvent((int)localPos.X, (int)localPos.Y, modifiers);
+        DebugLogger.Log($"Browser: OnDrop (data: {dragData?.GetType().Name}, localPos: {localPos}, forcedMods: {modifiers})");
+
+        // Complete the drop sequence: final DragOver + Drop
+        host.DragTargetDragOver(mouseEvent, DragOperationsMask.Copy | DragOperationsMask.Move | DragOperationsMask.Link);
+        host.DragTargetDragDrop(mouseEvent);
+        
+        // IMPORTANT: Do NOT call DragSourceEndedAt or DragSourceSystemDragEnded here!
+        // Those are only for when the BROWSER is the drag source.
+        // We are dropping INTO the browser, so it's the drop TARGET, not the source.
+        
+        _activeCefDragData = null;
+        return true;
+    }
+
+    public Rectangle GetDropBounds() => Bounds;
 }
