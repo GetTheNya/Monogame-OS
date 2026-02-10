@@ -16,6 +16,8 @@ public class ScrollPanel : Panel {
     private float _targetScrollY = 0f;
     private float _targetScrollX = 0f;
     
+    public Vector2 ContentPadding { get; set; } = Vector2.Zero;
+    
     // Public properties for external control
     public float TargetScrollY {
         get => _targetScrollY;
@@ -202,8 +204,8 @@ public class ScrollPanel : Panel {
                 maxR = Math.Max(maxR, child.Position.X + child.Size.X);
                 maxB = Math.Max(maxB, child.Position.Y + child.Size.Y);
             }
-            _contentWidth = Math.Max(Size.X, maxR);
-            _contentHeight = Math.Max(Size.Y, maxB);
+            _contentWidth = Math.Max(Size.X, maxR + ContentPadding.X);
+            _contentHeight = Math.Max(Size.Y, maxB + ContentPadding.Y);
             ClampScroll();
         }
 

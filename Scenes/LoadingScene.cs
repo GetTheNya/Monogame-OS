@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework.Graphics;
 using TheGame.Core;
 using TheGame.Core.OS;
 using TheGame.Core.UI.Controls;
+using System.Linq;
 
 namespace TheGame.Scenes;
 
@@ -36,12 +37,11 @@ public class LoadingScene : Core.Scenes.Scene {
 
     private async void StartLoading() {
         _startedLoading = true;
-        await AppLoader.Instance.LoadAppsFromDirectoryAsync(new[] {
-            "C:\\Windows\\System32\\SystemApps",
-            "C:\\Windows\\System32\\TerminalApps\\",
-            "C:\\Program Files\\",
-            "C:\\Program Files\\TerminalApps\\",
-        });
+        await AppLoader.Instance.LoadAppsFromDirectoryAsync(AppLoader.Instance.SearchPaths.ToArray());
+        
+        // Cleanup orphaned registry entries and refresh the installer cache
+        await AppInstaller.Instance.CleanupRegistryAsync();
+        await AppInstaller.Instance.RefreshCacheAsync();
     }
 
     public override void UnloadContent() { 

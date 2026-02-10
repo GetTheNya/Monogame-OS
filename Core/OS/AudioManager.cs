@@ -73,7 +73,7 @@ public class AudioManager {
             _highLatencyOutput.Play();
             
             // Load values from registry
-            _masterVolume = Registry.GetValue($"{Shell.Registry.Audio}\\MasterVolume", 1.0f);
+            _masterVolume = Registry.Instance.GetValue($"{Shell.Registry.Audio}\\MasterVolume", 1.0f);
         } catch (Exception ex) {
             DebugLogger.Log($"Failed to initialize NAudio engine: {ex.Message}");
         }
@@ -83,7 +83,7 @@ public class AudioManager {
         get => _masterVolume;
         set {
             _masterVolume = Math.Clamp(value, 0f, 1f);
-            Registry.SetValue($"{Shell.Registry.Audio}\\MasterVolume", _masterVolume);
+            Registry.Instance.SetValue($"{Shell.Registry.Audio}\\MasterVolume", _masterVolume);
             lock (_lock) {
                 foreach (var context in _processContexts.Values) {
                     context.UpdateEffectiveVolume(_masterVolume);
@@ -337,9 +337,9 @@ public class AudioManager {
 
                 // Save to registry
                 if (process.AppId == "SYSTEM") {
-                    Registry.SetValue($"{Shell.Registry.Audio}\\SystemVolume", volume);
+                    Registry.Instance.SetValue($"{Shell.Registry.Audio}\\SystemVolume", volume);
                 } else {
-                    Registry.SetValue($"{Shell.Registry.AppSettings(process.AppId)}\\Volume", volume);
+                    Registry.Instance.SetValue($"{Shell.Registry.AppSettings(process.AppId)}\\Volume", volume);
                 }
             }
         }
@@ -360,9 +360,9 @@ public class AudioManager {
                 // Load from registry
                 float vol = 1.0f;
                 if (process.AppId == "SYSTEM") {
-                    vol = Registry.GetValue($"{Shell.Registry.Audio}\\SystemVolume", 1.0f);
+                    vol = Registry.Instance.GetValue($"{Shell.Registry.Audio}\\SystemVolume", 1.0f);
                 } else {
-                    vol = Registry.GetValue($"{Shell.Registry.AppSettings(process.AppId)}\\Volume", 1.0f);
+                    vol = Registry.Instance.GetValue($"{Shell.Registry.AppSettings(process.AppId)}\\Volume", 1.0f);
                 }
                 context.SetVolume(vol);
 

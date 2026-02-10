@@ -52,6 +52,10 @@ public class PageStack : Panel {
         var oldPage = _history.Pop();
         oldPage.OnNavigatedFrom();
         RemoveChild(oldPage);
+        
+        if (oldPage is IDisposable disposable) {
+            disposable.Dispose();
+        }
 
         var newPage = _history.Peek();
         newPage.Size = ClientSize; // Force recalculate size

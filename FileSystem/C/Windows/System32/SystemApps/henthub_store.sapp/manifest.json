@@ -4,6 +4,7 @@
     "entryClass": "HentHub.Program",
     "entryMethod": "Main",
     "references": [
-        "System.Text.Json"
+        "System.Text.Json",
+        "FontStashSharp.MonoGame"
     ]
 }

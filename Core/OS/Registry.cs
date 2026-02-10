@@ -7,23 +7,28 @@ using System.Text.Json.Nodes;
 
 namespace TheGame.Core.OS;
 
-public static class Registry {
+public class Registry {
+    private static Registry _instance;
+    public static Registry Instance => _instance ??= new Registry();
+
     private const string REGISTRY_PATH = "C:\\Windows\\System32\\config\\registry.json";
-    private static JsonObject _cachedRoot;
-    private static bool _isDirty;
+    private JsonObject _cachedRoot;
+    private bool _isDirty;
     
     // Valid hive roots
-    private static readonly string[] ValidHives = { "HKLM", "HKCU" };
+    private readonly string[] ValidHives = { "HKLM", "HKCU" };
     
     // Debounce timer - only save after delay to avoid disk thrashing
-    private static float _saveTimer = 0f;
+    private float _saveTimer = 0f;
     private const float SAVE_DELAY = 1.0f; // seconds
 
-    public static void Initialize() {
+    private Registry() { }
+
+    public void Initialize() {
         EnsureLoaded();
     }
 
-    public static void Update(float deltaTime) {
+    public void Update(float deltaTime) {
         if (_isDirty) {
             _saveTimer += deltaTime;
             if (_saveTimer >= SAVE_DELAY) {
@@ -32,89 +37,138 @@ public static class Registry {
         }
     }
 
-    private static bool _isWriting = false;
+    private readonly object _lock = new object();
+    private bool _isWriting = false;
 
-    public static void FlushToDisk() {
-        if (!_isDirty || _cachedRoot == null || _isWriting) return;
-        
-        string json = _cachedRoot.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
-        _isDirty = false;
-        _saveTimer = 0f;
-        
-        _isWriting = true;
+    public void FlushToDisk() {
+        string json;
+        lock (_lock) {
+            if (!_isDirty || _cachedRoot == null || _isWriting) return;
+            json = _cachedRoot.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+            _isDirty = false;
+            _saveTimer = 0f;
+            _isWriting = true;
+        }
+
         System.Threading.Tasks.Task.Run(() => {
+            string tmpPath = REGISTRY_PATH + ".tmp";
             try {
-                VirtualFileSystem.Instance.WriteAllText(REGISTRY_PATH, json);
-            } catch { }
-            finally {
-                _isWriting = false;
+                // Atomic save: Write to temp file first
+                VirtualFileSystem.Instance.WriteAllText(tmpPath, json);
+                
+                // Then swap (Move with overwrite)
+                // We use host paths for direct File.Move if VFS Move is not atomic-swap guaranteed
+                string hostTarget = VirtualFileSystem.Instance.ToHostPath(REGISTRY_PATH);
+                string hostTmp = VirtualFileSystem.Instance.ToHostPath(tmpPath);
+                
+                if (File.Exists(hostTmp)) {
+                    if (File.Exists(hostTarget)) File.Delete(hostTarget);
+                    File.Move(hostTmp, hostTarget);
+                    DebugLogger.Log($"[Registry] Saved successfully to {REGISTRY_PATH}");
+                }
+            } catch (Exception ex) {
+                DebugLogger.Log($"[Registry] Error flushing to disk: {ex.Message}");
+            } finally {
+                lock (_lock) {
+                    _isWriting = false;
+                }
             }
         });
     }
 
-    private static void EnsureLoaded() {
-        if (_cachedRoot != null) return;
+    private void EnsureLoaded() {
+        lock (_lock) {
+            if (_cachedRoot != null) return;
 
-        if (VirtualFileSystem.Instance.Exists(REGISTRY_PATH)) {
-            try {
-                string json = VirtualFileSystem.Instance.ReadAllText(REGISTRY_PATH);
-                var node = JsonNode.Parse(json);
-                _cachedRoot = node as JsonObject ?? new JsonObject();
-            } catch {
+            if (VirtualFileSystem.Instance.Exists(REGISTRY_PATH)) {
+                string json = "";
+                try {
+                    json = VirtualFileSystem.Instance.ReadAllText(REGISTRY_PATH);
+                    var node = JsonNode.Parse(json);
+                    _cachedRoot = node as JsonObject ?? new JsonObject();
+                } catch (Exception ex) {
+                    DebugLogger.Log($"[Registry] CRITICAL: Failed to parse registry JSON: {ex.Message}");
+                    
+                    // Backup corrupted file
+                    try {
+                        string badPath = REGISTRY_PATH + ".bad";
+                        if (VirtualFileSystem.Instance.Exists(badPath)) VirtualFileSystem.Instance.Delete(badPath);
+                        VirtualFileSystem.Instance.WriteAllText(badPath, json);
+                        DebugLogger.Log($"[Registry] Corrupted registry backed up to {badPath}");
+                    } catch { }
+
+                    _cachedRoot = new JsonObject();
+                    MarkDirty(); // Force a clean rewrite
+                }
+            } else {
                 _cachedRoot = new JsonObject();
+                // Ensure file exists
+                try {
+                    VirtualFileSystem.Instance.WriteAllText(REGISTRY_PATH, "{}");
+                } catch { }
             }
-        } else {
-            _cachedRoot = new JsonObject();
-            // Ensure directory exists
-            VirtualFileSystem.Instance.WriteAllText(REGISTRY_PATH, "{}");
         }
     }
 
-    private static void MarkDirty() {
+    private void MarkDirty() {
         _isDirty = true;
         _saveTimer = 0f; // Reset timer on new changes
     }
 
-    private static JsonObject NavigateToKey(string path, bool createIfMissing) {
-        EnsureLoaded();
-        
-        // Normalize path separators
-        path = path.Replace('/', '\\');
-        string[] parts = path.Split('\\', StringSplitOptions.RemoveEmptyEntries);
+    private JsonObject NavigateToKey(string path, bool createIfMissing) {
+        lock (_lock) {
+            EnsureLoaded();
+            
+            // Normalize path separators and remove leading/trailing slashes for splitting
+            path = path.Replace('/', '\\').Trim('\\');
+            if (string.IsNullOrEmpty(path)) return _cachedRoot;
 
-        JsonObject current = _cachedRoot;
+            string[] parts = path.Split('\\', StringSplitOptions.RemoveEmptyEntries);
+            JsonObject current = _cachedRoot;
 
-        foreach (var part in parts) {
-            if (current.ContainsKey(part)) {
-                var next = current[part] as JsonObject;
-                if (next == null) {
-                    // It might be a value node, not a container. If we need to traverse through it, that's a problem (or overwrite it).
+            foreach (var part in parts) {
+                // Try direct match first (fastest)
+                if (current.ContainsKey(part)) {
+                    var next = current[part] as JsonObject;
+                    if (next == null) {
+                        if (createIfMissing) {
+                            next = new JsonObject();
+                            current[part] = next;
+                        } else {
+                            return null;
+                        }
+                    }
+                    current = next;
+                } else {
+                    // Try case-insensitive match
+                    string matchedKey = current.Select(kvp => kvp.Key).FirstOrDefault(k => k.Equals(part, StringComparison.OrdinalIgnoreCase));
+                    
+                    if (matchedKey != null) {
+                        var next = current[matchedKey] as JsonObject;
+                        if (next != null) {
+                            current = next;
+                            continue;
+                        }
+                    }
+
                     if (createIfMissing) {
-                        next = new JsonObject();
-                        current[part] = next;
+                        var newObj = new JsonObject();
+                        current[part] = newObj;
+                        current = newObj;
                     } else {
                         return null;
                     }
                 }
-                current = next;
-            } else {
-                if (createIfMissing) {
-                    var newObj = new JsonObject();
-                    current[part] = newObj;
-                    current = newObj;
-                } else {
-                    return null;
-                }
             }
-        }
 
-        return current;
+            return current;
+        }
     }
     
     /// <summary>
     /// Validates that a path starts with a valid hive. Logs warning if not.
     /// </summary>
-    private static bool ValidateHive(string path) {
+    private bool ValidateHive(string path) {
         if (string.IsNullOrEmpty(path)) return false;
         
         string normalizedPath = path.Replace('/', '\\');
@@ -133,8 +187,8 @@ public static class Registry {
     }
     
     // Splits "path\key" into "path" and "key"
-    private static void SplitPathAndKey(string fullPath, out string parentPath, out string keyName) {
-        fullPath = fullPath.Replace('/', '\\');
+    private void SplitPathAndKey(string fullPath, out string parentPath, out string keyName) {
+        fullPath = fullPath.Replace('/', '\\').TrimEnd('\\');
         int lastSlash = fullPath.LastIndexOf('\\');
         
         if (lastSlash == -1) {
@@ -147,7 +201,7 @@ public static class Registry {
         }
     }
 
-    public static void SetValue<T>(string fullPath, T value) {
+    public void SetValue<T>(string fullPath, T value) {
         if (!ValidateHive(fullPath)) return; // Block root-level writes
         
         EnsureLoaded();
@@ -155,23 +209,15 @@ public static class Registry {
         
         JsonObject parent = NavigateToKey(parentPath, true);
         if (parent != null) {
-            // We use JsonValue.Create to handle primitives correctly
-            // Note: JsonValue.Create handles int, float, bool, string, etc.
-            // Complex objects usually need SerializeToNode
-            
             JsonNode valNode;
-            
-            // Handle primitives explicitly where possible or fallback to generic
             if (value == null) {
                 valNode = null;
             } else {
-                // Determine if simple usage
                 Type type = typeof(T);
                 if (type == typeof(string) || type == typeof(int) || type == typeof(float) || 
                     type == typeof(double) || type == typeof(bool) || type == typeof(long)) {
                     valNode = JsonValue.Create(value);
                 } else {
-                    // Fallback for arrays/objects
                     valNode = JsonSerializer.SerializeToNode(value);
                 }
             }
@@ -181,7 +227,18 @@ public static class Registry {
         }
     }
 
-    public static T GetValue<T>(string fullPath, T defaultValue = default) {
+    public void SetValue<T>(string path, string key, T value) {
+        SetValue(CombinePath(path, key), value);
+    }
+
+    private string CombinePath(string path, string key) {
+        if (string.IsNullOrEmpty(path)) return key;
+        path = path.Replace('/', '\\');
+        if (!path.EndsWith("\\")) path += "\\";
+        return path + key;
+    }
+
+    public T GetValue<T>(string fullPath, T defaultValue = default) {
         EnsureLoaded();
         SplitPathAndKey(fullPath, out string parentPath, out string keyName);
 
@@ -190,9 +247,6 @@ public static class Registry {
             try {
                 var node = parent[keyName];
                 if (node == null) return defaultValue; // null explicitly stored
-                
-                // If it's a JsonValue, we might need direct extraction, 
-                // but Deserialize usually handles conversion well.
                 return node.Deserialize<T>();
             } catch {
                 return defaultValue;
@@ -202,15 +256,23 @@ public static class Registry {
         return defaultValue;
     }
 
-    public static bool KeyExists(string fullPath) {
+    public T GetValue<T>(string path, string key, T defaultValue = default) {
+        return GetValue(CombinePath(path, key), defaultValue);
+    }
+
+    public bool KeyExists(string fullPath) {
         EnsureLoaded();
         SplitPathAndKey(fullPath, out string parentPath, out string keyName);
         
         JsonObject parent = NavigateToKey(parentPath, false);
         return parent != null && parent.ContainsKey(keyName);
     }
+
+    public bool KeyExists(string path, string key) {
+        return KeyExists(CombinePath(path, key));
+    }
     
-    public static void DeleteKey(string fullPath) {
+    public void DeleteKey(string fullPath) {
         if (!ValidateHive(fullPath)) return; // Block root-level deletes
         
         EnsureLoaded();
@@ -226,7 +288,7 @@ public static class Registry {
     /// <summary>
     /// Gets all key-value pairs at a specific path.
     /// </summary>
-    public static Dictionary<string, T> GetAllValues<T>(string path) {
+    public Dictionary<string, T> GetAllValues<T>(string path) {
         EnsureLoaded();
         var result = new Dictionary<string, T>();
         
@@ -241,6 +303,22 @@ public static class Registry {
                 }
             } catch {
                 // Skip values that can't be deserialized
+            }
+        }
+        
+        return result;
+    }
+
+    public List<string> GetSubKeys(string path) {
+        EnsureLoaded();
+        var result = new List<string>();
+        
+        JsonObject container = NavigateToKey(path, false);
+        if (container == null) return result;
+        
+        foreach (var kvp in container) {
+            if (kvp.Value is JsonObject) {
+                result.Add(kvp.Key);
             }
         }
         

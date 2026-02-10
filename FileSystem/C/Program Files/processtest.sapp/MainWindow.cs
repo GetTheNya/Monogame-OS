@@ -99,13 +99,13 @@ public class MainWindow : Window {
         y += 25;
         
         AddButton("Add to Startup", y, () => {
-            Registry.SetValue($"{Shell.Registry.Startup}\\PROCESSTEST", true);
+            Registry.Instance.SetValue($"{Shell.Registry.Startup}\\PROCESSTEST", true);
             Shell.Notifications.Show("Startup", "PROCESSTEST added to startup apps!");
         });
         y += buttonHeight + gap;
         
         AddButton("Remove from Startup", y, () => {
-            Registry.SetValue($"{Shell.Registry.Startup}\\PROCESSTEST", false);
+            Registry.Instance.SetValue($"{Shell.Registry.Startup}\\PROCESSTEST", false);
             Shell.Notifications.Show("Startup", "PROCESSTEST removed from startup apps.");
         });
         y += buttonHeight + gap;

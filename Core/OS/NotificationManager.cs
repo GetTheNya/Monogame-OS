@@ -24,6 +24,36 @@ public class Notification {
     public Action OnClick { get; set; }
     public List<NotificationAction> Actions { get; set; } = new();
     public bool IsRead { get; set; } = false;
+
+    // Progress support
+    private float _progress = 0f;
+    public float Progress {
+        get => _progress;
+        set {
+            if (Math.Abs(_progress - value) > 0.001f) {
+                _progress = value;
+                OnUpdated?.Invoke();
+            }
+        }
+    }
+    public bool ShowProgress { get; set; } = false;
+    public bool AutoDismiss { get; set; } = true;
+    public float DismissTime { get; set; } = 5f;
+
+    public event Action OnUpdated;
+
+    public void Update(string text, float? progress = null) {
+        bool changed = false;
+        if (text != null && Text != text) {
+            Text = text;
+            changed = true;
+        }
+        if (progress.HasValue && Math.Abs(_progress - progress.Value) > 0.001f) {
+            _progress = progress.Value;
+            changed = true;
+        }
+        if (changed) OnUpdated?.Invoke();
+    }
 }
 
 /// <summary>
@@ -68,11 +98,19 @@ public class NotificationManager {
             Actions = actions ?? new List<NotificationAction>()
         };
 
-        _history.Insert(0, notification); // Newest first
+        AddNotification(notification);
+        return notification.Id;
+    }
+
+    /// <summary>
+    /// Adds an existing notification instance to the manager (useful for custom notification classes).
+    /// </summary>
+    public void AddNotification(Notification notification) {
+        if (notification == null) return;
+        _history.Insert(0, notification);
         _unreadCount++;
         OnNotificationAdded?.Invoke(notification);
-        DebugLogger.Log($"Notification: {title}");
-        return notification.Id;
+        DebugLogger.Log($"Notification: {notification.Title}");
     }
 
     /// <summary>

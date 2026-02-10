@@ -56,7 +56,7 @@ public class DesktopScene : Core.Scenes.Scene {
         _uiManager = new UIManager();
         
         // Load grid alignment setting from Registry
-        _alignToGrid = Registry.GetValue($"{Shell.Registry.Desktop}\\AlignToGrid", true);
+        _alignToGrid = TheGame.Core.OS.Registry.Instance.GetValue($"{Shell.Registry.Desktop}\\AlignToGrid", true);
 
         var viewport = G.GraphicsDevice.Viewport;
         var screenWidth = viewport.Width;
@@ -490,8 +490,8 @@ public class DesktopScene : Core.Scenes.Scene {
             // Optionally delete from Registry too to make it "permanent"
             string encodedPath = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(item));
             string key = $"{Shell.Registry.Desktop}\\IconPositions\\{encodedPath}";
-            Registry.DeleteKey($"{key}\\X");
-            Registry.DeleteKey($"{key}\\Y");
+            TheGame.Core.OS.Registry.Instance.DeleteKey($"{key}\\X");
+            TheGame.Core.OS.Registry.Instance.DeleteKey($"{key}\\Y");
         }
 
         LoadDesktopIcons();
@@ -593,8 +593,8 @@ public class DesktopScene : Core.Scenes.Scene {
             // Use Base64 encoding to avoid Registry key issues with special characters
             string encodedPath = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(virtualPath));
             string key = $"{Shell.Registry.Desktop}\\IconPositions\\{encodedPath}";
-            Registry.SetValue($"{key}\\X", position.X);
-            Registry.SetValue($"{key}\\Y", position.Y);
+            TheGame.Core.OS.Registry.Instance.SetValue($"{key}\\X", position.X);
+            TheGame.Core.OS.Registry.Instance.SetValue($"{key}\\Y", position.Y);
         } catch { }
     }
     
@@ -603,9 +603,9 @@ public class DesktopScene : Core.Scenes.Scene {
             string encodedPath = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(virtualPath));
             string key = $"{Shell.Registry.Desktop}\\IconPositions\\{encodedPath}";
             
-            if (Registry.KeyExists($"{key}\\X") && Registry.KeyExists($"{key}\\Y")) {
-                float x = Registry.GetValue<float>($"{key}\\X", 0f);
-                float y = Registry.GetValue<float>($"{key}\\Y", 0f);
+            if (TheGame.Core.OS.Registry.Instance.KeyExists($"{key}\\X") && TheGame.Core.OS.Registry.Instance.KeyExists($"{key}\\Y")) {
+                float x = TheGame.Core.OS.Registry.Instance.GetValue<float>($"{key}\\X", 0f);
+                float y = TheGame.Core.OS.Registry.Instance.GetValue<float>($"{key}\\Y", 0f);
                 return new Vector2(x, y);
             }
         } catch { }
@@ -855,7 +855,7 @@ public class DesktopScene : Core.Scenes.Scene {
                 Priority = 60,
                 Action = () => {
                     _scene._alignToGrid = !_scene._alignToGrid;
-                    Registry.SetValue($"{Shell.Registry.Desktop}\\AlignToGrid", _scene._alignToGrid);
+                    TheGame.Core.OS.Registry.Instance.SetValue($"{Shell.Registry.Desktop}\\AlignToGrid", _scene._alignToGrid);
                     if (_scene._alignToGrid) _scene.ArrangeIconsToGrid();
                 }
             });

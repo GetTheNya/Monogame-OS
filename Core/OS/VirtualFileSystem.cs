@@ -353,6 +353,14 @@ public class VirtualFileSystem {
         NotifyWatchers(GetParentPath(virtualPath), virtualPath, WatcherChangeType.Deleted);
     }
 
+    public void DeleteDirectory(string path, bool recursive) {
+        string hostPath = ToHostPath(path);
+        if (Directory.Exists(hostPath)) {
+            Directory.Delete(hostPath, recursive);
+            NotifyWatchers(GetParentPath(path), path, WatcherChangeType.Deleted);
+        }
+    }
+
     private bool IsSystemProtectedPath(string virtualPath) {
         if (string.IsNullOrEmpty(virtualPath)) return false;
         string norm = virtualPath.Replace('/', '\\').TrimEnd('\\').ToUpper();
@@ -402,14 +410,18 @@ public class VirtualFileSystem {
         if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
 
         if (File.Exists(sourceHost)) {
+            DebugLogger.Log($"[VFS] Moving FILE {sourceHost} -> {destHost}");
             if (File.Exists(destHost)) File.Delete(destHost);
             File.Move(sourceHost, destHost);
         } else if (Directory.Exists(sourceHost)) {
+            DebugLogger.Log($"[VFS] Moving DIRECTORY {sourceHost} -> {destHost}");
             if (Directory.Exists(destHost)) Directory.Delete(destHost, true);
             Directory.Move(sourceHost, destHost);
 
             // Notify AppLoader about path changes (recursively updates any .sapp paths inside)
             AppLoader.Instance.UpdateAppPath(sourceVirtualPath, destVirtualPath);
+        } else {
+            DebugLogger.Log($"[VFS] Move FAILED: Source {sourceHost} does not exist.");
         }
 
         // Clean up trash info if moving OUT of recycle bin
@@ -663,6 +675,38 @@ public class VirtualFileSystem {
         string bundle = GetAppBundleDirectory(appId);
         if (bundle == null) return null;
         return Path.Combine(bundle, resourceName);
+    }
+
+    public long GetAvailableSpace(string virtualPath) {
+        try {
+            string hostPath = ToHostPath(virtualPath);
+            string drive = Path.GetPathRoot(hostPath);
+            var driveInfo = new DriveInfo(drive);
+            return driveInfo.AvailableFreeSpace;
+        } catch {
+            return -1;
+        }
+    }
+
+    public bool IsWritable(string virtualPath) {
+        try {
+            string hostPath = ToHostPath(virtualPath);
+            if (!Directory.Exists(hostPath)) {
+                string parent = Path.GetDirectoryName(hostPath);
+                if (parent != null && !Directory.Exists(parent)) return false;
+            }
+            
+            // Simple check: try to create and delete a temp file
+            string dir = Directory.Exists(hostPath) ? hostPath : Path.GetDirectoryName(hostPath);
+            if (dir == null) return false;
+            
+            string testFile = Path.Combine(dir, Guid.NewGuid().ToString() + ".tmp");
+            File.WriteAllText(testFile, "test");
+            File.Delete(testFile);
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     private string GetParentPath(string virtualPath) {

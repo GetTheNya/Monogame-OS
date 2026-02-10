@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using TheGame;
 using TheGame.Core;
 using TheGame.Core.OS;
 using TheGame.Core.UI;
@@ -10,12 +11,13 @@ using TheGame.Core.UI.Controls;
 
 namespace HentHub;
 
-public class AppCard : Panel {
+public class AppCard : Panel, IDisposable {
     private StoreApp _app;
     private Action _onMore;
     private Icon _iconImage;
     private Label _nameLabel;
     private Label _authorLabel;
+    private Label _statusLabel;
     private Button _moreBtn;
     private Process _ownerProcess;
 
@@ -49,13 +51,47 @@ public class AppCard : Panel {
         };
         AddChild(_authorLabel);
 
+        _statusLabel = new Label(new Vector2(Size.X - 100, 10), "") {
+            FontSize = 12,
+            Color = Color.LightGreen
+        };
+        AddChild(_statusLabel);
+        UpdateStatus();
+
         _moreBtn = new Button(new Vector2(Size.X - 90, Size.Y - 40), new Vector2(80, 30), "More");
         _moreBtn.OnClickAction = _onMore;
         AddChild(_moreBtn);
 
         OnResize += () => {
             if (_moreBtn != null) _moreBtn.Position = new Vector2(Size.X - 90, Size.Y - 40);
+            if (_statusLabel != null) _statusLabel.Position = new Vector2(Size.X - _statusLabel.Size.X - 10, 10);
         };
+    }
+
+    public void UpdateStatus() {
+        bool isInstalled = AppInstaller.Instance.IsAppInstalled(_app.AppId);
+        string installedVer = AppInstaller.Instance.GetInstalledVersion(_app.AppId);
+        
+        if (!isInstalled) {
+            _statusLabel.Text = "";
+            return;
+        }
+
+        if (AppInstaller.IsNewerVersion(installedVer, _app.Version)) {
+            _statusLabel.Text = "Update Available";
+            _statusLabel.Color = Color.Orange;
+            DebugLogger.Log($"[AppCard] Update Available for {_app.AppId}: {installedVer} -> {_app.Version}");
+        } else {
+            _statusLabel.Text = "Installed";
+            _statusLabel.Color = Color.LightGreen;
+        }
+
+        // Force measurement for immediate layout
+        if (GameContent.FontSystem != null && !string.IsNullOrEmpty(_statusLabel.Text)) {
+            var font = GameContent.FontSystem.GetFont(_statusLabel.FontSize);
+            var size = font.MeasureString(_statusLabel.Text);
+            _statusLabel.Position = new Vector2(Size.X - size.X - 10, 10);
+        }
     }
 
     private async void LoadIcon() {
@@ -83,5 +119,9 @@ public class AppCard : Panel {
         } catch (Exception ex) {
             Console.WriteLine($"[HentHub] Exception loading icon for {_app.Name}: {ex.Message}");
         }
+    }
+
+    public void Dispose() {
+        _iconImage?.Dispose();
     }
 }

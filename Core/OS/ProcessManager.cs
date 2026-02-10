@@ -212,7 +212,7 @@ public class ProcessManager {
     /// </summary>
     public void LoadStartupApps() {
         try {
-            var startupApps = TheGame.Core.OS.Registry.GetAllValues<bool>(Shell.Registry.Startup);
+            var startupApps = Registry.Instance.GetAllValues<bool>(Shell.Registry.Startup);
             foreach (var kvp in startupApps) {
                 if (kvp.Value) {
                     try {

@@ -29,6 +29,7 @@ public class NotificationToast : UIElement {
     private bool _isClosing = false;
     private List<Button> _actionButtons = new();
     private Button _closeButton;
+    private ProgressBar _progressBar;
 
     // Swipe support
     private bool _isDragging = false;
@@ -47,6 +48,8 @@ public class NotificationToast : UIElement {
         _notification = notification;
         _targetY = yOffset;
         _animatedY = yOffset;
+        
+        _notification.OnUpdated += HandleNotificationUpdated;
 
         // Wrap text and calculate size
         float textAvailableWidth = ToastWidth - (ToastPadding * 2 + IconSize + 10f) - 30f; // 30 for close button
@@ -61,6 +64,7 @@ public class NotificationToast : UIElement {
         float bodyHeight = string.IsNullOrEmpty(_wrappedText) ? 0 : bodyFont.MeasureString(_wrappedText).Y;
         
         float contentHeight = ToastPadding * 2 + Math.Max(IconSize, titleHeight + (titleHeight > 0 && bodyHeight > 0 ? 4 : 0) + bodyHeight);
+        if (_notification.ShowProgress) contentHeight += 25f;
         if (_notification.Actions.Count > 0) contentHeight += 40f;
 
         Size = new Vector2(ToastWidth, Math.Max(80f, contentHeight));
@@ -94,6 +98,19 @@ public class NotificationToast : UIElement {
             btnX += 85;
         }
 
+        if (_notification.ShowProgress) {
+            float pbY = titleHeight + bodyHeight + (titleHeight > 0 && bodyHeight > 0 ? 4 : 0) + ToastPadding + 5f;
+            _progressBar = new ProgressBar(new Vector2(IconSize + ToastPadding + 10f, pbY), new Vector2(textAvailableWidth, 12)) {
+                Value = _notification.Progress
+            };
+            AddChild(_progressBar);
+        }
+
+        // Adjust display duration if it's a progress notification
+        if (!_notification.AutoDismiss) {
+            // Effectively disable auto-dismiss timer
+        }
+
         // Animate in
         Tweener.To(this, v => _animatedX = v, _animatedX, 0f, 0.3f, Easing.EaseOutQuad);
     }
@@ -124,10 +141,10 @@ public class NotificationToast : UIElement {
         );
         _isHovered = hoverBounds.Contains(InputManager.MousePosition);
 
-        // Only count timer if not hovered and not dragging
-        if (!_isHovered && !_isDragging) {
+        // Only count timer if not hovered and not dragging and AutoDismiss is on
+        if (!_isHovered && !_isDragging && _notification.AutoDismiss) {
             _timer += (float)gameTime.ElapsedGameTime.TotalSeconds;
-            if (_timer >= DisplayDuration) {
+            if (_timer >= _notification.DismissTime) {
                 Close();
                 base.Update(gameTime);
                 return;
@@ -248,5 +265,12 @@ public class NotificationToast : UIElement {
         }
 
         base.Draw(sb, batch);
+    }
+
+    private void HandleNotificationUpdated() {
+        _wrappedText = TextHelper.WrapText(GameContent.FontSystem.GetFont(14), _notification.Text, ToastWidth - (ToastPadding * 2 + IconSize + 10f) - 30f);
+        if (_progressBar != null) {
+            _progressBar.Value = _notification.Progress;
+        }
     }
 }

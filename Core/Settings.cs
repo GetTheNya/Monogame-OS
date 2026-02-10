@@ -25,9 +25,9 @@ public static class Settings {
         /// Default: C:\Windows\Web\Wallpaper\img0.jpg
         /// </summary>
         public static string WallpaperPath {
-            get => Registry.GetValue($"{BASE_PATH}\\WallpaperPath", "C:\\Windows\\Web\\Wallpaper\\img0.jpg");
+            get => Registry.Instance.GetValue($"{BASE_PATH}\\WallpaperPath", "C:\\Windows\\Web\\Wallpaper\\img0.jpg");
             set {
-                Registry.SetValue($"{BASE_PATH}\\WallpaperPath", value);
+                Registry.Instance.SetValue($"{BASE_PATH}\\WallpaperPath", value);
                 OnWallpaperChanged?.Invoke();
             }
         }
@@ -37,9 +37,9 @@ public static class Settings {
         /// Default: Fill
         /// </summary>
         public static string WallpaperDrawMode {
-            get => Registry.GetValue($"{BASE_PATH}\\WallpaperDrawMode", "Fill");
+            get => Registry.Instance.GetValue($"{BASE_PATH}\\WallpaperDrawMode", "Fill");
             set {
-                Registry.SetValue($"{BASE_PATH}\\WallpaperDrawMode", value);
+                Registry.Instance.SetValue($"{BASE_PATH}\\WallpaperDrawMode", value);
                 // No callback needed - draw mode change doesn't require reloading texture
             }
         }

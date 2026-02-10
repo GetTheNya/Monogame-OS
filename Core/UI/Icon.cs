@@ -5,7 +5,7 @@ using TheGame.Graphics;
 
 namespace TheGame.Core.UI;
 
-public class Icon : UIElement {
+public class Icon : UIElement, IDisposable {
     public Texture2D Texture { get; set; }
     public Rectangle? SourceRect { get; set; }
     public Color Tint { get; set; } = Color.White;
@@ -47,5 +47,9 @@ public class Icon : UIElement {
             batch.FillRectangle(absPos, Size, Color.Magenta); // Missing texture color
             batch.BorderRectangle(absPos, Size, Color.Black, 1f);
         }
+    }
+
+    public void Dispose() {
+        Texture?.Dispose();
     }
 }

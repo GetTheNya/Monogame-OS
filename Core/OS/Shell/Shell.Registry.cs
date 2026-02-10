@@ -32,14 +32,14 @@ public static partial class Shell {
         public static T GetSetting<T>(string key, T defaultValue = default, string appIdOverride = null) {
             string appId = appIdOverride ?? AppLoader.Instance.GetAppIdFromAssembly(Assembly.GetCallingAssembly());
             if (appId == null) return defaultValue;
-            return TheGame.Core.OS.Registry.GetValue($"HKCU\\Software\\{appId}\\{key}", defaultValue);
+            return TheGame.Core.OS.Registry.Instance.GetValue($"HKCU\\Software\\{appId}\\{key}", defaultValue);
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static void SetSetting<T>(string key, T value, string appIdOverride = null) {
             string appId = appIdOverride ?? AppLoader.Instance.GetAppIdFromAssembly(Assembly.GetCallingAssembly());
             if (appId == null) return;
-            TheGame.Core.OS.Registry.SetValue($"HKCU\\Software\\{appId}\\{key}", value);
+            TheGame.Core.OS.Registry.Instance.SetValue($"HKCU\\Software\\{appId}\\{key}", value);
         }
     }
 }

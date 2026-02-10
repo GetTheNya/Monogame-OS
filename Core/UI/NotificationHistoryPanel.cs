@@ -217,6 +217,7 @@ public class NotificationHistoryPanel : UIElement {
 public class NotificationHistoryItem : UIElement {
     private Notification _notification;
     private Button _dismissBtn;
+    private ProgressBar _progressBar;
     private List<Button> _actionButtons = new();
     public Action OnDismiss;
 
@@ -236,7 +237,8 @@ public class NotificationHistoryItem : UIElement {
     public NotificationHistoryItem(Vector2 pos, float width, Notification notif) {
         Position = pos;
         _notification = notif;
-
+        _notification.OnUpdated += HandleNotificationUpdated;
+        
         float textX = 55f;
         float textAvailableWidth = width - textX - 30f; // 30 for dismiss button
         
@@ -269,6 +271,14 @@ public class NotificationHistoryItem : UIElement {
                 btnX += 90;
             }
             currentY += 32f;
+        }
+
+        if (_notification.ShowProgress) {
+            _progressBar = new ProgressBar(new Vector2(textX, currentY), new Vector2(textAvailableWidth, 10)) {
+                Value = _notification.Progress
+            };
+            AddChild(_progressBar);
+            currentY += 20f;
         }
         
         float contentHeight = currentY + 22f; // Area for timestamp
@@ -365,6 +375,12 @@ public class NotificationHistoryItem : UIElement {
         base.Update(gameTime);
     }
 
+    private void HandleNotificationUpdated() {
+        if (_progressBar != null) {
+            _progressBar.Value = _notification.Progress;
+        }
+    }
+
     protected override void OnClick() {
         if (_isAnimatingOut) return;
         _notification.OnClick?.Invoke();
@@ -410,6 +426,11 @@ public class NotificationHistoryItem : UIElement {
 
         _dismissBtn.Position = new Vector2(Size.X - 25 + _swipeOffset, 5);
         _dismissBtn.Opacity = alpha;
+
+        if (_progressBar != null) {
+            _progressBar.Position = new Vector2(55f + _swipeOffset, _progressBar.Position.Y);
+            _progressBar.Opacity = alpha;
+        }
 
         // Ensure action buttons follow swipe
         float btnBaseX = 55f;

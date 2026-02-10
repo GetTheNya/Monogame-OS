@@ -153,7 +153,7 @@ public static partial class Shell {
             if (_resolvedFileIcons.TryGetValue(cacheKey, out var cached)) return cached;
 
             var data = File.GetFileTypeHandlers(ext); // This triggers self-healing
-            var handlers = TheGame.Core.OS.Registry.GetValue<FileAssociationData>($"{Shell.Registry.FileAssociations}\\{ext}", null);
+            var handlers = TheGame.Core.OS.Registry.Instance.GetValue<FileAssociationData>($"{Shell.Registry.FileAssociations}\\{ext}", null);
             
             if (handlers != null && handlers.Handlers.TryGetValue(appId, out var handler) && !string.IsNullOrEmpty(handler.Icon)) {
                 string appDir = AppLoader.Instance.GetAppDirectory(appId);
@@ -183,7 +183,7 @@ public static partial class Shell {
     public static void Initialize(Panel windowLayer, TheGame.Core.UI.ContextMenu contextMenu) {
         WindowLayer = windowLayer;
         GlobalContextMenu = contextMenu;
-        Registry.Initialize();
+        TheGame.Core.OS.Registry.Instance.Initialize();
         UI.InternalInitialize();
     }
 

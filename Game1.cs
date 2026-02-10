@@ -106,7 +106,7 @@ public class Game1 : Game {
         _fps.Update(gameTime);
 
         AudioManager.Instance.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
-        Registry.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
+        Registry.Instance.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
         DebugLogger.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
 
         // The drag cleanup is now handled by DragDropManager through Shell.DraggedItem wrapper

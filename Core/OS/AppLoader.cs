@@ -19,12 +19,15 @@ public class AppLoader {
 
     private Dictionary<string, Assembly> _compiledApps = new Dictionary<string, Assembly>();
     private Dictionary<string, string> _appPaths = new Dictionary<string, string>();
+    private Dictionary<string, string> _appVersions = new Dictionary<string, string>();
 
     public bool IsLoadingComplete { get; private set; } = false;
     public int AppsLoadedCount { get; private set; } = 0;
     public int TotalAppsToLoad { get; private set; } = 0;
 
-    private AppLoader() { }
+    private AppLoader() { 
+        LoadSearchPathsFromRegistry();
+    }
 
     /// <summary>
     /// Loads an app from a folder, compiles it if needed, and registers it with the Shell.
@@ -62,8 +65,9 @@ public class AppLoader {
                 return true;
             }
 
-            // Store path early so hot reload can find the app even if compilation fails
+            // Store path and version early
             _appPaths[upperAppId] = appFolderPath;
+            _appVersions[upperAppId] = manifest.Version ?? "1.0.0";
 
             // Gather all .cs source files
             var sourceFiles = GatherSourceFiles(hostPath);
@@ -290,6 +294,74 @@ public class AppLoader {
         }
     }
 
+    private List<string> _searchPaths = new List<string> { 
+        "C:\\Windows\\System32\\SystemApps\\",
+        "C:\\Windows\\System32\\TerminalApps\\",
+        "C:\\Program Files\\",
+        "C:\\Program Files\\TerminalApps\\"
+    };
+
+    public IReadOnlyList<string> SearchPaths => _searchPaths;
+
+    public void AddSearchPath(string virtualPath) {
+        if (string.IsNullOrEmpty(virtualPath)) return;
+        
+        // Validation: Must be a full virtual path (e.g. C:\...)
+        if (!virtualPath.Contains(":") && !virtualPath.StartsWith("\\\\")) {
+            DebugLogger.Log($"[AppLoader] Rejected invalid search path: {virtualPath}. Stack: {Environment.StackTrace}");
+            return;
+        }
+
+        string normalized = virtualPath.Replace('/', '\\');
+        if (!normalized.EndsWith("\\")) normalized += "\\";
+
+        if (!_searchPaths.Any(p => p.Equals(normalized, StringComparison.OrdinalIgnoreCase))) {
+            _searchPaths.Add(normalized);
+            SaveSearchPathsToRegistry();
+            DebugLogger.Log($"Added app search path: {normalized}");
+        }
+    }
+
+    private void SaveSearchPathsToRegistry() {
+        try {
+            // Filter out default paths which are hardcoded
+            var defaultPaths = new[] { 
+                "C:\\Windows\\System32\\SystemApps\\",
+                "C:\\Windows\\System32\\TerminalApps\\",
+                "C:\\Program Files\\",
+                "C:\\Program Files\\TerminalApps\\"
+            };
+            var persistentPaths = _searchPaths.Where(p => !defaultPaths.Any(dp => dp.Equals(p, StringComparison.OrdinalIgnoreCase))).ToList();
+            Registry.Instance.SetValue("HKLM\\Software\\HentOS\\AppLoader", "SearchPaths", string.Join(";", persistentPaths));
+        } catch (Exception ex) {
+            DebugLogger.Log($"Error saving search paths: {ex.Message}");
+        }
+    }
+
+    public void LoadSearchPathsFromRegistry() {
+        try {
+            string paths = Registry.Instance.GetValue<string>("HKLM\\Software\\HentOS\\AppLoader", "SearchPaths", null);
+            if (!string.IsNullOrEmpty(paths)) {
+                bool changed = false;
+                foreach (var path in paths.Split(';', StringSplitOptions.RemoveEmptyEntries)) {
+                    // Only add if it looks like a real path
+                    if (path.Contains(":") || path.StartsWith("\\\\")) {
+                        AddSearchPath(path);
+                    } else {
+                        changed = true;
+                        DebugLogger.Log($"[AppLoader] Cleaning up junk registry path: {path}");
+                    }
+                }
+                
+                if (changed) {
+                    SaveSearchPathsToRegistry();
+                }
+            }
+        } catch (Exception ex) {
+            DebugLogger.Log($"Error loading search paths: {ex.Message}");
+        }
+    }
+
     /// <summary>
     /// Loads all apps from a directory (e.g., C:\Windows\System32\)
     /// </summary>
@@ -372,7 +444,31 @@ public class AppLoader {
 
     public string GetAppDirectory(string appId) {
         if (string.IsNullOrEmpty(appId)) return null;
-        if (_appPaths.TryGetValue(appId.ToUpper(), out var path)) return path;
+        if (_appPaths.TryGetValue(appId.ToUpper(), out var path)) {
+            // Verify path still exists on disk to avoid stale cache hits
+            if (VirtualFileSystem.Instance.Exists(path)) return path;
+            
+            // If it doesn't exist, purge it
+            _appPaths.Remove(appId.ToUpper());
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Removes an app from all internal caches.
+    /// </summary>
+    public void UnregisterApp(string appId) {
+        if (string.IsNullOrEmpty(appId)) return;
+        string upperAppId = appId.ToUpper();
+        _appPaths.Remove(upperAppId);
+        _appVersions.Remove(upperAppId);
+        _compiledApps.Remove(upperAppId);
+        DebugLogger.Log($"[AppLoader] Unregistered {appId}");
+    }
+
+    public string GetAppVersion(string appId) {
+        if (string.IsNullOrEmpty(appId)) return null;
+        if (_appVersions.TryGetValue(appId.ToUpper(), out var version)) return version;
         return null;
     }
 
@@ -442,6 +538,9 @@ public class AppLoader {
 
             string manifestJson = File.ReadAllText(manifestPath);
             AppManifest manifest = AppManifest.FromJson(manifestJson);
+            
+            // Update version cache
+            _appVersions[upperAppId] = manifest.Version ?? "1.0.0";
 
             // Gather all .cs source files
             var sourceFiles = GatherSourceFiles(hostPath);
@@ -490,7 +589,7 @@ public class AppLoader {
     /// <summary>
     /// Close all running instances of an app (uses ProcessManager).
     /// </summary>
-    private void CloseAllInstances(string appId) {
+    public void CloseAllInstances(string appId) {
         if (string.IsNullOrEmpty(appId)) return;
         
         var processes = ProcessManager.Instance.GetProcessesByApp(appId);
@@ -515,6 +614,7 @@ public class AppLoader {
     public void Reset() {
         _compiledApps.Clear();
         _appPaths.Clear();
+        _appVersions.Clear();
         IsLoadingComplete = false;
         AppsLoadedCount = 0;
         TotalAppsToLoad = 0;

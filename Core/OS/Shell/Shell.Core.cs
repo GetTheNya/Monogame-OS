@@ -9,13 +9,13 @@ public static partial class Shell {
         public static void SetStartup(TheGame.Core.OS.Process process, bool enabled) {
             var appId = process.AppId;
             if (string.IsNullOrEmpty(appId)) return;
-            TheGame.Core.OS.Registry.SetValue($"{Shell.Registry.Startup}\\{appId.ToUpper()}", enabled);
+            TheGame.Core.OS.Registry.Instance.SetValue($"{Shell.Registry.Startup}\\{appId.ToUpper()}", enabled);
         }
 
         public static bool GetStartup(TheGame.Core.OS.Process process) {
             var appId = process.AppId;           
             if (string.IsNullOrEmpty(appId)) return false;
-            return TheGame.Core.OS.Registry.GetValue($"{Shell.Registry.Startup}\\{appId.ToUpper()}", false);
+            return TheGame.Core.OS.Registry.Instance.GetValue($"{Shell.Registry.Startup}\\{appId.ToUpper()}", false);
         }
     }
 }

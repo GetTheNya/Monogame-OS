@@ -20,11 +20,11 @@ public static partial class Shell {
             string key = $"{Shell.Registry.FileAssociations}\\{extension}";
             
             // Try to load new format first
-            var data = TheGame.Core.OS.Registry.GetValue<FileAssociationData>(key, null);
+            var data = TheGame.Core.OS.Registry.Instance.GetValue<FileAssociationData>(key, null);
             if (data != null) return data;
             
             // Check for old format (single string value)
-            string oldValue = TheGame.Core.OS.Registry.GetValue<string>(key, null);
+            string oldValue = TheGame.Core.OS.Registry.Instance.GetValue<string>(key, null);
             if (!string.IsNullOrEmpty(oldValue)) {
                 // Migrate to new format
                 data = new FileAssociationData {
@@ -37,7 +37,7 @@ public static partial class Shell {
                     }
                 };
                 // Save in new format
-                TheGame.Core.OS.Registry.SetValue(key, data);
+                TheGame.Core.OS.Registry.Instance.SetValue(key, data);
                 return data;
             }
             
@@ -50,7 +50,7 @@ public static partial class Shell {
         private static void SaveAssociationData(string extension, FileAssociationData data) {
             extension = NormalizeExtension(extension);
             string key = $"{Shell.Registry.FileAssociations}\\{extension}";
-            TheGame.Core.OS.Registry.SetValue(key, data);
+            TheGame.Core.OS.Registry.Instance.SetValue(key, data);
         }
 
         /// <summary>
