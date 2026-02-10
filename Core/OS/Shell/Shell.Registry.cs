@@ -16,6 +16,9 @@ public static partial class Shell {
         
         /// <summary>Path for startup apps: HKLM\Software\Startup</summary>
         public const string Startup = "HKLM\\Software\\Startup";
+
+        /// <summary>Path for custom URI schemes: HKLM\Software\Protocols</summary>
+        public const string Protocols = "HKLM\\Software\\Protocols";
         
         /// <summary>Path for desktop settings: HKCU\Desktop</summary>
         public const string Desktop = "HKCU\\Desktop";

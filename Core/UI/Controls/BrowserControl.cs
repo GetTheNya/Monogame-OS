@@ -179,6 +179,28 @@ public class BrowserControl : UIElement, IDisposable, IDropTarget {
             _ownerProcess = ownerProcess;
         }
 
+        protected override bool OnBeforeBrowse(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, bool userGesture, bool isRedirect) {
+            if (string.IsNullOrEmpty(request.Url)) return false;
+
+            // Check for custom URI schemes
+            int colonIndex = request.Url.IndexOf(':');
+            if (colonIndex > 0) {
+                string scheme = request.Url.Substring(0, colonIndex).ToLower();
+                
+                // Standard web schemes are handled normally
+                if (scheme != "http" && scheme != "https" && scheme != "about" && scheme != "data") {
+                    string targetAppId = Shell.Protocols.GetApp(scheme);
+                    if (!string.IsNullOrEmpty(targetAppId)) {
+                        // Protocol recognized: Intercept and launch with confirmation
+                        Shell.Protocols.Launch(request.Url, _ownerProcess?.AppId ?? "Horizon");
+                        return true; // Cancel standard browser navigation
+                    }
+                }
+            }
+
+            return false;
+        }
+
         protected override IResourceRequestHandler GetResourceRequestHandler(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, bool isNavigation, bool isDownload, string requestInitiator, ref bool disableDefaultHandling) {
             return new NetworkResourceRequestHandler(_ownerProcess);
         }

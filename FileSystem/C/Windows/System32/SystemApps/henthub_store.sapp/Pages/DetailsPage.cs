@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using TheGame;
 using TheGame.Core;
 using TheGame.Core.OS;
 using TheGame.Core.UI;
@@ -84,11 +85,11 @@ public class DetailsPage : StorePage, IDisposable {
             }
 
             // Dependency Check
-            var missing = AppInstaller.Instance.CheckDependencies(_app.Dependencies);
-            if (missing.Count > 0) {
-                var dialog = new DependencyDialog(missing, 
+            var root = StoreManager.Instance.ResolveDependencyTree(_app);
+            if (root.HasMissingDependencies) {
+                var dialog = new DependencyDialog(root, 
                     () => Shell.Notifications.Show("HentHub", "Installation cancelled due to missing dependencies."),
-                    () => StartBatchInstallation(missing),
+                    (missingIds) => StartBatchInstallation(missingIds),
                     () => StartInstallation()
                 );
                 _process.ShowModal(dialog);
@@ -205,7 +206,28 @@ public class DetailsPage : StorePage, IDisposable {
         OnResize += () => {
             _contentScroll.Size = new Vector2(ClientSize.X, ClientSize.Y - 50);
             if (_screenshotScroll != null) _screenshotScroll.Size = new Vector2(ClientSize.X, 220);
+            UpdateDescriptionLayout();
         };
+
+        // Initial Layout
+        UpdateDescriptionLayout();
+    }
+
+    private void UpdateDescriptionLayout() {
+        if (_descLabel == null || _app == null || _contentScroll == null) return;
+
+        float padding = 20;
+        float maxWidth = _contentScroll.ClientSize.X - padding;
+        if (maxWidth <= 0) return;
+
+        var font = GameContent.FontSystem.GetFont(_descLabel.FontSize);
+        if (font == null) return;
+
+        _descLabel.Text = TextHelper.WrapText(font, _app.Description ?? "No description provided.", maxWidth);
+        
+        // Ensure the content scroll knows its height has changed
+        // We add some bottom padding for the scroll area
+        _contentScroll.UpdateContentHeight(_descLabel.Position.Y + _descLabel.Size.Y + 20);
     }
 
     private string GetInstallButtonText() {
@@ -247,7 +269,7 @@ public class DetailsPage : StorePage, IDisposable {
     private async void StartBatchInstallation(List<string> missingIds) {
         var requests = new List<InstallRequest>();
         
-        // 1. Add missing dependencies
+        // 1. Add missing dependencies and the main app (if missing) from the tree
         foreach (var id in missingIds) {
             var depApp = StoreManager.Instance.GetApp(id);
             if (depApp != null) {
@@ -261,14 +283,16 @@ public class DetailsPage : StorePage, IDisposable {
             }
         }
 
-        // 2. Add the main app
-        requests.Add(new InstallRequest {
-            AppId = _app.AppId,
-            Name = _app.Name,
-            DownloadUrl = _app.DownloadUrl?.Replace("localhost", "127.0.0.1"),
-            Version = _app.Version,
-            IsTerminalOnly = _app.TerminalOnly
-        });
+        // 2. If the main app was NOT missing (e.g. re-install/update) but not in tree, add it last
+        if (!requests.Any(r => r.AppId.Equals(_app.AppId, StringComparison.OrdinalIgnoreCase))) {
+            requests.Add(new InstallRequest {
+                AppId = _app.AppId,
+                Name = _app.Name,
+                DownloadUrl = _app.DownloadUrl?.Replace("localhost", "127.0.0.1"),
+                Version = _app.Version,
+                IsTerminalOnly = _app.TerminalOnly
+            });
+        }
 
         Shell.Notifications.Show("HentHub", $"Queueing {requests.Count} apps for installation...");
         

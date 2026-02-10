@@ -42,9 +42,21 @@ public class MainWindow : Window {
         _pageStack.Push(new MainPage());
 
         if (!string.IsNullOrEmpty(StartupAppId)) {
+            string appId = StartupAppId;
+            
+            // Handle protocol URI (e.g., henthub://id?=xxx)
+            if (appId.StartsWith("henthub://", StringComparison.OrdinalIgnoreCase)) {
+                if (appId.Contains("id?=")) {
+                    appId = appId.Split("id?=")[1].Split('&')[0];
+                } else {
+                    // Fallback: strip scheme and use the rest as ID
+                    appId = appId.Substring(10).Trim('/');
+                }
+            }
+
             bool loaded = await StoreManager.Instance.LoadManifestAsync(OwnerProcess);
             if (loaded) {
-                var app = StoreManager.Instance.GetApp(StartupAppId);
+                var app = StoreManager.Instance.GetApp(appId);
                 if (app != null) {
                     _pageStack.Push(new DetailsPage(app, OwnerProcess));
                 }
