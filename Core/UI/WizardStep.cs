@@ -58,6 +58,12 @@ public abstract class WizardStep<TData> : Panel {
     public virtual WizardStep<TData> GetNextStep() => null;
 
     /// <summary>
+    /// Custom text for the Next button when this step is active.
+    /// If null, the default "Next >" or "Finish" will be used.
+    /// </summary>
+    public virtual string NextButtonText => null;
+
+    /// <summary>
     /// Called if the wizard is canceled while this step is active.
     /// </summary>
     public virtual void OnCancel() { }

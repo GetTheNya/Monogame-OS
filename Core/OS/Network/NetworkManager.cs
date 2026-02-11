@@ -66,7 +66,7 @@ public class NetworkManager {
         var handler = new HttpClientHandler {
             AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate,
             UseCookies = false, // Let the browser manage its own cookies
-            AllowAutoRedirect = false // Let the browser handle redirects
+            AllowAutoRedirect = true // Enable following redirects (needed for GitHub raw URLs)
         };
         _httpClient = new HttpClient(handler) {
             Timeout = TimeSpan.FromSeconds(30),

@@ -47,7 +47,7 @@ public class PersonalizationPanel : Panel {
             OnClickAction = () => {
                 var picker = new FilePickerWindow(
                     "Select Wallpaper",
-                    @"C:\Users\Admin\Documents",
+                    $@"C:\Users\{SystemConfig.Username}\Documents",
                     "",
                     FilePickerMode.Open,
                     (selectedPath) => {

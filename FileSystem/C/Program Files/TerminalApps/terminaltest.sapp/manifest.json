@@ -1,7 +1,0 @@
-{
-  "appId": "TERMINALTEST",
-  "name": "Terminal Test Utility",
-  "entryClass": "TerminalTest.Program",
-  "entryMethod": "Main",
-  "terminalOnly": true
-}

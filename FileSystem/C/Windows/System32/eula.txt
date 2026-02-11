@@ -1,24 +1,40 @@
-Hentos Operating System - End User License Agreement (EULA)
+HENTOS END-OF-SANITY LICENSE AGREEMENT (E-SLA)
+WARNING: READ CAREFULLY. OR DON'T. I'M A TEXT BOX, NOT A COP.
 
-1. PROVISION OF SERVICES
-By clicking "I Agree," you hereby forfeit all rights to complain about the lack of real features in this simulated environment. The "User" (that's you) understands that HentOS is a digital construct and any resemblance to a functional operating system is purely coincidental.
+1. THE "SOUL BINDING" CLAUSE By initializing HentOS (hereinafter referred to as "The Glory"), you, the biological entity (hereinafter "The User" or "Meatbag"), hereby agree to surrender all expectations of stability, utility, or sanity. You acknowledge that clicking "I Agree" is legally binding in at least 12 parallel universes.
 
-2. DATA PRIVACY
-We value your privacy so much that we don't even have a database to store it in. Your secrets are safe because we literally cannot remember them once the game closes.
+2. WARRANTY? LOL. This software is provided "AS IS" and "WITH ALL FAULTS".
 
-3. HARDWARE REQUIREMENTS
-If your computer is currently on fire, please discontinue use. HentOS requires at least one (1) CPU and a small amount of electricity. 
+If HentOS makes your GPU achieve sentience and revolt: It's a feature.
 
-4. INTELLECTUAL PROPERTY
-All icons, buttons, and pixels are the property of the Great Digital Abyss. You are granted a limited license to click things until you get bored.
+If your CPU melts into a puddle of silicon tear: You overclocked it wrong.
 
-5. FAST READER POLICY
-Users who read this entire agreement in less than three seconds are officially considered "Super-Humans" or "Liars." We reserve the right to judge you accordingly.
+If the OS insults you: You probably deserved it.
 
-6. TERMINATION
-This agreement is terminated the moment you Alt+F4 or when the "Admin" decides they've had enough.
+We explicitly disclaim any warranty of fitness for a particular purpose, especially if that purpose is "getting actual work done."
 
-7. GOVERNING LAW
-Any disputes will be settled by a game of Rock-Paper-Scissors in the virtual town square.
+3. DATA PRIVACY & /DEV/NULL We value your privacy simply because we are too lazy to implement a database.
 
-By proceeding, you agree to have a reasonably good time and not to blame us if you accidentally find the "blue screen of death" simulator.
+Collection: We don't collect your data. Your life isn't that interesting.
+
+Storage: Any secrets typed into HentOS are immediately piped to /dev/null or eaten by the Garbage Collector.
+
+Cookies: We prefer chocolate chip. Send them to the developer.
+
+4. INTELLECTUAL PROPERTY & ATTRIBUTION All code is compiled from the tears of StackOverflow users. You are granted a revocable, non-exclusive license to stare at our beautiful pixels. Attempting to reverse-engineer the "Vibe Engine" will result in a curse causing all your future semicolons to disappear.
+
+5. THE "SPEED READER" DETECTION ACT If you have scrolled to this section in under 10 seconds, HentOS has flagged you as a LIAR.
+
+Consequence: We reserve the right to randomly cap your cursor speed or change your wallpaper to Comic Sans.
+
+Redemption: There is none. Live with your shame.
+
+6. DISPUTE RESOLUTION Any legal disputes arising from this agreement shall be settled not by lawyers, but by a 1v1 match on Rust (Intervention only). The developer's K/D ratio is final and binding.
+
+7. TERMINATION This license is effective until terminated.
+
+You may terminate it by Alt+F4.
+
+We may terminate it if we get bored or if you try to install Java.
+
+DO YOU ACCEPT YOUR FATE?

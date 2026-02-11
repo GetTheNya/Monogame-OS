@@ -170,7 +170,7 @@ public class DesktopScene : Core.Scenes.Scene {
     private void LoadDesktopIcons() {
         foreach (var child in _desktopLayer.Children.ToArray()) _desktopLayer.RemoveChild(child);
 
-        string desktopPath = "C:\\Users\\Admin\\Desktop\\";
+        string desktopPath = $"C:\\Users\\{SystemConfig.Username}\\Desktop\\";
         var files = Core.OS.VirtualFileSystem.Instance.GetFiles(desktopPath);
         var dirs = Core.OS.VirtualFileSystem.Instance.GetDirectories(desktopPath);
 
@@ -479,7 +479,7 @@ public class DesktopScene : Core.Scenes.Scene {
         
         // Clear all tracked and persisted positions for the icons we're about to sort
         // This forces LoadDesktopIcons to use its default layout logic in the sorted order
-        string desktopPath = "C:\\Users\\Admin\\Desktop\\";
+        string desktopPath = $"C:\\Users\\{SystemConfig.Username}\\Desktop\\";
         var files = Core.OS.VirtualFileSystem.Instance.GetFiles(desktopPath);
         var dirs = Core.OS.VirtualFileSystem.Instance.GetDirectories(desktopPath);
         string trashPath = "C:\\$Recycle.Bin\\";

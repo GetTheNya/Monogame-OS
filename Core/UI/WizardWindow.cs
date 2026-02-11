@@ -87,7 +87,7 @@ public class WizardWindow<TData> : Window {
         UpdateLayout();
     }
 
-    private void UpdateLayout() {
+    protected void UpdateLayout() {
         if (_stepContainer == null) return;
 
         // Content container for steps
@@ -122,7 +122,8 @@ public class WizardWindow<TData> : Window {
             _backButton.IsEnabled = _navigationStack.Count > 1 && CurrentStep.CanGoBack;
             
             // If it's the last step (GetNextStep returns null), change text to Finish
-            _nextButton.Text = CurrentStep.GetNextStep() == null ? "Finish" : "Next >";
+            string defaultNext = CurrentStep.GetNextStep() == null ? "Finish" : "Next >";
+            _nextButton.Text = CurrentStep.NextButtonText ?? defaultNext;
 
             _dotUpdateTimer += (float)gameTime.ElapsedGameTime.TotalSeconds;
             if (_dotUpdateTimer > 0.2f) {
@@ -181,7 +182,7 @@ public class WizardWindow<TData> : Window {
         UpdateProgressDots();
     }
 
-    private void Next() {
+    public void Next() {
         if (_isAnimating || CurrentStep == null) return;
 
         CurrentStep.OnNext();
@@ -194,7 +195,7 @@ public class WizardWindow<TData> : Window {
         }
     }
 
-    private void Back() {
+    public void Back() {
         if (_isAnimating || CurrentStep == null) return;
         
         CurrentStep.OnBack();
@@ -229,7 +230,7 @@ public class WizardWindow<TData> : Window {
         AddChildWindow(msgBox);
     }
     
-    private void AddChildWindow(WindowBase window) {
+    public void AddChildWindow(WindowBase window) {
         window.ParentWindow = this;
         ChildWindows.Add(window);
         Parent?.AddChild(window);

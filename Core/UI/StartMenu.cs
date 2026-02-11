@@ -124,7 +124,7 @@ public class StartMenu : Panel {
         EnsureDefaultShortcuts();
         _scrollPanel.ClearChildren();
         
-        string startMenuPath = "C:\\Users\\Admin\\Start Menu\\";
+        string startMenuPath = $"C:\\Users\\{SystemConfig.Username}\\Start Menu\\";
         if (!Core.OS.VirtualFileSystem.Instance.Exists(startMenuPath)) {
             Core.OS.VirtualFileSystem.Instance.CreateDirectory(startMenuPath);
         }
@@ -146,7 +146,7 @@ public class StartMenu : Panel {
     }
 
     private void EnsureDefaultShortcuts() {
-        string startMenuPath = "C:\\Users\\Admin\\Start Menu\\";
+        string startMenuPath = $"C:\\Users\\{SystemConfig.Username}\\Start Menu\\";
         if (!VirtualFileSystem.Instance.Exists(startMenuPath)) {
             VirtualFileSystem.Instance.CreateDirectory(startMenuPath);
         }

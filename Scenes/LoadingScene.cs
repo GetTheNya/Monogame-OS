@@ -83,6 +83,8 @@ public class LoadingScene : Core.Scenes.Scene {
 
         spriteBatch.End();
         
+        shapeBatch.Begin();
         _spinner.Draw(spriteBatch, shapeBatch);
+        shapeBatch.End();
     }   
 }

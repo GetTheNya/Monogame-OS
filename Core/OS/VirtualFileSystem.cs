@@ -47,7 +47,10 @@ public class VirtualFileSystem {
         if (!Directory.Exists(cPath)) Directory.CreateDirectory(cPath);
 
         // Ensure default structure
-        string users = Path.Combine(cPath, "Users", "Admin");
+        string usersBase = Path.Combine(cPath, "Users");
+        if (!Directory.Exists(usersBase)) Directory.CreateDirectory(usersBase);
+
+        string users = Path.Combine(usersBase, SystemConfig.Username);
         if (!Directory.Exists(users)) Directory.CreateDirectory(users);
 
         string desktop = Path.Combine(users, "Desktop");
@@ -333,6 +336,12 @@ public class VirtualFileSystem {
         return null;
     }
 
+    public string[] ReadAllLines(string virtualPath) {
+        string hostPath = ToHostPath(virtualPath);
+        if (File.Exists(hostPath)) return File.ReadAllLines(hostPath);
+        return Array.Empty<string>();
+    }
+
     public void WriteAllText(string virtualPath, string content) {
         string hostPath = ToHostPath(virtualPath);
         string dir = Path.GetDirectoryName(hostPath);
@@ -593,7 +602,7 @@ public class VirtualFileSystem {
         string originalPath = GetOriginalPath(normalized);
         if (string.IsNullOrEmpty(originalPath)) {
             // Fallback: Restore to Desktop if original path unknown
-            originalPath = "C:\\Users\\Admin\\Desktop\\" + Path.GetFileName(trashVirtualPath);
+            originalPath = $"C:\\Users\\{SystemConfig.Username}\\Desktop\\" + Path.GetFileName(trashVirtualPath);
         }
 
         // Handle collisions in destination
@@ -662,7 +671,7 @@ public class VirtualFileSystem {
 
     public string GetAppHomeDirectory(string appId) {
         if (string.IsNullOrEmpty(appId)) return null;
-        string path = Path.Combine("C:\\Users\\Admin\\AppData\\Local", appId);
+        string path = Path.Combine($"C:\\Users\\{SystemConfig.Username}\\AppData\\Local", appId);
         CreateDirectory(path);
         return path;
     }

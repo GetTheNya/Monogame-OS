@@ -175,7 +175,7 @@ public class ImageViewerWindow : Window {
     private void OpenFile() {
         var picker = new FilePickerWindow(
             "Select Image",
-            "C:\\Users\\Admin\\Documents\\",
+            $@"C:\Users\{SystemConfig.Username}\Documents\",
             "",
             FilePickerMode.Open,
             LoadFile,

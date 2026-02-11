@@ -1,7 +1,0 @@
-{
-  "appId": "NEOFETCH",
-  "name": "Neofetch Utility",
-  "entryClass": "Neofetch.Program",
-  "entryMethod": "Main",
-  "terminalOnly": true
-}

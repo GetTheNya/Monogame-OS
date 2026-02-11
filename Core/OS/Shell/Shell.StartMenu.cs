@@ -6,7 +6,7 @@ namespace TheGame.Core.OS;
 public static partial class Shell {
     public static class StartMenu {
         public static void CreateShortcuts(IEnumerable<string> targetPaths) {
-            string startMenuPath = "C:\\Users\\Admin\\Start Menu\\";
+            string startMenuPath = $"C:\\Users\\{SystemConfig.Username}\\Start Menu\\";
 
             foreach (var path in targetPaths) {
                 string fileName = System.IO.Path.GetFileName(path.TrimEnd('\\'));

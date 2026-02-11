@@ -1,6 +1,0 @@
-title: Constructor
-description: Class constructor
----
-public $CLASSNAME$() {
-    $0
-}

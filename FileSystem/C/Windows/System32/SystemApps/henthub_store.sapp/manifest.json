@@ -5,6 +5,7 @@
     "entryMethod": "Main",
     "references": [
         "System.Text.Json",
+        "System.Net.Http",
         "FontStashSharp.MonoGame"
     ]
 }

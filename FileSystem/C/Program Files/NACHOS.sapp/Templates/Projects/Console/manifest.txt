@@ -1,9 +1,0 @@
-{
-    "appId": "{projectName}",
-    "name": "{projectName}",
-    "entryClass": "{namespace}.Program",
-    "entryMethod": "Main",
-    "terminalOnly": true,
-    "references": [ ],
-    "singleInstance": false
-}

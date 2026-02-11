@@ -143,8 +143,8 @@ public class FileExplorerWindow : Window {
         AddSidebarItem("Recycle Bin", GameContent.TrashEmptyIcon, "C:\\$Recycle.Bin\\", ref y);
         
         y += 10;
-        AddSidebarItem("Desktop", GameContent.DesktopIcon ?? GameContent.FolderIcon, "C:\\Users\\Admin\\Desktop\\", ref y);
-        AddSidebarItem("Documents", GameContent.FolderIcon, "C:\\Users\\Admin\\Documents\\", ref y);
+        AddSidebarItem("Desktop", GameContent.DesktopIcon ?? GameContent.FolderIcon, $@"C:\Users\{SystemConfig.Username}\Desktop\", ref y);
+        AddSidebarItem("Documents", GameContent.FolderIcon, $@"C:\Users\{SystemConfig.Username}\Documents\", ref y);
     }
 
     private void AddSidebarItem(string label, Texture2D icon, string path, ref float y) {

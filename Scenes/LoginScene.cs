@@ -35,7 +35,7 @@ public class LoginScene : Core.Scenes.Scene {
         _loginPanel.AddChild(avatar);
 
         // Username
-        var usernameLabel = new Label(new Vector2(panelWidth / 2 - 30, 180), "Admin") {
+        var usernameLabel = new Label(new Vector2(panelWidth / 2 - 30, 180), SystemConfig.DisplayName) {
             TextColor = Color.White,
             FontSize = 24
         };

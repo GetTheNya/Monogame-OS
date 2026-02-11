@@ -30,7 +30,7 @@ public static partial class Shell {
         /// Handles anti-overlap positioning for the entire batch.
         /// </summary>
         public static void CreateShortcuts(IEnumerable<string> targetPaths) {
-            string desktopPath = "C:\\Users\\Admin\\Desktop\\";
+            string desktopPath = $"C:\\Users\\{SystemConfig.Username}\\Desktop\\";
             int createdCount = 0;
             var localOccupied = new HashSet<(int x, int y)>();
 

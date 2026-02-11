@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using System.IO.Compression;
+using System.Net.Http;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
@@ -59,6 +60,7 @@ public class AppCompiler {
             { "System.IO.FileSystem.Watcher", MetadataReference.CreateFromFile(typeof(FileSystemWatcher).Assembly.Location) },
             { "System.Private.Uri", MetadataReference.CreateFromFile(Assembly.Load("System.Private.Uri").Location)},
             { "CefSharp", MetadataReference.CreateFromFile(Assembly.Load("CefSharp").Location)},
+            { "System.Net.Http", MetadataReference.CreateFromFile(typeof(HttpClient).Assembly.Location) },
             { "System.IO.Compression", MetadataReference.CreateFromFile(typeof(ZipFile).Assembly.Location) },
             { "System.IO.Compression.ZipFile", MetadataReference.CreateFromFile(typeof(ZipFile).Assembly.Location) },
         };

@@ -78,7 +78,7 @@ public class DetailsPage : StorePage, IDisposable {
         _installBtn = new Button(new Vector2(150, 100), new Vector2(120, 35), GetInstallButtonText());
         _installBtn.BackgroundColor = new Color(0, 120, 215);
         _installBtn.OnClickAction = () => {
-            string downloadUrl = _app.DownloadUrl?.Replace("localhost", "127.0.0.1");
+            string downloadUrl = _app.DownloadUrl;
             if (string.IsNullOrEmpty(downloadUrl)) {
                 Shell.Notifications.Show("HentHub", "Error: No download URL provided for this app.");
                 return;
@@ -250,7 +250,7 @@ public class DetailsPage : StorePage, IDisposable {
         bool success = await AppInstaller.Instance.InstallAppAsync(
             _app.AppId, 
             _app.Name,
-            _app.DownloadUrl?.Replace("localhost", "127.0.0.1"),
+            _app.DownloadUrl,
             _app.Version, 
             _process,
             _customInstallPath,
@@ -276,7 +276,7 @@ public class DetailsPage : StorePage, IDisposable {
                 requests.Add(new InstallRequest {
                     AppId = depApp.AppId,
                     Name = depApp.Name,
-                    DownloadUrl = depApp.DownloadUrl?.Replace("localhost", "127.0.0.1"),
+                    DownloadUrl = depApp.DownloadUrl,
                     Version = depApp.Version,
                     IsTerminalOnly = depApp.TerminalOnly
                 });
@@ -288,7 +288,7 @@ public class DetailsPage : StorePage, IDisposable {
             requests.Add(new InstallRequest {
                 AppId = _app.AppId,
                 Name = _app.Name,
-                DownloadUrl = _app.DownloadUrl?.Replace("localhost", "127.0.0.1"),
+                DownloadUrl = _app.DownloadUrl,
                 Version = _app.Version,
                 IsTerminalOnly = _app.TerminalOnly
             });
@@ -320,7 +320,7 @@ public class DetailsPage : StorePage, IDisposable {
     private async void LoadIcon() {
         if (string.IsNullOrEmpty(_app.IconUrl)) return;
         try {
-            string url = _app.IconUrl.Replace("localhost", "127.0.0.1");
+            string url = _app.IconUrl;
             var response = await Shell.Network.GetAsync(_process, url);
             if (response.IsSuccessStatusCode && response.BodyBytes != null) {
                 using (var ms = new MemoryStream(response.BodyBytes)) {
@@ -340,7 +340,7 @@ public class DetailsPage : StorePage, IDisposable {
         try {
             var tasks = new List<Task<Texture2D>>();
             for (int i = 0; i < _app.ScreenshotCount; i++) {
-                string url = $"http://127.0.0.1:3000/assets/screenshots/{_app.AppId}/{i}.png";
+                string url = $"https://getthenya.github.io/HentHub-Store/assets/screenshots/{_app.AppId.ToLower()}/{i}.png";
                 tasks.Add(DownloadTextureAsync(url));
             }
 

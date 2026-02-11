@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
 using TheGame.Core;
@@ -21,16 +22,21 @@ public class StoreManager {
         if (!forceRefresh && Manifest != null) return true;
 
         try {
-            // Try 127.0.0.1 as it's often more reliable than 'localhost' in simulator environments
-            var response = await Shell.Network.GetAsync(process, "http://127.0.0.1:3000/manifests/store-manifest.json");
+            var headers = new Dictionary<string, string> {
+                { "Accept", "application/json" }
+            };
+            var response = await Shell.Network.SendRequestAsync(process, "https://getthenya.github.io/HentHub-Store/manifests/store-manifest.json", HttpMethod.Get, null, headers);
 
             if (response.IsSuccessStatusCode) {
                 string json = response.BodyText;
                 Manifest = await Task.Run(() => JsonSerializer.Deserialize<StoreManifest>(json));
+                if (Manifest == null) DebugLogger.Log("[StoreManager] Manifest deserialization returned null.");
                 return Manifest != null;
+            } else {
+                DebugLogger.Log($"[StoreManager] Manifest fetch failed: {response.StatusCode} - {response.ErrorMessage} - URL: https://getthenya.github.io/HentHub-Store/manifests/store-manifest.json");
             }
         } catch (Exception ex) {
-            DebugLogger.Log($"[StoreManager] Failed to load manifest: {ex.Message}");
+            DebugLogger.Log($"[StoreManager] Exception loading manifest: {ex.Message}");
         }
         return false;
     }

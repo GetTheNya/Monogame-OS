@@ -1,4 +1,0 @@
-title: Console WriteLine
-description: Prints a line to the console
----
-Console.WriteLine($0);

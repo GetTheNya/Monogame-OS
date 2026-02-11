@@ -98,8 +98,7 @@ public class AppCard : Panel, IDisposable {
         if (string.IsNullOrEmpty(_app.IconUrl)) return;
 
         try {
-            // Replace localhost with 127.0.0.1 for simulator compatibility
-            string url = _app.IconUrl.Replace("localhost", "127.0.0.1");
+            string url = _app.IconUrl;
             
             // Use the stored _ownerProcess to ensure we have context even before adding to UI
             var response = await Shell.Network.GetAsync(_ownerProcess, url);
