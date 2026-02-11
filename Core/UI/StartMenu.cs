@@ -150,18 +150,6 @@ public class StartMenu : Panel {
         if (!VirtualFileSystem.Instance.Exists(startMenuPath)) {
             VirtualFileSystem.Instance.CreateDirectory(startMenuPath);
         }
-
-        string notepadLink = System.IO.Path.Combine(startMenuPath, "Notepad.slnk");
-        if (!VirtualFileSystem.Instance.Exists(notepadLink)) {
-            var shortcut = new Shortcut { TargetPath = "C:\\Windows\\System32\\notepad.sapp" };
-            VirtualFileSystem.Instance.WriteAllText(notepadLink, shortcut.ToJson());
-        }
-
-        string explorerLink = System.IO.Path.Combine(startMenuPath, "Explorer.slnk");
-        if (!VirtualFileSystem.Instance.Exists(explorerLink)) {
-            var shortcut = new Shortcut { TargetPath = "C:\\Windows\\System32\\explorer.sapp" };
-            VirtualFileSystem.Instance.WriteAllText(explorerLink, shortcut.ToJson());
-        }
     }
 
     private void AddMenuItem(int index, string text, Texture2D icon, Action<Button> onClick) {

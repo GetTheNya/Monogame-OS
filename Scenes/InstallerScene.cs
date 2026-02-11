@@ -55,6 +55,21 @@ public class InstallerScene : Core.Scenes.Scene {
             // Mark as installed
             Registry.Instance.SetValue("HKLM\\System\\Setup", "OSInstalled", true);
             Registry.Instance.FlushToDisk();
+
+            // Create Desktop Shortcuts
+            Shell.Desktop.CreateShortcuts(new[] {
+                ("C:\\Windows\\System32\\SystemApps\\explorer.sapp", "Your PC"),
+                ("C:\\Windows\\System32\\SystemApps\\henthub_store.sapp", "HentHub Store")
+            }, addShortcutSuffix: false);
+
+            // Create Start Menu Shortcuts
+            Shell.StartMenu.CreateShortcuts(new[] {
+                ("C:\\Windows\\System32\\SystemApps\\imageviewer.sapp", "Image Viewer"),
+                ("C:\\Windows\\System32\\SystemApps\\notepad.sapp", "Notepad"),
+                ("C:\\Windows\\System32\\SystemApps\\processmanager.sapp", "Process Manager"),
+                ("C:\\Windows\\System32\\SystemApps\\settings.sapp", "Settings"),
+                ("C:\\Windows\\System32\\SystemApps\\Terminal.sapp", "Terminal")
+            });
             
             Finish();
         };

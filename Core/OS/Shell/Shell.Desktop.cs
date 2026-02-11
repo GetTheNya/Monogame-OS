@@ -21,33 +21,36 @@ public static partial class Shell {
         /// <summary>
         /// Creates a desktop shortcut for the specified target path.
         /// </summary>
-        public static void CreateShortcut(string targetPath, string label = null) {
-            CreateShortcuts(new[] { targetPath });
+        public static void CreateShortcut(string targetPath, string label = null, bool addShortcutSuffix = true) {
+            CreateShortcuts(new[] { (targetPath, label) }, addShortcutSuffix);
         }
 
         /// <summary>
         /// Creates multiple desktop shortcuts for the specified target paths.
         /// Handles anti-overlap positioning for the entire batch.
         /// </summary>
-        public static void CreateShortcuts(IEnumerable<string> targetPaths) {
+        public static void CreateShortcuts(IEnumerable<(string path, string label)> targets, bool addShortcutSuffix = true) {
             string desktopPath = $"C:\\Users\\{SystemConfig.Username}\\Desktop\\";
             int createdCount = 0;
             var localOccupied = new HashSet<(int x, int y)>();
 
-            foreach (var path in targetPaths) {
+            foreach (var target in targets) {
+                string path = target.path;
                 string fileName = System.IO.Path.GetFileName(path.TrimEnd('\\'));
-                string shortcutLabel = fileName;
+                string shortcutLabel = target.label ?? fileName;
                 
-                if (fileName.EndsWith(".sapp", StringComparison.OrdinalIgnoreCase)) {
+                if (target.label == null && fileName.EndsWith(".sapp", StringComparison.OrdinalIgnoreCase)) {
                     shortcutLabel = System.IO.Path.GetFileNameWithoutExtension(fileName);
                 }
 
-                string shortcutName = $"{shortcutLabel} - Shortcut.slnk";
+                string shortcutName = addShortcutSuffix ? $"{shortcutLabel} - Shortcut.slnk" : $"{shortcutLabel}.slnk";
                 string destPath = System.IO.Path.Combine(desktopPath, shortcutName);
 
                 int i = 1;
                 while (VirtualFileSystem.Instance.Exists(destPath)) {
-                    destPath = System.IO.Path.Combine(desktopPath, $"{shortcutLabel} - Shortcut ({i++}).slnk");
+                    destPath = System.IO.Path.Combine(desktopPath, addShortcutSuffix 
+                        ? $"{shortcutLabel} - Shortcut ({i++}).slnk" 
+                        : $"{shortcutLabel} ({i++}).slnk");
                 }
 
                 // Get position and track it locally for this batch
@@ -57,10 +60,10 @@ public static partial class Shell {
                 // to avoid fragile hardcoded grid math here.
 
                 string json = "{\n" +
-                              $"  \"targetPath\": \"{path.Replace("\\", "\\\\")}\",\n" +
-                              $"  \"label\": \"{shortcutLabel}\",\n" +
-                              $"  \"iconPath\": null\n" +
-                              "}";
+                               $"  \"targetPath\": \"{path.Replace("\\", "\\\\")}\",\n" +
+                               $"  \"label\": \"{shortcutLabel}\",\n" +
+                               $"  \"iconPath\": null\n" +
+                               "}";
 
                 VirtualFileSystem.Instance.WriteAllText(destPath, json);
                 
@@ -71,9 +74,12 @@ public static partial class Shell {
             }
 
             if (createdCount > 0) {
-                Notifications.Show("Success", $"Created {createdCount} shortcut(s) on the desktop.");
                 RefreshDesktop?.Invoke();
             }
+        }
+
+        public static void CreateShortcuts(IEnumerable<string> targetPaths) {
+            CreateShortcuts(System.Linq.Enumerable.Select(targetPaths, p => (p, (string)null)));
         }
     }
 }
