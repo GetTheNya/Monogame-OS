@@ -73,6 +73,8 @@ public class LoadingScene : Core.Scenes.Scene {
         var viewport = G.GraphicsDevice.Viewport;
         var font = GameContent.FontSystem.GetFont(24);
 
+        font.DrawText(spriteBatch, $"OS version: {SystemVersion.Current}", Vector2.Zero, Color.White * 0.7f);
+
         string loadingText = $"Loading System... {(int)(_loadingProgress * 100)}%";
         var loadingTextSize = font.MeasureString(loadingText);
         font.DrawText(spriteBatch, loadingText, new Vector2((viewport.Width / 2) - (loadingTextSize.X / 2), (viewport.Height / 2) + 100), Color.White * 0.7f);

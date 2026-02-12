@@ -32,10 +32,10 @@ jobs:
       run: dotnet restore
 
     - name: Build
-      run: dotnet build --configuration Release --no-restore
+      run: dotnet build --configuration Release --no-restore -p:GitTag=${{ github.ref_name }}
 
     - name: Publish
-      run: dotnet publish -c Release -r win-x64 --self-contained true -p:PublishTrimmed=false -p:PublishSingleFile=false -o ./publish
+      run: dotnet publish -c Release -r win-x64 --self-contained true -p:PublishTrimmed=false -p:PublishSingleFile=false -o ./publish -p:GitTag=${{ github.ref_name }}
 
     - name: Zip Build Output
       shell: powershell
@@ -46,13 +46,30 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: TheGame-Windows
-        path: TheGame.zip
+        path: |
+          TheGame.zip
+          version.json
+
+    - name: Create version.json
+      if: startsWith(github.ref, 'refs/tags/v')
+      shell: pwsh
+      run: |
+        $version = "${{ github.ref_name }}".TrimStart('v')
+        $date = Get-Date -Format "yyyy-MM-dd"
+        $json = @{
+            latestVersion = $version
+            releaseDate = $date
+            downloadUrl = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/TheGame.zip"
+        } | ConvertTo-Json
+        $json | Out-File -FilePath version.json -Encoding utf8
 
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/v')
       uses: softprops/action-gh-release@v2
       with:
-        files: TheGame.zip
+        files: |
+          TheGame.zip
+          version.json
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

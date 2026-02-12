@@ -43,7 +43,13 @@
     <Message Text="Restoring dotnet tools" Importance="High" />
     <Exec Command="dotnet tool restore" />
   </Target>
-<Target Name="MoveDllsToLib" AfterTargets="Build">
+  <Target Name="GenerateSystemVersion" BeforeTargets="BeforeBuild">
+    <PropertyGroup>
+      <GitTag Condition="'$(GitTag)' == ''">v0.0.0-local</GitTag>
+    </PropertyGroup>
+    <WriteLinesToFile File="SystemVersion.cs" Overwrite="true" Lines="namespace TheGame%3b%0a%0apublic static class SystemVersion %0a{%0a    public static string Current = &quot;$(GitTag)&quot;%3b%0a}" />
+  </Target>
+  <Target Name="MoveDllsToLib" AfterTargets="Build">
   <ItemGroup>
     <DllFiles Include="$(TargetDir)*.dll" Exclude="$(TargetDir)$(TargetName).dll;$(TargetDir)MonoGame.Framework.dll;$(TargetDir)CefSharp*.dll;$(TargetDir)Ijwhost.dll" />
     <PdbFiles Include="$(TargetDir)*.pdb" Exclude="$(TargetDir)$(TargetName).pdb" />

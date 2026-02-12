@@ -53,3 +53,7 @@ $RECYCLE.BIN/
 # Personal FileSystem data
 FileSystem/C/Users/Admin/Documents/
 FileSystem/C/Users/Admin/Start Menu/
+
+# Generated versioning files
+SystemVersion.cs
+version.json
