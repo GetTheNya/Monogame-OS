@@ -16,7 +16,7 @@
     <ApplicationIcon>Icon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
-	<PackageReference Include="chromiumembeddedframework.runtime.win-x64" Version="144.0.12" GeneratePathProperty="true" />
+    <PackageReference Include="chromiumembeddedframework.runtime.win-x64" Version="144.0.12" GeneratePathProperty="true" />
     <PackageReference Include="CefSharp.OffScreen.NETCore" Version="144.0.120" />
     <PackageReference Include="FontStashSharp.MonoGame" Version="1.3.6" />
     <PackageReference Include="MonoGame.Content.Builder.Task" Version="3.8.1.303" />
@@ -43,11 +43,16 @@
     <Message Text="Restoring dotnet tools" Importance="High" />
     <Exec Command="dotnet tool restore" />
   </Target>
-  <Target Name="GenerateSystemVersion" BeforeTargets="BeforeBuild">
+  <Target Name="GenerateSystemVersion" BeforeTargets="BeforeBuild;CoreCompile">
     <PropertyGroup>
       <GitTag Condition="'$(GitTag)' == ''">v0.0.0-local</GitTag>
     </PropertyGroup>
+    <!-- On fresh CI build, SystemVersion.cs might not exist yet, but the SDK has already calculated default items. 
+         We generate it and explicitly add it to @(Compile) if it's not there, while avoiding duplicates locally. -->
     <WriteLinesToFile File="SystemVersion.cs" Overwrite="true" Lines="namespace TheGame%3b%0a%0apublic static class SystemVersion %0a{%0a    public static string Current = &quot;$(GitTag)&quot;%3b%0a}" />
+    <ItemGroup Condition="'$(CI)' == 'true' or !Exists('SystemVersion.cs')">
+      <Compile Include="SystemVersion.cs" />
+    </ItemGroup>
   </Target>
   <Target Name="MoveDllsToLib" AfterTargets="Build">
   <ItemGroup>
