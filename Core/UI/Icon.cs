@@ -49,7 +49,11 @@ public class Icon : UIElement, IDisposable {
         }
     }
 
-    public void Dispose() {
-        Texture?.Dispose();
+    protected override void Dispose(bool disposing) {
+        if (disposing) {
+            // Textures should be managed by the systems that load them (ContentManager, Process, etc.)
+            // Disposing it here breaks shared icons.
+        }
+        base.Dispose(disposing);
     }
 }

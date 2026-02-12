@@ -1,0 +1,19 @@
+{
+  "appId": "UPDATESVC",
+  "name": "Update Service",
+  "icon": "icon.png",
+  "version": "1.0.0",
+  "author": "TheGame Team",
+  "description": "Checks for updates in the background",
+  "entryPoint": "Program.cs",
+  "entryClass": "UpdateService.App",
+  "entryMethod": "Main",
+  "permissions": [
+    "network",
+    "notifications"
+  ],
+  "dependencies": [],
+  "references": [
+    "System.Text.Json"
+  ]
+}

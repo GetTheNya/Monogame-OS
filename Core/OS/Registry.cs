@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 
 namespace TheGame.Core.OS;
 
@@ -44,7 +45,7 @@ public class Registry {
         string json;
         lock (_lock) {
             if (!_isDirty || _cachedRoot == null || _isWriting) return;
-            json = _cachedRoot.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+            json = _cachedRoot.ToJsonString(new JsonSerializerOptions { WriteIndented = true, TypeInfoResolver = new DefaultJsonTypeInfoResolver() });
             _isDirty = false;
             _saveTimer = 0f;
             _isWriting = true;

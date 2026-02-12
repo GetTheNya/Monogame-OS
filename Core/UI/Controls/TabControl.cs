@@ -164,6 +164,19 @@ public class TabControl : UIElement {
         }
     }
 
+    public void SelectTab(string title) {
+        var page = _pages.FirstOrDefault(p => p.Title.Equals(title, StringComparison.OrdinalIgnoreCase));
+        if (page != null) {
+            SelectedIndex = _pages.IndexOf(page);
+        }
+    }
+
+    public void SelectTab(TabPage page) {
+        if (page != null && _pages.Contains(page)) {
+            SelectedIndex = _pages.IndexOf(page);
+        }
+    }
+
     private void UpdateTabs() {
         for (int i = 0; i < _pages.Count; i++) {
             bool isSelected = (i == _selectedIndex);

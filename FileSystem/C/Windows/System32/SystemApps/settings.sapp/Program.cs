@@ -1,5 +1,6 @@
 using System;
 using Microsoft.Xna.Framework;
+using TheGame;
 using TheGame.Core.UI;
 using TheGame.Core.UI.Controls;
 using TheGame.Core.OS;
@@ -7,24 +8,40 @@ using SettingsApp.Panels;
 
 namespace SettingsApp;
 
+public class SettingsApp : Application {
+    public static Application Main(string[] args) {
+        return new SettingsApp();
+    }
+
+    protected override void OnLoad(string[] args) {
+        var win = new SettingsWindow(new Vector2(100, 100), new Vector2(600, 500));
+        MainWindow = win;
+
+        if (args != null) {
+            foreach (var arg in args) {
+                if (arg.Equals("--updates", StringComparison.OrdinalIgnoreCase)) {
+                    win.SelectTab("Update");
+                    break;
+                }
+            }
+        }
+    }
+}
+
 public class SettingsWindow : Window {
     private TabControl _tabs;
 
-    public static Window CreateWindow() {
-        return new SettingsWindow(new Vector2(100, 100), new Vector2(600, 500));
-    }
-
     public SettingsWindow(Vector2 pos, Vector2 size) : base(pos, size) {
         Title = "Settings";
-        AppId = "SETTINGS";
+        SetupUI();
         
         OnResize += () => {
             if (_tabs != null) _tabs.Size = ClientSize;
         };
     }
     
-    protected override void OnLoad() {
-        SetupUI();
+    public void SelectTab(string tabTitle) {
+        _tabs?.SelectTab(tabTitle);
     }
 
     private void SetupUI() {
@@ -34,6 +51,7 @@ public class SettingsWindow : Window {
         
         _tabs.AddTab("Personalization", Shell.Images.Load(@"C:\Windows\SystemResources\Icons\user.png")).Content.AddChild(CreatePersonalizationTab());
         _tabs.AddTab("System", Shell.Images.Load(@"C:\Windows\SystemResources\Icons\settings.png")).Content.AddChild(CreateSystemTab());
+        _tabs.AddTab("Update", Shell.Images.Load(@"C:\Windows\SystemResources\Icons\settings.png")).Content.AddChild(new UpdatePanel());
         _tabs.AddTab("About", Shell.Images.Load(@"C:\Windows\SystemResources\Icons\PC.png")).Content.AddChild(CreateAboutTab());
 
         AddChild(_tabs);
@@ -51,8 +69,7 @@ public class SettingsWindow : Window {
 
     private Panel CreateAboutTab() {
         var p = new Panel(Vector2.Zero, Vector2.Zero);
-        p.AddChild(new Label(new Vector2(10, 10), "TheGame OS v1.0") { TextColor = Color.White });
-        p.AddChild(new Label(new Vector2(10, 35), "Agent-built Operating System Simulator") { TextColor = Color.Gray, FontSize = 16 });
+        p.AddChild(new Label(new Vector2(10, 10), $"HentOS {SystemVersion.Current}") { TextColor = Color.White });
         return p;
     }
 }

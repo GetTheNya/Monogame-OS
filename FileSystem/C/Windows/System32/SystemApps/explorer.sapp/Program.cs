@@ -481,7 +481,7 @@ public class FileListPanel : ScrollPanel {
             }
 
             if (hoveredItem.IsDir) {
-                if (hoveredItem.Path.ToLower().EndsWith(".sapp")) {
+                if (hoveredItem.Path.ToLower().EndsWith(".sapp") || hoveredItem.Path.ToLower().EndsWith(".dtoy")) {
                     Shell.Execute(hoveredItem.Path, hoveredItem.Bounds);
                 } else {
                     _window.NavigateTo(hoveredItem.Path);

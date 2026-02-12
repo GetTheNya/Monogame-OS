@@ -152,22 +152,25 @@ public class BrowserControl : UIElement, IDisposable, IDropTarget {
         }
     }
 
-    public void Dispose() {
-        if (_browser != null) {
-            _browser.Paint -= OnBrowserPaint;
-            // Dispose the handlers if they are disposable
-            (_audioHandler as IDisposable)?.Dispose();
-            _audioHandler = null;
-            _browser.Dispose();
-            _browser = null;
+    protected override void Dispose(bool disposing) {
+        if (disposing) {
+            if (_browser != null) {
+                _browser.Paint -= OnBrowserPaint;
+                // Dispose the handlers if they are disposable
+                (_audioHandler as IDisposable)?.Dispose();
+                _audioHandler = null;
+                _browser.Dispose();
+                _browser = null;
+            }
+ 
+            if (_browserTexture != null) {
+                _browserTexture.Dispose();
+                _browserTexture = null;
+            }
+ 
+            OnResize -= HandleResize;
         }
-
-        if (_browserTexture != null) {
-            _browserTexture.Dispose();
-            _browserTexture = null;
-        }
-
-        OnResize -= HandleResize;
+        base.Dispose(disposing);
     }
 
     #region Custom Network Handlers

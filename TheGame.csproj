@@ -2,7 +2,9 @@
   <PropertyGroup>
     <SatelliteResourceLanguages>en-US</SatelliteResourceLanguages>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net6.0-windows</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
+	<SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
+	<UseRidGraph>true</UseRidGraph>
     <RollForward>Major</RollForward>
     <PublishReadyToRun>false</PublishReadyToRun>
     <TieredCompilation>false</TieredCompilation>
@@ -10,6 +12,8 @@
     <Platforms>AnyCPU;x64</Platforms>
 	<CefSharpBuildAction>Content</CefSharpBuildAction>
 	<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+	<NoWarn>CA1416;NETSDK1206;$(NoWarn)</NoWarn>
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -34,6 +38,11 @@
     <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
   </Content>
 </ItemGroup>
+<ItemGroup>
+    <Compile Remove="Updater\**" />
+    <EmbeddedResource Remove="Updater\**" />
+    <None Remove="Updater\**" />
+  </ItemGroup>
 <ItemGroup>
   <None Update="Icon.png">
     <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -64,4 +73,13 @@
   <Move SourceFiles="@(PdbFiles)" DestinationFolder="$(TargetDir)libs" />
   <Move SourceFiles="@(XmlFiles)" DestinationFolder="$(TargetDir)libs" />
 </Target>
+<Target Name="CopyUpdater" AfterTargets="Build">
+    <Exec Command="dotnet publish &quot;$(MSBuildProjectDirectory)\Updater\Updater.csproj&quot; -c Release -r win-x64 -o &quot;$(MSBuildProjectDirectory)\Updater\bin\Publish&quot;" />
+    
+    <ItemGroup>
+      <UpdaterFiles Include="$(MSBuildProjectDirectory)\Updater\bin\Publish\Updater.exe" />
+    </ItemGroup>
+    
+    <Copy SourceFiles="@(UpdaterFiles)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
 </Project>

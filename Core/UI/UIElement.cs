@@ -12,7 +12,7 @@ using TheGame.Core.Designer;
 
 namespace TheGame.Core.UI;
 
-public abstract class UIElement : IContextMenuProvider, ITooltipTarget {
+public abstract class UIElement : IContextMenuProvider, ITooltipTarget, IDisposable {
     [DesignerIgnoreProperty] [DesignerIgnoreJsonSerialization]
     public UIElement Parent { get; set; }
     private readonly List<UIElement> _childrenInternal = new();
@@ -355,24 +355,26 @@ public abstract class UIElement : IContextMenuProvider, ITooltipTarget {
     }
 
     public void RemoveChild(UIElement child) {
-        lock (_childrenLock) {
-            if (_childrenInternal.Remove(child)) {
-                child.Parent = null;
-                _childrenSnapshot = _childrenInternal.ToArray();
-            }
-        }
-    }
-
-    public void RemoveChildAt(int index) {
-        lock (_childrenLock) {
-            if (index >= 0 && index < _childrenInternal.Count) {
-                var child = _childrenInternal[index];
-                child.Parent = null;
-                _childrenInternal.RemoveAt(index);
-                _childrenSnapshot = _childrenInternal.ToArray();
-            }
-        }
-    }
+         lock (_childrenLock) {
+             if (_childrenInternal.Remove(child)) {
+                 child.Parent = null;
+                 _childrenSnapshot = _childrenInternal.ToArray();
+                 child.Dispose();
+             }
+         }
+     }
+ 
+     public void RemoveChildAt(int index) {
+         lock (_childrenLock) {
+             if (index >= 0 && index < _childrenInternal.Count) {
+                 var child = _childrenInternal[index];
+                 child.Parent = null;
+                 _childrenInternal.RemoveAt(index);
+                 _childrenSnapshot = _childrenInternal.ToArray();
+                 child.Dispose();
+             }
+         }
+     }
 
     public void InsertChild(int index, UIElement child) {
         lock (_childrenLock) {
@@ -383,12 +385,15 @@ public abstract class UIElement : IContextMenuProvider, ITooltipTarget {
     }
 
     public void ClearChildren() {
-        lock (_childrenLock) {
-            foreach (var child in _childrenInternal) child.Parent = null;
-            _childrenInternal.Clear();
-            _childrenSnapshot = Array.Empty<UIElement>();
-        }
-    }
+         lock (_childrenLock) {
+             foreach (var child in _childrenInternal) {
+                 child.Parent = null;
+                 child.Dispose();
+             }
+             _childrenInternal.Clear();
+             _childrenSnapshot = Array.Empty<UIElement>();
+         }
+     }
 
     public void BringToFront(UIElement child) {
         lock (_childrenLock) {
@@ -415,19 +420,50 @@ public abstract class UIElement : IContextMenuProvider, ITooltipTarget {
     }
 
     protected bool HandleContextMenuInput() {
-        try {
-            var context = new ContextMenuContext(this, InputManager.MousePosition.ToVector2());
-            Shell.ContextMenu.Show(context);
-            OnRightClickAction?.Invoke();
-            return true;
-        } catch (Exception ex) {
-            var process = GetOwnerProcess();
-            if (process != null && CrashHandler.IsAppException(ex, process)) {
-                CrashHandler.HandleAppException(process, ex);
-            } else {
-                throw; // Re-throw if it's an OS-level exception
-            }
-            return false;
-        }
-    }
-}
+         try {
+             var context = new ContextMenuContext(this, InputManager.MousePosition.ToVector2());
+             Shell.ContextMenu.Show(context);
+             OnRightClickAction?.Invoke();
+             return true;
+         } catch (Exception ex) {
+             var process = GetOwnerProcess();
+             if (process != null && CrashHandler.IsAppException(ex, process)) {
+                 CrashHandler.HandleAppException(process, ex);
+             } else {
+                 throw; // Re-throw if it's an OS-level exception
+             }
+             return false;
+         }
+     }
+ 
+     private bool _isDisposed = false;
+ 
+     public void Dispose() {
+         Dispose(true);
+         GC.SuppressFinalize(this);
+     }
+ 
+     protected virtual void Dispose(bool disposing) {
+         if (!_isDisposed) {
+             if (disposing) {
+                 lock (_childrenLock) {
+                     foreach (var child in _childrenInternal) {
+                         child.Dispose();
+                     }
+                     _childrenInternal.Clear();
+                     _childrenSnapshot = Array.Empty<UIElement>();
+                 }
+                 OnLostFocus = null;
+                 OnResize = null;
+                 OnMove = null;
+                 OnDesignResize = null;
+                 OnDesignMove = null;
+                 OnDesignSelect = null;
+                 OnRightClickAction = null;
+                 OnDoubleClickAction = null;
+                 OnDrawOver = null;
+             }
+             _isDisposed = true;
+         }
+     }
+ }

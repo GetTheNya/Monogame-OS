@@ -220,8 +220,16 @@ public static partial class Shell {
     /// <summary>
     /// Performs a full system shutdown.
     /// </summary>
-    public static void Shutdown() {
-        DebugLogger.Log("--- SYSTEM SHUTDOWN INITIATED ---");
+    public static void Shutdown() => InitiateShutdown(TheGame.Scenes.ShutdownMode.Shutdown);
+
+    /// <summary>
+    /// Performs a system shutdown for an update.
+    /// </summary>
+    public static void ShutdownForUpdate() => InitiateShutdown(TheGame.Scenes.ShutdownMode.Update);
+
+    private static void InitiateShutdown(TheGame.Scenes.ShutdownMode mode) {
+        string logPrefix = mode == TheGame.Scenes.ShutdownMode.Update ? "UPDATE " : "";
+        DebugLogger.Log($"--- SYSTEM {logPrefix}SHUTDOWN INITIATED ---");
         
         // 1. Terminate all processes
         ProcessManager.Instance.TerminateAll();
@@ -241,10 +249,10 @@ public static partial class Shell {
         // 6. Cancel active drags
         DragDropManager.Instance.CancelDrag();
         
-        // 7. Transition to ShutdownScene (Shutdown mode)
-        Game1.Instance.SceneManager.TransitionTo(new TheGame.Scenes.ShutdownScene(TheGame.Scenes.ShutdownMode.Shutdown));
+        // 7. Transition to ShutdownScene
+        Game1.Instance.SceneManager.TransitionTo(new TheGame.Scenes.ShutdownScene(mode));
         
-        DebugLogger.Log("--- SYSTEM SHUTDOWN READY ---");
+        DebugLogger.Log($"--- SYSTEM {logPrefix}SHUTDOWN READY ---");
     }
 
     public static void RefreshExplorers(string pathFilter = null) {
@@ -273,9 +281,15 @@ public static partial class Shell {
         string ext = System.IO.Path.GetExtension(virtualPath).ToLower();
         DebugLogger.Log($"Shell.Execute: {virtualPath}, extension: {ext}");
 
-        // Handle system file types (.sapp, .slnk) through built-in handlers first
+        // Handle system file types (.sapp, .slnk, .dtoy) through built-in handlers first
         // These should never go through file associations
-        if (ext == ".sapp" || ext == ".slnk") {
+        if (ext == ".sapp" || ext == ".slnk" || ext == ".dtoy") {
+            // Special case for .dtoy - always handle with DeskToys
+            if (ext == ".dtoy") {
+                ProcessManager.Instance.StartProcess("DESKTOYS", new[] { "/install", virtualPath }, null, startBounds);
+                return;
+            }
+
             var builtIn = UI.GetFileHandler(ext);
             if (builtIn != null) {
                 builtIn.Execute(virtualPath, args, startBounds);

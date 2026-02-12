@@ -9,7 +9,8 @@ namespace TheGame.Scenes;
 
 public enum ShutdownMode {
     Shutdown,
-    Restart
+    Restart,
+    Update
 }
 
 public class ShutdownScene : Core.Scenes.Scene {
@@ -51,7 +52,11 @@ public class ShutdownScene : Core.Scenes.Scene {
         var viewport = G.GraphicsDevice.Viewport;
         var font = GameContent.FontSystem.GetFont(32);
         
-        string text = _mode == ShutdownMode.Restart ? "Restarting..." : "Shutting down...";
+        string text = _mode switch {
+            ShutdownMode.Restart => "Restarting...",
+            ShutdownMode.Update => "Updating...",
+            _ => "Shutting down..."
+        };
         var textSize = font.MeasureString(text);
         
         spriteBatch.Begin();

@@ -27,7 +27,7 @@ public class AppHotReloadManager {
     }
 
     private Dictionary<string, FileSystemWatcher> _watchers = new Dictionary<string, FileSystemWatcher>();
-    private Dictionary<string, Timer> _debounceTimers = new Dictionary<string, Timer>();
+    private Dictionary<string, System.Timers.Timer> _debounceTimers = new Dictionary<string, System.Timers.Timer>();
     private Dictionary<string, string> _appPaths = new Dictionary<string, string>();
     private Queue<string> _pendingReloads = new Queue<string>();
     private object _reloadLock = new object();

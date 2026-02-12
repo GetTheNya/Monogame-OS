@@ -39,6 +39,7 @@ public static class InputManager {
     public static int MouseY => _currentMouse.Y;
     public static int ScrollWheel => _currentMouse.ScrollWheelValue;
     public static int ScrollDelta => _currentMouse.ScrollWheelValue - _previousMouse.ScrollWheelValue;
+    public static Vector2 MouseDelta => (_currentMouse.Position - _previousMouse.Position).ToVector2();
 
     private static double _lastLeftClickTime;
     private static double _lastRightClickTime;

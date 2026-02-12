@@ -63,6 +63,9 @@ public class AppCompiler {
             { "System.Net.Http", MetadataReference.CreateFromFile(typeof(HttpClient).Assembly.Location) },
             { "System.IO.Compression", MetadataReference.CreateFromFile(typeof(ZipFile).Assembly.Location) },
             { "System.IO.Compression.ZipFile", MetadataReference.CreateFromFile(typeof(ZipFile).Assembly.Location) },
+            { "System.Diagnostics.Process", MetadataReference.CreateFromFile(Assembly.Load("System.Diagnostics.Process").Location) },
+            { "System.IO", MetadataReference.CreateFromFile(typeof(Path).Assembly.Location) },
+            { "System.IO.FileSystem", MetadataReference.CreateFromFile(Assembly.Load("System.IO.FileSystem").Location) },
         };
     }
 
