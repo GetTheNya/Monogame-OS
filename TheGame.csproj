@@ -47,10 +47,9 @@
     <PropertyGroup>
       <GitTag Condition="'$(GitTag)' == ''">v0.0.0-local</GitTag>
     </PropertyGroup>
-    <!-- On fresh CI build, SystemVersion.cs might not exist yet, but the SDK has already calculated default items. 
-         We generate it and explicitly add it to @(Compile) if it's not there, while avoiding duplicates locally. -->
     <WriteLinesToFile File="SystemVersion.cs" Overwrite="true" Lines="namespace TheGame%3b%0a%0apublic static class SystemVersion %0a{%0a    public static string Current = &quot;$(GitTag)&quot;%3b%0a}" />
-    <ItemGroup Condition="'$(CI)' == 'true' or !Exists('SystemVersion.cs')">
+    <ItemGroup>
+      <Compile Remove="SystemVersion.cs" />
       <Compile Include="SystemVersion.cs" />
     </ItemGroup>
   </Target>
