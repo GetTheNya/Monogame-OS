@@ -61,3 +61,21 @@ This project uses the following third-party software:
 *   **License**: Universal Multimedia Licensing Agreement (Free tier requires attribution)
 *   **Copyright**: Copyright © Icons8 LLC
 *   **Link**: https://icons8.com/
+
+## 11. Pixabay Sound Effects
+* **Description**: Various sound effects used in the system.
+* **License**: Pixabay Content License (Royalty-free)
+* **Copyright**: Various Artists via Pixabay
+* **Link**: https://pixabay.com/service/license/
+
+## 12. Unsplash Images
+* **Description**: Various images used in the system (e.g., wallpapers).
+* **License**: Unsplash License (Free to use)
+* **Copyright**: Various Photographers via Unsplash
+* **Link**: https://unsplash.com/license
+
+## 13. Miscellaneous UI Assets (Cursors, Wallpapers, etc.)
+* **Description**: Various graphical elements used for the system's look and feel.
+* **Sources**: Sourced from royalty-free community platforms (DeviantArt, Pixabay, OpenGameArt).
+* **License**: Creative Commons (CC0 / CC BY 3.0/4.0) or Public Domain.
+* **Note**: We strive to use only open-source assets. If you are an author of an asset and wish to be specifically credited or have the asset removed, please contact us.
