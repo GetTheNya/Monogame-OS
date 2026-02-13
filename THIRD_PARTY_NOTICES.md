@@ -55,3 +55,9 @@ This project uses the following third-party software:
 *   **License**: MIT License
 *   **Copyright**: Copyright (c) 2026 Apostolique
 *   **Link**: https://github.com/Apostolique/Apos.Shapes
+
+## 10. Icons8
+*   **Description**: Design resources including icons, illustrations, and photos.
+*   **License**: Universal Multimedia Licensing Agreement (Free tier requires attribution)
+*   **Copyright**: Copyright © Icons8 LLC
+*   **Link**: https://icons8.com/
