@@ -26,6 +26,9 @@ public static partial class Shell {
         /// <summary>Path for audio settings: HKCU\Audio</summary>
         public const string Audio = "HKCU\\Audio";
         
+        /// <summary>Path for update status: HKLM\Software\System\Update</summary>
+        public const string Update = "HKLM\\Software\\System\\Update";
+        
         /// <summary>Path for per-app settings: HKCU\Software\{AppId}</summary>
         public static string AppSettings(string appId) => $"HKCU\\Software\\{appId}";
 

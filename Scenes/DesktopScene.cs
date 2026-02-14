@@ -156,6 +156,9 @@ public class DesktopScene : Core.Scenes.Scene {
 
         // Populate Start Menu
         _startMenu.RefreshItems();
+
+        // Check for update results
+        CheckForUpdateResult();
     }
 
     private void RegisterGlobalHotkeys() {
@@ -402,6 +405,36 @@ public class DesktopScene : Core.Scenes.Scene {
         }
 
         _iconLayer.SortAction = SortIcons;
+    }
+
+    private void CheckForUpdateResult() {
+        var reg = TheGame.Core.OS.Registry.Instance;
+        string updatePath = Shell.Registry.Update;
+
+        if (reg.GetValue($"{updatePath}\\UpdatePending", false)) {
+            string lastVersion = reg.GetValue($"{updatePath}\\LastVersion", "");
+            string currentVersion = SystemVersion.Current;
+
+            if (!string.IsNullOrEmpty(lastVersion)) {
+                if (currentVersion != lastVersion) {
+                    NotificationManager.Instance.ShowNotification(
+                        "System Updated", 
+                        $"The system has been successfully updated to version {currentVersion}.",
+                        GameContent.FileIcon // Using a generic icon for now
+                    );
+                } else {
+                    NotificationManager.Instance.ShowNotification(
+                        "Update Failed", 
+                        "The system update could not be completed. You are still running the previous version.",
+                        GameContent.FileIcon 
+                    );
+                }
+            }
+
+            // Reset pending flag
+            reg.SetValue($"{updatePath}\\UpdatePending", false);
+            reg.FlushToDisk();
+        }
     }
 
     private void ShowToast(Notification notification) {

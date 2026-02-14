@@ -153,6 +153,11 @@ namespace TheGame.Core.OS {
 
         public void LaunchUpdater(string zipPath) {
             try {
+                // Track update status in registry
+                Registry.Instance.SetValue($"{Shell.Registry.Update}\\LastVersion", SystemVersion.Current);
+                Registry.Instance.SetValue($"{Shell.Registry.Update}\\UpdatePending", true);
+                Registry.Instance.FlushToDisk();
+
                 string hostZipPath = VirtualFileSystem.Instance.ToHostPath(zipPath);
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
                 
