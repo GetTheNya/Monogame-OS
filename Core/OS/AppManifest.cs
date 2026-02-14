@@ -13,11 +13,17 @@ public class AppManifest {
     [JsonPropertyName("name")]
     public string Name { get; set; }
 
+    [JsonPropertyName("extensionType")]
+    public string ExtensionType { get; set; } = "application";
+
     [JsonPropertyName("icon")]
     public string Icon { get; set; } = "icon.png";
 
     [JsonPropertyName("version")]
     public string Version { get; set; } = "1.0.0";
+
+    [JsonPropertyName("minOSVersion")]
+    public string MinOSVersion { get; set; } = "1.0.0";
 
     [JsonPropertyName("author")]
     public string Author { get; set; } = "Unknown";

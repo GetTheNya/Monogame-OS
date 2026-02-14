@@ -8,12 +8,16 @@ public static class Tweener {
     private static List<Tween> _tweens = new List<Tween>();
 
     public static void Update(float dt) {
-        for (int i = _tweens.Count - 1; i >= 0; i--) {
-            _tweens[i].Update(dt);
-            if (_tweens[i].IsComplete) {
-                _tweens.RemoveAt(i);
-            }
+        if (_tweens.Count == 0) return;
+
+        // Copy to avoid modification issues (e.g., CancelAll called during OnComplete)
+        var currentTweens = _tweens.ToArray();
+        foreach (var tween in currentTweens) {
+            tween.Update(dt);
         }
+
+        // Clean up completed ones
+        _tweens.RemoveAll(t => t.IsComplete);
     }
 
     public static Tween To(object target, Action<float> setter, float start, float end, float duration, Easing easing = Easing.Linear) {

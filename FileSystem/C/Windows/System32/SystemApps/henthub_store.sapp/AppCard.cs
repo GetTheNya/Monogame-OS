@@ -20,6 +20,7 @@ public class AppCard : Panel, IDisposable {
     private Label _statusLabel;
     private Button _moreBtn;
     private Process _ownerProcess;
+    private Texture2D _loadedTexture;
 
     public AppCard(StoreApp app, Vector2 size, Process ownerProcess, Action onMore) : base(Vector2.Zero, size) {
         _app = app;
@@ -107,6 +108,8 @@ public class AppCard : Panel, IDisposable {
                 using (var ms = new MemoryStream(response.BodyBytes)) {
                     var texture = ImageLoader.LoadFromStream(TheGame.G.GraphicsDevice, ms);
                     if (texture != null) {
+                        _loadedTexture?.Dispose();
+                        _loadedTexture = texture;
                         _iconImage.Texture = texture;
                     } else {
                         Console.WriteLine($"[HentHub] ImageLoader returned null texture for {url}");
@@ -122,5 +125,6 @@ public class AppCard : Panel, IDisposable {
 
     public void Dispose() {
         _iconImage?.Dispose();
+        _loadedTexture?.Dispose();
     }
 }

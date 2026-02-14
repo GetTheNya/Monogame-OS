@@ -1,6 +1,7 @@
 {
   "appId": "TERMINAL",
   "name": "Terminal",
+  "extensionType": "application",
   "icon": "icon.png",
   "entryClass": "TerminalApp.Program",
   "entryMethod": "CreateWindow",

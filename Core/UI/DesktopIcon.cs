@@ -14,7 +14,7 @@ namespace TheGame.Core.UI;
 /// <summary>
 /// A desktop icon component that displays an image, text, and handles double-click actions.
 /// </summary>
-public class DesktopIcon : UIElement, IDraggable {
+public class DesktopIcon : UIElement, IDraggable, IDropTarget {
     public Texture2D Icon { get; set; }
     private string _label;
     public string Label { 
@@ -30,6 +30,7 @@ public class DesktopIcon : UIElement, IDraggable {
     public Action<DesktopIcon> OnSelectedAction { get; set; }
     public Action<DesktopIcon, Vector2> OnDragAction { get; set; }
     public Action OnDropAction { get; set; }
+    public Action<object> OnDropOverAction { get; set; }
     
     public bool IsSelected { get; set; }
     public bool IsDragging => _isDragging;
@@ -202,10 +203,54 @@ public class DesktopIcon : UIElement, IDraggable {
                 _isDragging = false;
                 _lastDragTargetPos = Vector2.Zero;
                 OnDropAction?.Invoke();
-                InputManager.IsMouseConsumed = true; // Consume input on drop to prevent scene-level resets
+
+                // Only consume if we are actually hovered or were dragging
+                if (InputManager.IsMouseHovering(Bounds, ignoreConsumed: true)) {
+                    InputManager.IsMouseConsumed = true; 
+                }
+            }
+        }
+
+        // --- GLOBAL IDropTarget HANDLING ---
+        // This MUST be outside the _isDragging block to accept drops from external sources (like Explorer)
+        if (Shell.Drag.IsActive) {
+            bool isHovered = Bounds.Contains(InputManager.MousePosition);
+            
+            // 1. Hover feedback (cursor indicators, etc.)
+            if (isHovered) {
+                Shell.Drag.CheckDropTarget(this, InputManager.MousePosition.ToVector2());
+            }
+
+            // 2. Drop handling on release
+            if (isHovered && InputManager.IsMouseButtonJustReleased(MouseButton.Left)) {
+                if (Shell.Drag.TryDropOn(this, InputManager.MousePosition.ToVector2())) {
+                    InputManager.IsMouseConsumed = true;
+                }
             }
         }
     }
+
+    // --- IDropTarget Implementation ---
+
+    public bool CanAcceptDrop(object dragData) {
+        return OnDropOverAction != null;
+    }
+
+    public DragDropEffect OnDragOver(object dragData, Vector2 position) {
+        return DragDropEffect.Move;
+    }
+
+    public void OnDragLeave() { }
+
+    public bool OnDrop(object dragData, Vector2 position) {
+        if (OnDropOverAction != null) {
+            OnDropOverAction.Invoke(dragData);
+            return true;
+        }
+        return false;
+    }
+
+    public Rectangle GetDropBounds() => Bounds;
     
     public void StartRename() {
         if (_isRenaming || string.IsNullOrEmpty(VirtualPath)) return;

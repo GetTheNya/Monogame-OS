@@ -62,6 +62,11 @@ public class DragDropManager {
         if (_snapBackTween != null) {
             _snapBackTween.Update((float)gameTime.ElapsedGameTime.TotalSeconds);
         }
+
+        // Ensure custom visual is updated so labels/dynamic elements calculate their layout
+        if (_isActive && _cachedCustomVisual != null) {
+            _cachedCustomVisual.Update(gameTime);
+        }
     }
 
     private DragDropManager() {

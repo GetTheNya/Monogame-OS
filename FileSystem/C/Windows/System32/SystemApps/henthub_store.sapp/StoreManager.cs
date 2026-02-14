@@ -46,6 +46,52 @@ public class StoreManager {
         return Manifest.Apps.Find(a => a.AppId.Equals(appId, StringComparison.OrdinalIgnoreCase));
     }
 
+    public string GetCategoryFolder(string extensionType) {
+        if (string.IsNullOrEmpty(extensionType)) return "application";
+        if (extensionType.Equals("widget", StringComparison.OrdinalIgnoreCase)) return "widgets";
+        return extensionType.ToLower();
+    }
+
+    public async Task<bool> LoadAppManifestAsync(StoreApp app, Process process) {
+        try {
+            string category = GetCategoryFolder(app.ExtensionType);
+            string url = $"https://getthenya.github.io/HentHub-Store/manifests/{category}/{app.AppId.ToLower()}.json";
+            
+            var response = await Shell.Network.SendRequestAsync(process, url, HttpMethod.Get, null);
+            if (response.IsSuccessStatusCode) {
+                string json = response.BodyText;
+                var detailedApp = await Task.Run(() => JsonSerializer.Deserialize<StoreApp>(json));
+                if (detailedApp != null) {
+                    // Update the existing object with detailed info
+                    app.Version = detailedApp.Version;
+                    app.Author = detailedApp.Author;
+                    app.Description = detailedApp.Description;
+                    app.MinOSVersion = detailedApp.MinOSVersion;
+                    app.ScreenshotCount = detailedApp.ScreenshotCount;
+                    app.Dependencies = detailedApp.Dependencies;
+                    app.Permissions = detailedApp.Permissions;
+                    app.Subscriptions = detailedApp.Subscriptions;
+                    app.SingleInstance = detailedApp.SingleInstance;
+                    app.EntryPoint = detailedApp.EntryPoint;
+                    app.EntryClass = detailedApp.EntryClass;
+                    app.EntryMethod = detailedApp.EntryMethod;
+                    app.TerminalOnly = detailedApp.TerminalOnly;
+                    app.WidgetClass = detailedApp.WidgetClass;
+                    app.DefaultSize = detailedApp.DefaultSize;
+                    app.IsResizable = detailedApp.IsResizable;
+                    app.RefreshPolicy = detailedApp.RefreshPolicy;
+                    app.IntervalMs = detailedApp.IntervalMs;
+                    app.Size = detailedApp.Size;
+                    
+                    return true;
+                }
+            }
+        } catch (Exception ex) {
+            DebugLogger.Log($"[StoreManager] Error loading detailed manifest for {app.AppId}: {ex.Message}");
+        }
+        return false;
+    }
+
     /// <summary>
     /// Recursively resolves all missing dependencies for a given app.
     /// </summary>

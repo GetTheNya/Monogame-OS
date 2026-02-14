@@ -79,6 +79,9 @@ public class Game1 : Game {
         GameContent.InitContent();
 
         // All apps are now loaded dynamically from System32 via AppLoader
+        
+        // Register Widgets
+        // Built-in widgets removed in favor of dynamic .dtoy packages
 
         _sceneManager = new SceneManager(Content, GraphicsDevice);
         _sceneManager.LoadScene(new TheGame.Scenes.InstallerScene());

@@ -359,7 +359,6 @@ public abstract class UIElement : IContextMenuProvider, ITooltipTarget, IDisposa
              if (_childrenInternal.Remove(child)) {
                  child.Parent = null;
                  _childrenSnapshot = _childrenInternal.ToArray();
-                 child.Dispose();
              }
          }
      }
@@ -371,7 +370,6 @@ public abstract class UIElement : IContextMenuProvider, ITooltipTarget, IDisposa
                  child.Parent = null;
                  _childrenInternal.RemoveAt(index);
                  _childrenSnapshot = _childrenInternal.ToArray();
-                 child.Dispose();
              }
          }
      }

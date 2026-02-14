@@ -117,7 +117,19 @@ public class AppCompiler {
     /// <summary>
     /// Compiles C# source files into an assembly.
     /// </summary>
-    public Assembly Compile(Dictionary<string, string> sourceFiles, string assemblyName, out IEnumerable<Diagnostic> diagnostics, IEnumerable<string> extraReferences = null) {
+    public Assembly Compile(Dictionary<string, string> sourceFiles, string assemblyName, out IEnumerable<Diagnostic> diagnostics, IEnumerable<string> extraReferences = null, AppManifest manifest = null) {
+        if (manifest != null && !VersionHelper.IsCompatible(manifest.MinOSVersion)) {
+            diagnostics = new[] { 
+                CSharpSyntaxTree.ParseText("// Error")
+                    .GetDiagnostics()
+                    .FirstOrDefault() ?? 
+                Diagnostic.Create(
+                    new DiagnosticDescriptor("OS001", "Incompatible OS Version", $"App requires {manifest.MinOSVersion} but system is {SystemVersion.Current}", "OS", DiagnosticSeverity.Error, true),
+                    Location.None)
+            };
+            return null;
+        }
+
         var compilation = Validate(sourceFiles, assemblyName, out diagnostics, extraReferences);
 
         // Compile to memory stream
@@ -136,7 +148,16 @@ public class AppCompiler {
     /// <summary>
     /// Compiles C# source files into an assembly using a collectible AssemblyLoadContext.
     /// </summary>
-    public Assembly CompileCollectible(Dictionary<string, string> sourceFiles, string assemblyName, out IEnumerable<Diagnostic> diagnostics, System.Runtime.Loader.AssemblyLoadContext context, IEnumerable<string> extraReferences = null) {
+    public Assembly CompileCollectible(Dictionary<string, string> sourceFiles, string assemblyName, out IEnumerable<Diagnostic> diagnostics, System.Runtime.Loader.AssemblyLoadContext context, IEnumerable<string> extraReferences = null, AppManifest manifest = null) {
+        if (manifest != null && !VersionHelper.IsCompatible(manifest.MinOSVersion)) {
+            diagnostics = new[] { 
+                Diagnostic.Create(
+                    new DiagnosticDescriptor("OS001", "Incompatible OS Version", $"App requires {manifest.MinOSVersion} but system is {SystemVersion.Current}", "OS", DiagnosticSeverity.Error, true),
+                    Location.None)
+            };
+            return null;
+        }
+
         var compilation = Validate(sourceFiles, assemblyName, out diagnostics, extraReferences);
 
         using var ms = new MemoryStream();

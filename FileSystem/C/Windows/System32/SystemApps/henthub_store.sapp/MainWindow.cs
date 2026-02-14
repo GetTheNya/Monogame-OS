@@ -58,7 +58,7 @@ public class MainWindow : Window {
             if (loaded) {
                 var app = StoreManager.Instance.GetApp(appId);
                 if (app != null) {
-                    _pageStack.Push(new DetailsPage(app, OwnerProcess));
+                    _pageStack.Push(DetailsPageFactory.Create(app, OwnerProcess));
                 }
             }
         }

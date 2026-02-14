@@ -13,36 +13,57 @@ using TheGame.Core.UI.Controls;
 
 namespace HentHub;
 
-public class DetailsPage : StorePage, IDisposable {
-    private StoreApp _app;
-    private Process _process;
+public abstract class BaseDetailsPage : StorePage, IDisposable {
+    protected StoreApp _app;
+    protected Process _process;
     
-    private ScrollPanel _contentScroll;
-    private ScrollPanel _screenshotScroll;
-    private Icon _iconImage;
-    private Label _nameLabel;
-    private Label _authorLabel;
-    private Label _descLabel;
-    private Button _backBtn;
-    private Button _installBtn;
-    private Button _uninstallBtn;
-    private Button _changePathBtn;
-    private Label _pathHeader;
-    private Label _pathLabel;
-    private string _customInstallPath = null;
+    protected ScrollPanel _contentScroll;
+    protected ScrollPanel _screenshotScroll;
+    protected Icon _iconImage;
+    protected Label _nameLabel;
+    protected Label _authorLabel;
+    protected Label _descLabel;
+    protected Button _backBtn;
+    protected Button _installBtn;
+    protected Button _uninstallBtn;
+    protected Button _changePathBtn;
+    protected Label _pathHeader;
+    protected Label _pathLabel;
+    protected Label _sizeLabel;
+    protected Label _minOSLabel;
+    protected Label _incompatibleLabel;
+    protected string _customInstallPath = null;
+    
+    protected Texture2D _loadedIcon;
+    protected List<Texture2D> _loadedScreenshots = new();
 
-    public DetailsPage(StoreApp app, Process process) : base(app.Name) {
+    public BaseDetailsPage(StoreApp app, Process process) : base(app.Name) {
         _app = app;
         _process = process;
         
         SetupUI();
+        InitializeAsync();
+    }
+
+    protected async void InitializeAsync() {
+        // Load detailed manifest first
+        await StoreManager.Instance.LoadAppManifestAsync(_app, _process);
+        
+        // Refresh UI elements with detailed data
+        _authorLabel.Text = $"by {_app.Author} (v{_app.Version})";
+        _minOSLabel.Text = $"Required OS: {_app.MinOSVersion}";
+        UpdateDescriptionLayout();
+        UpdateStatus();
+        UpdatePathLabel();
+        UpdateSizeLabel();
+
         LoadIcon();
         LoadScreenshots();
     }
 
-    private void SetupUI() {
+    protected virtual void SetupUI() {
         _backBtn = new Button(new Vector2(10, 10), new Vector2(80, 30), "< Back");
-        _backBtn.OnClickAction = () => Stack?.Pop();
+        _backBtn.OnClickAction = () => base.Stack?.Pop();
         AddChild(_backBtn);
 
         _contentScroll = new ScrollPanel(new Vector2(0, 50), new Vector2(ClientSize.X, ClientSize.Y - 50));
@@ -66,16 +87,19 @@ public class DetailsPage : StorePage, IDisposable {
         };
         _contentScroll.AddChild(_authorLabel);
 
-        string sizeStr = _app.Size > 1024 * 1024 
-            ? $"{_app.Size / (1024 * 1024f):F1} MB" 
-            : $"{_app.Size / 1024f:F1} KB";
-        var sizeLabel = new Label(new Vector2(150, 70), $"Size: {sizeStr}") {
+        _sizeLabel = new Label(new Vector2(150, 70), "Size: ...") {
             Color = Color.Gray,
             FontSize = 14
         };
-        _contentScroll.AddChild(sizeLabel);
+        _contentScroll.AddChild(_sizeLabel);
 
-        _installBtn = new Button(new Vector2(150, 100), new Vector2(120, 35), GetInstallButtonText());
+        _minOSLabel = new Label(new Vector2(150, 95), $"Required OS: {_app.MinOSVersion}") {
+            Color = Color.Gray,
+            FontSize = 14
+        };
+        _contentScroll.AddChild(_minOSLabel);
+
+        _installBtn = new Button(new Vector2(150, 125), new Vector2(120, 35), GetInstallButtonText());
         _installBtn.BackgroundColor = new Color(0, 120, 215);
         _installBtn.OnClickAction = () => {
             string downloadUrl = _app.DownloadUrl;
@@ -99,22 +123,31 @@ public class DetailsPage : StorePage, IDisposable {
         };
         _contentScroll.AddChild(_installBtn);
 
+        _incompatibleLabel = new Label(new Vector2(150, 125), "Incompatible OS Version") {
+            Color = Color.LightPink,
+            FontSize = 16,
+            UseBoldFont = true,
+            IsVisible = false
+        };
+        _contentScroll.AddChild(_incompatibleLabel);
+
         // Custom Install Path Section
-        _pathHeader = new Label(new Vector2(280, 100), "Install to:") {
+        _pathHeader = new Label(new Vector2(450, 10), "Install to:") {
             Color = Color.Gray,
             FontSize = 14
         };
         _contentScroll.AddChild(_pathHeader);
 
-        string defaultPath = AppInstaller.Instance.GetDefaultInstallPath(_app.TerminalOnly);
-        _pathLabel = new Label(new Vector2(280, 118), defaultPath) {
+        string defaultPath = GetDefaultInstallPath();
+        _pathLabel = new Label(new Vector2(450, 28), defaultPath) {
             Color = new Color(200, 200, 200),
             FontSize = 14
         };
         _contentScroll.AddChild(_pathLabel);
 
-        _changePathBtn = new Button(new Vector2(280, 140), new Vector2(120, 30), "Change...") {
-            BackgroundColor = new Color(60, 60, 60)
+        _changePathBtn = new Button(new Vector2(450, 50), new Vector2(100, 25), "Change...") {
+            BackgroundColor = new Color(60, 60, 60),
+            FontSize = 12
         };
         _changePathBtn.OnClickAction = () => {
             var picker = new FilePickerWindow(
@@ -163,7 +196,7 @@ public class DetailsPage : StorePage, IDisposable {
             });
             _process.ShowModal(msg);
         };
-        _contentScroll.AddChild(_uninstallBtn); // Move inside scroll area
+        _contentScroll.AddChild(_uninstallBtn);
 
         UpdatePathLabel();
         UpdateStatus();
@@ -198,7 +231,6 @@ public class DetailsPage : StorePage, IDisposable {
             Color = new Color(220, 220, 220),
         };
         _contentScroll.AddChild(_descLabel);
-        currentY += 50; // Some space for the description itself
 
         // Bottom Padding
         _contentScroll.ContentPadding = new Vector2(0, 100);
@@ -209,11 +241,10 @@ public class DetailsPage : StorePage, IDisposable {
             UpdateDescriptionLayout();
         };
 
-        // Initial Layout
         UpdateDescriptionLayout();
     }
 
-    private void UpdateDescriptionLayout() {
+    protected void UpdateDescriptionLayout() {
         if (_descLabel == null || _app == null || _contentScroll == null) return;
 
         float padding = 20;
@@ -224,13 +255,11 @@ public class DetailsPage : StorePage, IDisposable {
         if (font == null) return;
 
         _descLabel.Text = TextHelper.WrapText(font, _app.Description ?? "No description provided.", maxWidth);
-        
-        // Ensure the content scroll knows its height has changed
-        // We add some bottom padding for the scroll area
         _contentScroll.UpdateContentHeight(_descLabel.Position.Y + _descLabel.Size.Y + 20);
     }
 
-    private string GetInstallButtonText() {
+    protected string GetInstallButtonText() {
+        if (!VersionHelper.IsCompatible(_app.MinOSVersion)) return "Incompatible OS Version";
         if (!AppInstaller.Instance.IsAppInstalled(_app.AppId)) return "Install";
         
         string installedVer = AppInstaller.Instance.GetInstalledVersion(_app.AppId);
@@ -239,37 +268,54 @@ public class DetailsPage : StorePage, IDisposable {
         return "Reinstall";
     }
 
-    private void UpdateStatus() {
+    protected virtual void UpdateStatus() {
+        bool isCompatible = VersionHelper.IsCompatible(_app.MinOSVersion);
         _installBtn.Text = GetInstallButtonText();
+        _installBtn.IsVisible = isCompatible;
+        _incompatibleLabel.IsVisible = !isCompatible;
+        _minOSLabel.Color = isCompatible ? Color.Gray : Color.LightPink;
+        
         _uninstallBtn.IsVisible = AppInstaller.Instance.IsAppInstalled(_app.AppId);
     }
 
-    private async void StartInstallation() {
+    protected abstract string GetDefaultInstallPath();
+    protected abstract void UpdateSizeLabel();
+    protected abstract void OnPostInstallSuccess();
+
+    protected async void StartInstallation() {
+        if (!VersionHelper.IsCompatible(_app.MinOSVersion)) {
+            Shell.Notifications.Show("HentHub", $"Error: This app requires at least {_app.MinOSVersion}. Your system is {SystemVersion.Current}.");
+            return;
+        }
+
         Shell.Notifications.Show("HentHub", $"Beginning installation of {_app.Name}...");
         
+        string installPath = _customInstallPath ?? GetDefaultInstallPath();
+
         bool success = await AppInstaller.Instance.InstallAppAsync(
             _app.AppId, 
             _app.Name,
             _app.DownloadUrl,
             _app.Version, 
             _process,
-            _customInstallPath,
-            isTerminalOnly: _app.TerminalOnly
+            installPath,
+            isTerminalOnly: _app.TerminalOnly,
+            extensionType: _app.ExtensionType
         );
 
         if (success) {
             UpdateStatus();
             UpdatePathLabel();
+            OnPostInstallSuccess();
             Shell.Notifications.Show("HentHub", $"{_app.Name} installed successfully!");
         } else {
             Shell.Notifications.Show("HentHub", $"Failed to install {_app.Name}. Check debug_log.txt for details.");
         }
     }
 
-    private async void StartBatchInstallation(List<string> missingIds) {
+    protected async void StartBatchInstallation(List<string> missingIds) {
         var requests = new List<InstallRequest>();
         
-        // 1. Add missing dependencies and the main app (if missing) from the tree
         foreach (var id in missingIds) {
             var depApp = StoreManager.Instance.GetApp(id);
             if (depApp != null) {
@@ -278,19 +324,20 @@ public class DetailsPage : StorePage, IDisposable {
                     Name = depApp.Name,
                     DownloadUrl = depApp.DownloadUrl,
                     Version = depApp.Version,
-                    IsTerminalOnly = depApp.TerminalOnly
+                    IsTerminalOnly = depApp.TerminalOnly,
+                    ExtensionType = depApp.ExtensionType
                 });
             }
         }
 
-        // 2. If the main app was NOT missing (e.g. re-install/update) but not in tree, add it last
         if (!requests.Any(r => r.AppId.Equals(_app.AppId, StringComparison.OrdinalIgnoreCase))) {
             requests.Add(new InstallRequest {
                 AppId = _app.AppId,
                 Name = _app.Name,
                 DownloadUrl = _app.DownloadUrl,
                 Version = _app.Version,
-                IsTerminalOnly = _app.TerminalOnly
+                IsTerminalOnly = _app.TerminalOnly,
+                ExtensionType = _app.ExtensionType
             });
         }
 
@@ -303,21 +350,21 @@ public class DetailsPage : StorePage, IDisposable {
         }
     }
 
-    private void UpdatePathLabel() {
+    protected virtual void UpdatePathLabel() {
         if (AppInstaller.Instance.IsAppInstalled(_app.AppId)) {
             string installedPath = AppInstaller.Instance.GetInstalledPath(_app.AppId);
             _pathLabel.Text = installedPath ?? "Unknown Location";
             _pathHeader.Text = "Installed at:";
             _changePathBtn.IsVisible = false;
         } else {
-            string defaultPath = AppInstaller.Instance.GetDefaultInstallPath(_app.TerminalOnly);
-            _pathLabel.Text = string.IsNullOrEmpty(_customInstallPath) ? defaultPath : _customInstallPath;
+            string defaultPath = _customInstallPath ?? GetDefaultInstallPath();
+            _pathLabel.Text = defaultPath;
             _pathHeader.Text = "Install to:";
             _changePathBtn.IsVisible = true;
         }
     }
 
-    private async void LoadIcon() {
+    protected async void LoadIcon() {
         if (string.IsNullOrEmpty(_app.IconUrl)) return;
         try {
             string url = _app.IconUrl;
@@ -326,6 +373,8 @@ public class DetailsPage : StorePage, IDisposable {
                 using (var ms = new MemoryStream(response.BodyBytes)) {
                     var texture = ImageLoader.LoadFromStream(TheGame.G.GraphicsDevice, ms);
                     if (texture != null) {
+                        _loadedIcon?.Dispose();
+                        _loadedIcon = texture;
                         _iconImage.ShowPlaceholder = false;
                         _iconImage.Texture = texture;
                     }
@@ -334,17 +383,19 @@ public class DetailsPage : StorePage, IDisposable {
         } catch { }
     }
 
-    private async void LoadScreenshots() {
+    protected async void LoadScreenshots() {
         if (_app.ScreenshotCount <= 0 || _screenshotScroll == null) return;
 
         try {
             var tasks = new List<Task<Texture2D>>();
             for (int i = 0; i < _app.ScreenshotCount; i++) {
-                string url = $"https://getthenya.github.io/HentHub-Store/assets/screenshots/{_app.AppId.ToLower()}/{i}.png";
+                string category = StoreManager.Instance.GetCategoryFolder(_app.ExtensionType);
+                string url = $"https://getthenya.github.io/HentHub-Store/assets/screenshots/{category}/{_app.AppId.ToLower()}/{i}.png";
                 tasks.Add(DownloadTextureAsync(url));
             }
 
             var textures = await Task.WhenAll(tasks);
+            _loadedScreenshots.AddRange(textures.Where(t => t != null));
 
             float xOffset = 10;
             float galleryHeight = 180;
@@ -352,7 +403,6 @@ public class DetailsPage : StorePage, IDisposable {
             foreach (var texture in textures) {
                 if (texture == null) continue;
 
-                // Maintain aspect ratio: width = (texWidth / texHeight) * targetHeight
                 float width = (texture.Width / (float)texture.Height) * galleryHeight;
                 
                 var ssIcon = new Icon(new Vector2(xOffset, 10), new Vector2(width, galleryHeight), texture) {
@@ -368,7 +418,7 @@ public class DetailsPage : StorePage, IDisposable {
         }
     }
 
-    private async Task<Texture2D> DownloadTextureAsync(string url) {
+    protected async Task<Texture2D> DownloadTextureAsync(string url) {
         try {
             var response = await Shell.Network.GetAsync(_process, url);
             if (response.IsSuccessStatusCode && response.BodyBytes != null && response.BodyBytes.Length > 0) {
@@ -380,8 +430,14 @@ public class DetailsPage : StorePage, IDisposable {
         return null;
     }
 
-    public void Dispose() {
+    public virtual void Dispose() {
         _iconImage?.Dispose();
+        _loadedIcon?.Dispose();
+        foreach (var tex in _loadedScreenshots) {
+            tex?.Dispose();
+        }
+        _loadedScreenshots.Clear();
+
         if (_screenshotScroll != null) {
             foreach (var child in _screenshotScroll.Children) {
                 if (child is IDisposable disposable) disposable.Dispose();

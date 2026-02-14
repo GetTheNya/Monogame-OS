@@ -22,7 +22,9 @@ public class DesktopScene : Core.Scenes.Scene {
     private const int StartMenuHeight = 450;
 
     private UIManager _uiManager;
-    private DesktopPanel _desktopLayer;
+    private DesktopIconLayer _iconLayer;
+    private DesktopBackgroundPanel _backgroundLayer;
+    private Panel _widgetLayer;
     private BlurredWindowLayerPanel _windowLayer;
     private StartMenu _startMenu;
     private ClipboardHistoryPanel _clipboardPanel;
@@ -71,13 +73,34 @@ public class DesktopScene : Core.Scenes.Scene {
         // 0. Shell Overlay Layer - Context Menus (Created first so others can reference it)
         _contextMenu = new ContextMenu();
 
-        // 1. Desktop Layer (Bottom) - Icons etc.
-        _desktopLayer = new DesktopPanel(this, Vector2.Zero, new Vector2(screenWidth, screenHeight));
-        _uiManager.AddElement(_desktopLayer);
-        _desktopLayer.ContextMenu = _contextMenu;
-        _desktopLayer.RefreshAction = LoadDesktopIcons;
+        // 1. Background Layer (Bottom-most - Marquee/Wallpaper clicks)
+        _backgroundLayer = new DesktopBackgroundPanel(this, Vector2.Zero, new Vector2(screenWidth, screenHeight));
+        _uiManager.AddElement(_backgroundLayer);
+        _backgroundLayer.ContextMenu = _contextMenu;
+        _backgroundLayer.RefreshAction = LoadDesktopIcons;
 
-        // 2. Window Layer (Middle) - Windows
+        // 2. Widget Layer (DeskToys)
+        _widgetLayer = new Panel(Vector2.Zero, new Vector2(screenWidth, screenHeight)) {
+            BackgroundColor = Color.Transparent,
+            BorderThickness = 0,
+            ConsumesInput = false,
+            Name = "WidgetLayer"
+        };
+        _uiManager.AddElement(_widgetLayer);
+
+        // 3. Icon Layer (Top-Bottom) - Icons only, transparent to widgets/background
+        _iconLayer = new DesktopIconLayer(this, Vector2.Zero, new Vector2(screenWidth, screenHeight));
+        _uiManager.AddElement(_iconLayer);
+        _iconLayer.RefreshAction = LoadDesktopIcons;
+
+        // 3.5 Selection Overlay (Above icons, below windows)
+        var marqueeOverlay = new MarqueeOverlayLayer(_backgroundLayer);
+        _uiManager.AddElement(marqueeOverlay);
+
+        // Hook up widget API
+        Shell.Widgets.RefreshWidgets = LoadDesktopWidgets;
+
+        // 4. Window Layer (Middle) - Windows
         _windowLayer = new BlurredWindowLayerPanel(Vector2.Zero, new Vector2(screenWidth, screenHeight));
         _uiManager.AddElement(_windowLayer);
 
@@ -119,20 +142,6 @@ public class DesktopScene : Core.Scenes.Scene {
         // Play Startup Sound
         Shell.Audio.PlaySound("C:\\Windows\\Media\\startup.wav");
 
-        // Demo notification
-        string welcomeId = "";
-        welcomeId = Shell.Notifications.Show("Welcome!", "The notification system is ready.", null, null, new List<NotificationAction> {
-            new NotificationAction { Label = "Got it", OnClick = () => {
-                DebugLogger.Log("User acknowledged.");
-                if (!string.IsNullOrEmpty(welcomeId)) Shell.Notifications.Dismiss(welcomeId);
-            }}
-        });
-
-        Shell.Notifications.Show("System Update", "A very long message that previously would have been truncated but now wraps nicely across multiple lines in both the toast and the history panel.", actions: new List<NotificationAction> {
-            new NotificationAction { Label = "Details", OnClick = () => DebugLogger.Log("Update details.") },
-            new NotificationAction { Label = "OK", OnClick = () => { } }
-        });
-
         // Load startup apps from Registry
         ProcessManager.Instance.LoadStartupApps();
 
@@ -141,6 +150,9 @@ public class DesktopScene : Core.Scenes.Scene {
 
         // Load Dynamic Desktop Icons
         LoadDesktopIcons();
+
+        // Load Widgets
+        LoadDesktopWidgets();
 
         // Populate Start Menu
         _startMenu.RefreshItems();
@@ -168,7 +180,7 @@ public class DesktopScene : Core.Scenes.Scene {
     }
 
     private void LoadDesktopIcons() {
-        foreach (var child in _desktopLayer.Children.ToArray()) _desktopLayer.RemoveChild(child);
+        foreach (var child in _iconLayer.Children.ToArray()) _iconLayer.RemoveChild(child);
 
         string desktopPath = $"C:\\Users\\{SystemConfig.Username}\\Desktop\\";
         var files = Core.OS.VirtualFileSystem.Instance.GetFiles(desktopPath);
@@ -233,7 +245,7 @@ public class DesktopScene : Core.Scenes.Scene {
                 Shell.Drag.SetDropPreview(i, finalPos);
             };
             icon.OnSelectedAction = (selected) => {
-                foreach (var child in _desktopLayer.Children) {
+                foreach (var child in _iconLayer.Children) {
                     if (child is DesktopIcon d && d != selected) d.IsSelected = false;
                 }
             };
@@ -269,6 +281,18 @@ public class DesktopScene : Core.Scenes.Scene {
                     }
                     Shell.Drag.End();
                 };
+                icon.OnDropOverAction = (dropped) => {
+                    if (dropped is DesktopIcon di) VirtualFileSystem.Instance.Recycle(di.VirtualPath);
+                    else if (dropped is string s) VirtualFileSystem.Instance.Recycle(s);
+                    else if (dropped is List<string> list) foreach (var p in list) VirtualFileSystem.Instance.Recycle(p);
+                    else if (dropped is IDraggable draggable) {
+                        var data = draggable.GetDragData();
+                        if (data is string s2) VirtualFileSystem.Instance.Recycle(s2);
+                        else if (data is List<string> list2) foreach (var p in list2) VirtualFileSystem.Instance.Recycle(p);
+                    }
+                    LoadDesktopIcons();
+                    Shell.RefreshExplorers();
+                };
                 icon.OnRightClickAction = () => {
                     _contextMenu.Show(InputManager.MousePosition.ToVector2(), new List<MenuItem> {
                         new MenuItem { Text = "Open", Action = () => Shell.Execute(trashPath, icon.Bounds) },
@@ -288,7 +312,7 @@ public class DesktopScene : Core.Scenes.Scene {
                         new MenuItem { Text = "Properties", Action = () => DebugLogger.Log("Trash Properties") }
                     });
                 };
-                _desktopLayer.TrashIcon = icon;
+                _iconLayer.TrashIcon = icon;
             } else {
                 icon.OnDoubleClickAction = () => Shell.Execute(item, icon.Bounds);
                 icon.OnDropAction = () => {
@@ -299,7 +323,7 @@ public class DesktopScene : Core.Scenes.Scene {
                     
                     if (droppedOnTrash) {
                         if (icon.IsSelected) {
-                            var selectedPaths = _desktopLayer.Children.OfType<DesktopIcon>().Where(i => i.IsSelected && !string.IsNullOrEmpty(i.VirtualPath)).Select(i => i.VirtualPath).ToList();
+                            var selectedPaths = _iconLayer.Children.OfType<DesktopIcon>().Where(i => i.IsSelected && !string.IsNullOrEmpty(i.VirtualPath)).Select(i => i.VirtualPath).ToList();
                             foreach (var path in selectedPaths) VirtualFileSystem.Instance.Recycle(path);
                         } else {
                             VirtualFileSystem.Instance.Recycle(icon.VirtualPath);
@@ -312,7 +336,7 @@ public class DesktopScene : Core.Scenes.Scene {
 
                     // Priority 2: Move icon(s)
                     if (icon.IsSelected) {
-                        foreach (var child in _desktopLayer.Children) {
+                        foreach (var child in _iconLayer.Children) {
                             if (child is DesktopIcon d && d.IsSelected) {
                                 Shell.Drag.SetDropPreview(d, null);
                                 if (d.DragDelta.LengthSquared() > 1.0f) {
@@ -374,10 +398,10 @@ public class DesktopScene : Core.Scenes.Scene {
                 LoadDesktopIcons();
                 Shell.RefreshExplorers();
             };
-            _desktopLayer.AddChild(icon);
+            _iconLayer.AddChild(icon);
         }
 
-        _desktopLayer.SortAction = SortIcons;
+        _iconLayer.SortAction = SortIcons;
     }
 
     private void ShowToast(Notification notification) {
@@ -412,9 +436,11 @@ public class DesktopScene : Core.Scenes.Scene {
 
     public override void Update(GameTime gameTime) {
         var viewport = G.GraphicsDevice.Viewport;
-        if (viewport.Width != _desktopLayer.Size.X || viewport.Height != _desktopLayer.Size.Y) {
+        if (viewport.Width != _iconLayer.Size.X || viewport.Height != _iconLayer.Size.Y) {
             // Screen Resized
-            _desktopLayer.Size = new Vector2(viewport.Width, viewport.Height);
+            _backgroundLayer.Size = new Vector2(viewport.Width, viewport.Height);
+            _iconLayer.Size = new Vector2(viewport.Width, viewport.Height);
+            _widgetLayer.Size = new Vector2(viewport.Width, viewport.Height);
             _windowLayer.Size = new Vector2(viewport.Width, viewport.Height);
             _taskbar.Position = new Vector2(0, viewport.Height - TaskbarHeight);
             _taskbar.Size = new Vector2(viewport.Width, TaskbarHeight);
@@ -501,7 +527,7 @@ public class DesktopScene : Core.Scenes.Scene {
             ArrangeIconsToGrid();
         } else {
             // Even if grid is off, save the current positions from the sort
-            foreach (var child in _desktopLayer.Children.OfType<DesktopIcon>()) {
+            foreach (var child in _iconLayer.Children.OfType<DesktopIcon>()) {
                 if (!string.IsNullOrEmpty(child.VirtualPath)) {
                     SaveIconPosition(child.VirtualPath, child.Position);
                 }
@@ -509,6 +535,32 @@ public class DesktopScene : Core.Scenes.Scene {
         }
 
         Shell.RefreshExplorers(); // Refresh explorers too for consistent view
+    }
+
+    private void LoadDesktopWidgets() {
+        if (_widgetLayer == null) return;
+        
+        var activeWidgets = Shell.Widgets.GetActiveWidgets();
+        DebugLogger.Log($"[Widgets] Loading {activeWidgets.Count} widgets onto desktop...");
+
+        // Clear current widgets
+        foreach (var child in _widgetLayer.Children.ToArray()) {
+            _widgetLayer.RemoveChild(child);
+        }
+
+        foreach (var data in activeWidgets) {
+            // Widgets will use WidgetLoader to instantiate
+            var widget = WidgetLoader.Instance.CreateWidget(data.Type, data.Id, data.Position, data.Size);
+            if (widget != null) {
+                widget.ZIndex = data.ZIndex;
+                widget.LoadFromRegistry();
+                _widgetLayer.AddChild(widget);
+            }
+        }
+        
+        // Ensure proper Z-order within the layer
+        // Panels draw children in order of AddChild, so sorting here is fine
+        // If we want dynamic sorting, we'd need to re-order the children list
     }
     
     private Vector2 SnapToGrid(Vector2 position) {
@@ -518,7 +570,7 @@ public class DesktopScene : Core.Scenes.Scene {
     }
     
     private void ArrangeIconsToGrid() {
-        var icons = _desktopLayer.Children.OfType<DesktopIcon>().Where(i => !string.IsNullOrEmpty(i.VirtualPath)).ToList();
+        var icons = _iconLayer.Children.OfType<DesktopIcon>().Where(i => !string.IsNullOrEmpty(i.VirtualPath)).ToList();
         
         // Sort icons by current position (top-left to bottom-right)
         icons = icons.OrderBy(i => i.Position.Y).ThenBy(i => i.Position.X).ToList();
@@ -547,7 +599,7 @@ public class DesktopScene : Core.Scenes.Scene {
 
     private HashSet<(int, int)> GetOccupiedCells(DesktopIcon excluding = null) {
         HashSet<(int, int)> occupied = new HashSet<(int, int)>();
-        foreach (var child in _desktopLayer.Children) {
+        foreach (var child in _iconLayer.Children) {
             if (child is DesktopIcon di && !string.IsNullOrEmpty(di.VirtualPath)) {
                 // If it's the one we're moving, or part of the selection, don't count it as "occupying" its current spot
                 // because we're about to move it.
@@ -686,80 +738,42 @@ public class DesktopScene : Core.Scenes.Scene {
 
 
 
-    private class DesktopPanel : Panel {
+    /// <summary>
+    /// Background layer that handles Wallpaper, Desktop Context Menu, and Marquee Selection.
+    /// This layer is at the bottom of the UI stack.
+    /// </summary>
+    private class DesktopBackgroundPanel : Panel {
         private DesktopScene _scene;
-        private bool _isSelecting;
+        internal bool _isSelecting;
         private Vector2 _selectionStart;
-        private Rectangle _marqueeRect;
+        internal Rectangle _marqueeRect;
         private bool _wasMouseDown;
-        private bool _isHandlingGroupDrag;
         public Action RefreshAction { get; set; }
         public Action<string> SortAction { get; set; }
-        public Action<DesktopIcon> IconMovedAction { get; set; }
-        public DesktopIcon TrashIcon { get; set; }
         public ContextMenu ContextMenu { get; set; }
 
-        public DesktopPanel(DesktopScene scene, Vector2 pos, Vector2 size) : base(pos, size) {
+        public DesktopBackgroundPanel(DesktopScene scene, Vector2 pos, Vector2 size) : base(pos, size) {
             _scene = scene;
             BackgroundColor = Color.Transparent;
             BorderThickness = 0;
             ConsumesInput = true;
-
-            // Connect to Shell API
-            Shell.Desktop.GetNextFreePosition = FindFreeDesktopSpot;
-            Shell.Desktop.SetIconPosition = (path, position) => {
-                _scene._iconPositions[path] = position;
-                _scene.SaveIconPosition(path, position);
-            };
-        }
-
-        public override void AddChild(UIElement child) {
-            base.AddChild(child);
-            if (child is DesktopIcon icon) {
-                icon.OnDragAction += HandleGroupDrag;
-                icon.OnSelectedAction += (selected) => {
-                    foreach (var c in Children) {
-                        if (c is DesktopIcon other && other != selected) other.IsSelected = false;
-                    }
-                };
-            }
-        }
-
-        private void HandleGroupDrag(DesktopIcon leader, Vector2 delta) {
-            if (_isHandlingGroupDrag) return;
-            _isHandlingGroupDrag = true;
-            try {
-                if (DragDropManager.Instance.GetStoredPositions().Count == 0) {
-                    foreach (var child in Children) {
-                        if (child is DesktopIcon icon && icon.IsSelected) {
-                            DragDropManager.Instance.StoreIconPosition(icon, icon.Position);
-                        }
-                    }
-                }
-                // Don't actually move icons - just trigger their OnDragAction for drop preview updates
-                foreach (var child in Children) {
-                    if (child is DesktopIcon icon && icon != leader && icon.IsSelected) {
-                        // Trigger the drag action which will update drop preview
-                        icon.OnDragAction?.Invoke(icon, delta);
-                    }
-                }
-            } finally {
-                _isHandlingGroupDrag = false;
-            }
         }
 
         protected override void UpdateInput() {
             bool alreadyConsumed = InputManager.IsMouseConsumed;
             base.UpdateInput();
             
-            bool isHovered = IsMouseOver; // This is set correctly by base using UIManager.IsHovered
+            bool isHovered = IsMouseOver; 
 
             if (!alreadyConsumed && isHovered && InputManager.IsMouseButtonJustPressed(MouseButton.Left)) {
                 _isSelecting = true;
                 _selectionStart = InputManager.MousePosition.ToVector2();
                 _marqueeRect = Rectangle.Empty;
                 Window.ActiveWindow = null;
-                foreach (var child in Children) if (child is DesktopIcon icon) icon.IsSelected = false;
+                // De-select all icons
+                if (_scene._iconLayer != null) {
+                    foreach (var child in _scene._iconLayer.Children) if (child is DesktopIcon icon) icon.IsSelected = false;
+                }
             }
 
             var currentMouse = Microsoft.Xna.Framework.Input.Mouse.GetState();
@@ -770,29 +784,20 @@ public class DesktopScene : Core.Scenes.Scene {
                                  InputManager.MousePosition.X <= G.GraphicsDevice.Viewport.Width &&
                                  InputManager.MousePosition.Y <= G.GraphicsDevice.Viewport.Height;
 
-            bool overTrash = TrashIcon != null && TrashIcon.Bounds.Contains(InputManager.MousePosition);
-            bool draggingItself = Shell.Drag.DraggedItem == TrashIcon || (Shell.Drag.DraggedItem is System.Collections.Generic.List<string> list && list.Count == 1 && list[0] == TrashIcon.VirtualPath);
-
-            if ((!alreadyConsumed || (overTrash && !draggingItself)) && isOverDesktop && justReleased && Shell.Drag.DraggedItem != null) {
+            if (!alreadyConsumed && isOverDesktop && justReleased && Shell.Drag.DraggedItem != null) {
                 HandleDesktopDrop(Shell.Drag.DraggedItem);
             }
 
             if (justReleased && Shell.Drag.DraggedItem != null && !alreadyConsumed) {
-                // Clicking/dropping on empty space - cancel drag but don't reset deltas yet
-                // The icons themselves (or their drop handlers) will reset deltas.
                 DragDropManager.Instance.CancelDrag();
             }
 
             if (!alreadyConsumed && isHovered && InputManager.IsMouseButtonJustPressed(MouseButton.Right)) {
-                // Centralized context menu logic in UIElement already triggered ContextMenuManager.Show
-                // We just consume the input and handled = true in PopulateContextMenu if we don't want bubbling.
                 InputManager.IsMouseConsumed = true;
             }
 
             if (_isSelecting) {
                 if (InputManager.IsMouseButtonDown(MouseButton.Left)) {
-                    // Once selection is active, we continue updating it even if hit an icon (alreadyConsumed)
-                    // This prevents icons from breaking a selection drag that's already in progress.
                     var currentMouseVec = InputManager.MousePosition.ToVector2();
                     float x = Math.Min(_selectionStart.X, currentMouseVec.X);
                     float y = Math.Min(_selectionStart.Y, currentMouseVec.Y);
@@ -800,7 +805,10 @@ public class DesktopScene : Core.Scenes.Scene {
                     float h = Math.Abs(_selectionStart.Y - currentMouseVec.Y);
                     var rawRect = new Rectangle((int)x, (int)y, (int)w, (int)h);
                     _marqueeRect = Rectangle.Intersect(rawRect, Bounds);
-                    foreach (var child in Children) if (child is DesktopIcon icon) icon.IsSelected = _marqueeRect.Intersects(icon.Bounds);
+                    
+                    if (_scene._iconLayer != null) {
+                        foreach (var child in _scene._iconLayer.Children) if (child is DesktopIcon icon) icon.IsSelected = _marqueeRect.Intersects(icon.Bounds);
+                    }
                     
                     InputManager.IsMouseConsumed = true;
                 } else {
@@ -872,7 +880,6 @@ public class DesktopScene : Core.Scenes.Scene {
                     path = System.IO.Path.Combine(desktopPath, $"{defaultName} ({i++}){extension}");
                 }
 
-                // Find best position
                 Vector2 pos = FindFreeDesktopSpot(clickPos);
 
                 if (isDirectory) VirtualFileSystem.Instance.CreateDirectory(path);
@@ -886,20 +893,17 @@ public class DesktopScene : Core.Scenes.Scene {
             }
         }
 
-        private Vector2 FindFreeDesktopSpot(Vector2? hintPos, HashSet<(int x, int y)> localOccupied = null) {
+        public Vector2 FindFreeDesktopSpot(Vector2? hintPos, HashSet<(int x, int y)> localOccupied = null) {
             Vector2 startPos = hintPos ?? new Vector2(DesktopPadding, DesktopPadding);
             if (_scene._alignToGrid) {
                 Vector2 snapped = _scene.SnapToGrid(startPos);
                 var occupied = _scene.GetOccupiedCells();
                 
-                // Merge with local occupied set if provided (for batch placement)
                 if (localOccupied != null) {
                     foreach (var cell in localOccupied) occupied.Add(cell);
                 }
 
                 var nearest = _scene.FindNearestAvailableCell((int)((snapped.X - DesktopPadding) / GridCellWidth), (int)((snapped.Y - DesktopPadding) / GridCellHeight), occupied);
-                
-                // CRITICAL: Claim the cell locally so the next item in the batch doesn't take it
                 localOccupied?.Add((nearest.x, nearest.y));
 
                 return new Vector2(nearest.x * GridCellWidth + DesktopPadding, nearest.y * GridCellHeight + DesktopPadding);
@@ -907,8 +911,7 @@ public class DesktopScene : Core.Scenes.Scene {
             return startPos;
         }
 
-        private void HandleDesktopDrop(object item) {
-            // Handle IDraggable (like items from Browser)
+        public void HandleDesktopDrop(object item) {
             object dragData = item;
             if (item is IDraggable draggable) {
                 dragData = draggable.GetDragData();
@@ -916,20 +919,10 @@ public class DesktopScene : Core.Scenes.Scene {
 
             if (dragData == null) return;
 
-            if (TrashIcon != null && TrashIcon.Bounds.Contains(InputManager.MousePosition)) {
-                if (dragData is string path) VirtualFileSystem.Instance.Recycle(path);
-                else if (dragData is List<string> list) foreach (var p in list) VirtualFileSystem.Instance.Recycle(p);
-                RefreshAction?.Invoke();
-                Shell.RefreshExplorers();
-                Shell.Drag.DraggedItem = null;
-                return;
-            }
             string desktopPath = "C:\\Users\\Admin\\Desktop\\";
             bool changed = false;
             Vector2 dropPos = InputManager.MousePosition.ToVector2() - DragDropManager.Instance.DragGrabOffset;
             
-            // If dragging a DesktopIcon from inside this scene, handled by its own OnDropAction
-            // We check 'item' here because we don't want to handle internal DesktopIcon drags twice
             if (item is DesktopIcon) { return; }
             
             if (dragData is string itemPath) {
@@ -960,7 +953,6 @@ public class DesktopScene : Core.Scenes.Scene {
                         }
                         _scene._iconPositions[newPath] = finalPos;
                         _scene.SaveIconPosition(newPath, finalPos);
-                        
                         if (!_scene._alignToGrid) dropPos += new Vector2(20, 20);
                     }
                 }
@@ -981,11 +973,8 @@ public class DesktopScene : Core.Scenes.Scene {
             string destPath = System.IO.Path.Combine(desktopPath, fileName);
             if (sourcePath.ToUpper() == destPath.ToUpper()) return null;
             
-            // Don't move the $Recycle.Bin folder itself (but allow moving items inside it)
             string normalizedSource = sourcePath.Replace('/', '\\').TrimEnd('\\').ToUpper();
-            if (normalizedSource == "C:\\$RECYCLE.BIN") {
-                return null;
-            }
+            if (normalizedSource == "C:\\$RECYCLE.BIN") return null;
             
             if (VirtualFileSystem.Instance.Exists(destPath)) {
                 string name = System.IO.Path.GetFileNameWithoutExtension(fileName);
@@ -999,14 +988,87 @@ public class DesktopScene : Core.Scenes.Scene {
 
         public override void Draw(SpriteBatch spriteBatch, ShapeBatch shapeBatch) {
             if (!IsVisible) return;
-            DrawSelf(spriteBatch, shapeBatch);
-            foreach (var child in Children) {
-                if (!child.IsVisible) continue;
-                child.Draw(spriteBatch, shapeBatch);
+            // Removed redundant DrawWallpaper call to prevent obscuring marquee
+            // Marquee is now drawn in MarqueeOverlayLayer to be above icons
+        }
+    }
+
+    /// <summary>
+    /// Dedicated layer to draw the selection marquee on top of icons.
+    /// </summary>
+    private class MarqueeOverlayLayer : Panel {
+        private DesktopBackgroundPanel _bg;
+        public MarqueeOverlayLayer(DesktopBackgroundPanel bg) : base(Vector2.Zero, bg.Size) {
+            _bg = bg;
+            BackgroundColor = Color.Transparent;
+            BorderThickness = 0;
+            ConsumesInput = false;
+        }
+
+        public override void Draw(SpriteBatch spriteBatch, ShapeBatch shapeBatch) {
+            if (!IsVisible) return;
+            if (_bg._isSelecting && _bg._marqueeRect != Rectangle.Empty) {
+                shapeBatch.FillRectangle(_bg._marqueeRect.Location.ToVector2(), _bg._marqueeRect.Size.ToVector2(), new Color(0, 102, 204, 50));
+                shapeBatch.BorderRectangle(_bg._marqueeRect.Location.ToVector2(), _bg._marqueeRect.Size.ToVector2(), new Color(0, 102, 204, 150), 1f);
             }
-            if (_isSelecting && _marqueeRect != Rectangle.Empty) {
-                shapeBatch.FillRectangle(_marqueeRect.Location.ToVector2(), _marqueeRect.Size.ToVector2(), new Color(0, 102, 204, 50));
-                shapeBatch.BorderRectangle(_marqueeRect.Location.ToVector2(), _marqueeRect.Size.ToVector2(), new Color(0, 102, 204, 150), 1f);
+        }
+    }
+
+    /// <summary>
+    /// Layer that contains only desktop icons. 
+    /// ConsumesInput = false so that empty space clicks fall through to widgets or background.
+    /// </summary>
+    private class DesktopIconLayer : Panel {
+        private DesktopScene _scene;
+        private bool _isHandlingGroupDrag;
+        public Action RefreshAction { get; set; }
+        public Action<string> SortAction { get; set; }
+        public Action<DesktopIcon, Vector2> IconMovedAction { get; set; }
+        public DesktopIcon TrashIcon { get; set; }
+
+        public DesktopIconLayer(DesktopScene scene, Vector2 pos, Vector2 size) : base(pos, size) {
+            _scene = scene;
+            BackgroundColor = Color.Transparent;
+            BorderThickness = 0;
+            ConsumesInput = false;
+
+            Shell.Desktop.GetNextFreePosition = _scene._backgroundLayer.FindFreeDesktopSpot;
+            Shell.Desktop.SetIconPosition = (path, position) => {
+                _scene._iconPositions[path] = position;
+                _scene.SaveIconPosition(path, position);
+            };
+        }
+
+        public override void AddChild(UIElement child) {
+            base.AddChild(child);
+            if (child is DesktopIcon icon) {
+                icon.OnDragAction += HandleGroupDrag;
+                icon.OnSelectedAction += (selected) => {
+                    foreach (var c in Children) {
+                        if (c is DesktopIcon other && other != selected) other.IsSelected = false;
+                    }
+                };
+            }
+        }
+
+        private void HandleGroupDrag(DesktopIcon leader, Vector2 delta) {
+            if (_isHandlingGroupDrag) return;
+            _isHandlingGroupDrag = true;
+            try {
+                if (DragDropManager.Instance.GetStoredPositions().Count == 0) {
+                    foreach (var child in Children) {
+                        if (child is DesktopIcon icon && icon.IsSelected) {
+                            DragDropManager.Instance.StoreIconPosition(icon, icon.Position);
+                        }
+                    }
+                }
+                foreach (var child in Children) {
+                    if (child is DesktopIcon icon && icon != leader && icon.IsSelected) {
+                        icon.OnDragAction?.Invoke(icon, delta);
+                    }
+                }
+            } finally {
+                _isHandlingGroupDrag = false;
             }
         }
     }

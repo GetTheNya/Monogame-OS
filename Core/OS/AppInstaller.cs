@@ -32,6 +32,7 @@ public struct InstallRequest {
     public string DownloadUrl;
     public string Version;
     public bool IsTerminalOnly;
+    public string ExtensionType;
 }
 
 public class AppInstaller {
@@ -158,13 +159,17 @@ public class AppInstaller {
     /// <summary>
     /// Downloads and installs a new app or updates an existing one.
     /// </summary>
-    public async Task<bool> InstallAppAsync(string appId, string name, string downloadUrl, string version, Process process, string customInstallPath = null, IProgress<InstallProgress> progress = null, bool isTerminalOnly = false) {
+    public async Task<bool> InstallAppAsync(string appId, string name, string downloadUrl, string version, Process process, string customInstallPath = null, IProgress<InstallProgress> progress = null, bool isTerminalOnly = false, string extensionType = "application") {
         try {
             bool isUpdate = IsAppInstalled(appId);
-            string installBase = customInstallPath ?? GetDefaultInstallPath(isTerminalOnly);
-            string targetPath = Path.Combine(installBase, $"{appId}.sapp");
+            bool isWidget = extensionType?.Equals("widget", StringComparison.OrdinalIgnoreCase) ?? false;
+            string installBase = customInstallPath;
+            if (string.IsNullOrEmpty(installBase)) {
+                installBase = isWidget ? Shell.Widgets.WidgetDirectory : GetDefaultInstallPath(isTerminalOnly);
+            }
+            string targetPath = isWidget ? Path.Combine(installBase, $"{appId}.dtoy") : Path.Combine(installBase, $"{appId}.sapp");
             
-            DebugLogger.Log($"[AppInstaller] Starting install of {name} ({appId}). Target: {targetPath}, IsUpdate: {isUpdate}");
+            DebugLogger.Log($"[AppInstaller] Starting install of {name} ({appId}). Target: {targetPath}, IsUpdate: {isUpdate}, Type: {extensionType}");
             
             InstallNotification installNotif = null;
             if (progress == null) {
@@ -300,6 +305,12 @@ public class AppInstaller {
                 DebugLogger.Log($"[AppInstaller] Cleaned up extraction directory: {extractDir}");
             }
             
+            if (isWidget) {
+                // Refresh Widget Loader
+                WidgetLoader.Instance.ReloadDynamicWidgets();
+                if (Shell.Widgets.RefreshWidgets != null) Shell.Widgets.RefreshWidgets.Invoke();
+            }
+
             progress?.Report(new InstallProgress { Phase = InstallPhase.Complete, Progress = 1, Message = "Installation successful!" });
             return true;
 
@@ -472,17 +483,7 @@ public class AppInstaller {
     }
 
     public static bool IsNewerVersion(string current, string remote) {
-        if (string.IsNullOrEmpty(remote)) return false;
-        if (string.IsNullOrEmpty(current) || current == "0.0.0") return true; // Force update if no version or invalid
-        
-        try {
-            var v1 = new Version(current);
-            var v2 = new Version(remote);
-            return v2 > v1;
-        } catch {
-            // If parsing fails but remote exists, assume remote is "newer" if they aren't identical
-            return current != remote;
-        }
+        return VersionHelper.IsNewer(current, remote);
     }
 
     /// <summary>
@@ -493,7 +494,7 @@ public class AppInstaller {
 
         if (requests.Count == 1) {
             var r = requests[0];
-            return await InstallAppAsync(r.AppId, r.Name, r.DownloadUrl, r.Version, process, customInstallPath, isTerminalOnly: r.IsTerminalOnly);
+            return await InstallAppAsync(r.AppId, r.Name, r.DownloadUrl, r.Version, process, customInstallPath, isTerminalOnly: r.IsTerminalOnly, extensionType: r.ExtensionType);
         }
 
         InstallNotification installNotif = new InstallNotification(
@@ -512,8 +513,11 @@ public class AppInstaller {
                 string msg = $"[{currentStep}/{totalSteps}] {req.Name}: {p.Message}";
                 installNotif.UpdateProgress(overallProgress, msg);
             });
-
-            bool success = await InstallAppAsync(req.AppId, req.Name, req.DownloadUrl, req.Version, process, customInstallPath, progress, isTerminalOnly: req.IsTerminalOnly);
+            
+            // For batch installs, we only apply custom path to the primary request if it's external? 
+            // Actually, keep it simple: if custom path is provided, it applies to all. 
+            // BUT for default paths, let InstallAppAsync handle it based on ExtensionType.
+            bool success = await InstallAppAsync(req.AppId, req.Name, req.DownloadUrl, req.Version, process, customInstallPath, progress, isTerminalOnly: req.IsTerminalOnly, extensionType: req.ExtensionType);
             if (!success) {
                 installNotif.UpdateProgress(0, $"Failed to install {req.Name}. Queue aborted.");
                 return false;
